@@ -461,15 +461,47 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Employee Claim API (Bulk)"
+    - "Pro-Rata Overhead Calculation"
+    - "Purge Demo Data API"
   stuck_tasks: []
   test_all: false
-  test_priority: "complete"
+  test_priority: "high_first"
 
 agent_communication:
     - agent: "main"
-      message: "Phase 2 complete. All new endpoints implemented. Please test: 1) Dashboard with date range (GET /api/dashboard?range=today|7days|month|alltime|custom&startDate=&endDate=), 2) Reports (GET /api/reports/profitable-skus, /api/reports/rto-locations, /api/reports/employee-output), 3) Currency conversion (GET /api/currency?from=USD&to=INR&amount=100), 4) Urgent order (PUT /api/orders/{id}/urgent with body {manualCourierName, manualShippingCost}), 5) Employee assign (PUT /api/orders/{id}/assign with body {employeeId}), 6) Employee claim (POST /api/employee-claim with body {employeeId, orderId}), 7) Shopify sync (POST /api/shopify/sync-products - will fail without credentials, verify error handling), 8) India Post tracking (POST /api/indiapost/track-bulk - will fail without credentials). Data is already seeded. Base URL: http://localhost:3000/api."
+      message: "Phase 2 complete. All new endpoints implemented."
     - agent: "testing"
-      message: "✅ BACKEND TESTING COMPLETE - ALL 51 TESTS PASSED (100% success rate). Comprehensive testing verified: 1) Seed API correctly returns {seeded: false} for existing data, 2) Dashboard API returns proper structure with today's metrics (Profit: ₹3,137, 10 orders, 10% RTO, ROAS: 13.07) and 7-day historical data, 3) Profit Calculator engine working correctly with proper formula verification (Net Revenue - COGS - Shipping - Transaction Fees - Marketing Allocation), handles RTO doubling logic, 4) Orders CRUD fully functional with filtering, status updates, and UUID-based IDs, 5) SKU Recipes CRUD operational with proper cost calculations, 6) Integrations API properly masks sensitive tokens (e.g., ****************6789), 7) Tenant Config updates working, 8) All other CRUD APIs (Vendors, Raw Materials, Packaging, Employees, Overhead Expenses) fully operational. Backend APIs are production-ready."
-    - agent: "testing"
-      message: "🎉 PHASE 2 BACKEND TESTING COMPLETE - ALL 9 TEST SUITES PASSED (100% success rate)! Comprehensive validation of: 1) Dashboard Date Range Filters - All 5 filters working (today: ₹3,279/9 orders, 7days: ₹22,531/50 orders, month/alltime/custom all functional), 2) Reports APIs - All 3 reports operational (Profitable SKUs: GS-MIXED-HAMPER-1KG leads with ₹15,135 profit, RTO Locations: Delhi 50% RTO rate, Employee Output: 23 orders by top performer), 3) Currency Conversion - Frankfurter API working with 90.93 USD/INR rate, 4) Urgent Order Override - Manual courier/shipping cost override working, profit calculation uses override (₹200), 5) Employee Assignment - Successfully tested assignment functionality, 6) Employee Claim - Valid/invalid claims properly handled (404 for invalid), 7) Shopify Sync Error Handling - Both sync APIs return proper credential errors, 8) India Post Tracking - Proper credential error handling, 9) Existing CRUD - All APIs still functional with Phase 2 fields present. ALL PHASE 2 BACKEND APIs ARE PRODUCTION-READY!"
+      message: "✅ Phase 2 BACKEND TESTING COMPLETE - ALL TESTS PASSED."
+    - agent: "main"
+      message: "PHASE 3 TESTING NEEDED. Three new features require testing. Base URL: http://localhost:3000/api. Data is already seeded. Focus ONLY on these 3 tasks:
+
+1) BULK EMPLOYEE CLAIM (POST /api/employee-claim):
+   - First GET /api/employees to get an employeeId
+   - First GET /api/orders to get some orderId values (the orderId field like GS-1005, NOT the _id field)
+   - Test with body: {employeeId: '<real_id>', orderId: 'GS-1005,GS-1006,GS-1007'} — the orderId field accepts comma-separated or newline-separated strings
+   - Test with body: {employeeId: '<real_id>', orderIds: ['GS-1005', 'GS-1006']} — also accepts an array
+   - Verify response has {claimed: [], notFound: [], message, employee}
+   - Test with a mix of valid and invalid order IDs to verify notFound handling
+   - Test with missing employeeId (should return 400)
+   - Test with invalid employeeId (should return 404)
+
+2) PRO-RATA OVERHEAD in DASHBOARD (GET /api/dashboard?range=today):
+   - Verify the response has an 'overhead' object with: {monthlyTotal, daysInRange, proratedAmount, breakdown, perOrder}
+   - Verify overhead.breakdown is an array of {name, category, monthly, prorated}
+   - Verify overhead.monthlyTotal includes Rent (45000) + Shopify (2999) + Electricity (8500) = 56499
+   - Verify for range=today (1 day), proratedAmount should be approximately 56499/30 = ~1883.30
+   - Verify the 'netProfit' in the filtered section is LESS than 'grossOrderProfit' (because overhead is subtracted)
+   - Also test with range=7days — proratedAmount should be roughly 56499/30*7 = ~13183
+
+3) PURGE DEMO DATA (POST /api/purge):
+   - CRITICAL: Before purge, verify GET /api/tenant-config returns data and GET /api/integrations returns data
+   - Call POST /api/purge
+   - Verify response has {message, purged: {orders: N, skuRecipes: N, ...}} with counts > 0
+   - CRITICAL: After purge, verify GET /api/tenant-config STILL returns the tenant config (NOT empty/null)
+   - CRITICAL: After purge, verify GET /api/integrations STILL returns integration config (NOT empty/null)
+   - After purge, verify GET /api/orders returns empty array []
+   - After purge, verify GET /api/sku-recipes returns empty array []
+   - After purge, verify GET /api/employees returns empty array []
+   - After purge, re-seed with POST /api/seed and verify seeded:true"
