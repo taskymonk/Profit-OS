@@ -141,6 +141,90 @@ export default function SettingsView() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Danger Zone: Purge Demo Data */}
+      <Card className="border-red-200 dark:border-red-900/50">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <div>
+              <CardTitle className="text-base text-red-600 dark:text-red-400">Danger Zone</CardTitle>
+              <CardDescription>Irreversible actions that affect your data</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
+            <div>
+              <p className="font-medium text-sm">Purge All Demo Data</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Deletes all Orders, SKU Recipes, Employees, Vendors, Materials, and Expenses.
+                <br />Preserves your Tenant Config and Integration credentials.
+              </p>
+            </div>
+            <Button variant="destructive" onClick={() => { setPurgeDialogOpen(true); setConfirmText(''); }}>
+              <Trash2 className="w-4 h-4 mr-2" /> Purge Data
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Purge Confirmation Dialog */}
+      <Dialog open={purgeDialogOpen} onOpenChange={setPurgeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" /> Confirm Data Purge
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete ALL demo data including orders, products, employees, vendors, and expenses.
+              Your Tenant Config and Integration credentials will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 text-sm space-y-1">
+              <p className="font-medium text-red-700 dark:text-red-400">Collections to be purged:</p>
+              <ul className="text-xs text-red-600 dark:text-red-300 list-disc pl-5 space-y-0.5">
+                <li>Orders</li>
+                <li>SKU Recipes</li>
+                <li>Raw Materials & Packaging Materials</li>
+                <li>Vendors</li>
+                <li>Employees</li>
+                <li>Overhead Expenses</li>
+              </ul>
+            </div>
+            <div>
+              <Label className="text-sm">Type <span className="font-bold text-red-600">PURGE</span> to confirm</Label>
+              <Input
+                value={confirmText}
+                onChange={e => setConfirmText(e.target.value)}
+                placeholder="Type PURGE"
+                className="mt-1 border-red-200 focus-visible:ring-red-500"
+              />
+            </div>
+          </div>
+          <Button
+            variant="destructive"
+            className="w-full"
+            disabled={confirmText !== 'PURGE' || purging}
+            onClick={async () => {
+              setPurging(true);
+              try {
+                const res = await fetch('/api/purge', { method: 'POST' });
+                const data = await res.json();
+                toast.success(data.message || 'Data purged successfully');
+                setPurgeDialogOpen(false);
+              } catch (err) {
+                toast.error('Purge failed');
+              }
+              setPurging(false);
+            }}
+          >
+            {purging ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+            {purging ? 'Purging...' : 'Permanently Delete All Demo Data'}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
