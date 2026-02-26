@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Users, Receipt,
   Settings, Plug, ChevronLeft, ChevronRight, Menu, X,
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
-  Boxes, Moon, Sun, RefreshCw, Database
+  Boxes, Moon, Sun, RefreshCw, Database, BarChart3, RefreshCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ import EmployeesView from '@/components/EmployeesView';
 import ExpensesView from '@/components/ExpensesView';
 import IntegrationsView from '@/components/IntegrationsView';
 import SettingsView from '@/components/SettingsView';
+import ReportsView from '@/components/ReportsView';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { id: 'inventory', label: 'Inventory', icon: Boxes },
   { id: 'employees', label: 'Employees', icon: Users },
   { id: 'expenses', label: 'Expenses', icon: Receipt },
+  { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
