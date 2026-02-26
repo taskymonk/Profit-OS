@@ -229,7 +229,7 @@ export default function DashboardView() {
     );
   }
 
-  const { filtered, allTime, dailyData, recentOrders, exchangeRate } = data;
+  const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead } = data;
 
   // Trend calc
   const mid = Math.floor(dailyData.length / 2);
