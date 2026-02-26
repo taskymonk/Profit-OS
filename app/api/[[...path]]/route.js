@@ -950,36 +950,79 @@ export async function POST(request) {
         return json({ error: 'Unknown India Post action' }, 404);
 
       case 'employee-claim': {
-        // Employee claims an order they prepared
-        const { employeeId, orderId } = body;
-        if (!employeeId || !orderId) return json({ error: 'employeeId and orderId required' }, 400);
+        // Bulk claim: accepts single orderId or array of orderIds
+        const { employeeId, orderId, orderIds: rawOrderIds } = body;
+        if (!employeeId) return json({ error: 'employeeId required' }, 400);
+
+        // Build array of order IDs from either field
+        let orderIdList = [];
+        if (rawOrderIds && Array.isArray(rawOrderIds)) {
+          orderIdList = rawOrderIds;
+        } else if (orderId) {
+          // Support comma/newline separated string
+          orderIdList = String(orderId).split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
+        }
+        if (orderIdList.length === 0) return json({ error: 'At least one orderId required' }, 400);
+
         const db = await getDb();
         const employee = await db.collection('employees').findOne({ _id: employeeId });
         if (!employee) return json({ error: 'Employee not found' }, 404);
-        const order = await db.collection('orders').findOne({ orderId: orderId });
-        if (!order) return json({ error: 'Order not found' }, 404);
 
-        // Update order with preparedBy
-        await db.collection('orders').updateOne({ _id: order._id }, {
-          $set: { preparedBy: employeeId, preparedByName: employee.name, updatedAt: new Date().toISOString() }
-        });
-
-        // Update employee daily outputs
         const today = new Date().toISOString().split('T')[0];
-        const existingOutput = (employee.dailyOutputs || []).find(d => d.date === today);
-        if (existingOutput) {
-          if (!existingOutput.orderIds.includes(orderId)) {
-            existingOutput.orderIds.push(orderId);
-            existingOutput.ordersPrepared = existingOutput.orderIds.length;
+        const results = { claimed: [], notFound: [] };
+
+        for (const oid of orderIdList) {
+          const order = await db.collection('orders').findOne({ orderId: oid });
+          if (!order) {
+            results.notFound.push(oid);
+            continue;
           }
-          await db.collection('employees').updateOne({ _id: employeeId }, { $set: { dailyOutputs: employee.dailyOutputs } });
-        } else {
-          await db.collection('employees').updateOne({ _id: employeeId }, {
-            $push: { dailyOutputs: { date: today, ordersPrepared: 1, orderIds: [orderId] } }
+
+          // Update order with preparedBy
+          await db.collection('orders').updateOne({ _id: order._id }, {
+            $set: { preparedBy: employeeId, preparedByName: employee.name, updatedAt: new Date().toISOString() }
           });
+          results.claimed.push(oid);
         }
 
-        return json({ message: `Order ${orderId} claimed by ${employee.name}`, order: order.orderId, employee: employee.name });
+        // Update employee daily outputs in one go
+        if (results.claimed.length > 0) {
+          const freshEmployee = await db.collection('employees').findOne({ _id: employeeId });
+          const dailyOutputs = freshEmployee.dailyOutputs || [];
+          const todayEntry = dailyOutputs.find(d => d.date === today);
+          if (todayEntry) {
+            for (const oid of results.claimed) {
+              if (!todayEntry.orderIds.includes(oid)) {
+                todayEntry.orderIds.push(oid);
+              }
+            }
+            todayEntry.ordersPrepared = todayEntry.orderIds.length;
+            await db.collection('employees').updateOne({ _id: employeeId }, { $set: { dailyOutputs } });
+          } else {
+            await db.collection('employees').updateOne({ _id: employeeId }, {
+              $push: { dailyOutputs: { date: today, ordersPrepared: results.claimed.length, orderIds: results.claimed } }
+            });
+          }
+        }
+
+        return json({
+          message: `${results.claimed.length} order(s) claimed by ${employee.name}${results.notFound.length > 0 ? `. ${results.notFound.length} not found.` : ''}`,
+          claimed: results.claimed,
+          notFound: results.notFound,
+          employee: employee.name,
+        });
+      }
+
+      case 'purge': {
+        // Purge all demo data but keep tenantConfig and integrations
+        const db = await getDb();
+        const collections = ['orders', 'skuRecipes', 'rawMaterials', 'packagingMaterials', 'vendors', 'employees', 'overheadExpenses'];
+        const counts = {};
+        for (const col of collections) {
+          const result = await db.collection(col).deleteMany({});
+          counts[col] = result.deletedCount;
+        }
+        return json({ message: 'All demo data purged. TenantConfig and Integrations preserved.', purged: counts });
       }
 
       case 'vendors':
