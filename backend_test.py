@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Profit OS Phase 2 Backend API Testing Suite
-Tests all Phase 2 features including dashboard date ranges, reports APIs,
-currency conversion, urgent orders, employee management, and integration error handling.
+Profit OS Phase 3 Backend API Testing Suite
+Tests Phase 3 features: Bulk Employee Claim, Pro-Rata Overhead in Dashboard, and Purge Demo Data.
 """
 
 import requests
