@@ -345,13 +345,13 @@ backend:
           agent: "testing"
           comment: "✅ TESTED - Employee assignment working correctly. Successfully assigned Ramesh Kumar to test order. preparedBy and preparedByName fields properly updated in order record."
 
-  - task: "Employee Claim API"
+  - task: "Employee Claim API (Bulk)"
     implemented: true
     working: true
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
-    priority: "medium"
-    needs_retesting: false
+    priority: "high"
+    needs_retesting: true
     status_history:
         - working: true
           agent: "main"
@@ -359,6 +359,33 @@ backend:
         - working: true
           agent: "testing"
           comment: "✅ TESTED - Employee claim functionality working correctly. Valid claim for order GS-1005 successful. Invalid order ID correctly returns 404 error. Employee daily outputs updated properly."
+        - working: "NA"
+          agent: "main"
+          comment: "UPGRADED to bulk claiming. Now accepts: 1) orderIds as array, 2) orderId as comma/newline-separated string. Returns {claimed:[], notFound:[], message}. Needs retesting for bulk flow."
+
+  - task: "Pro-Rata Overhead Calculation"
+    implemented: true
+    working: "NA"
+    file: "lib/profitCalculator.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New Phase 3 feature. calculateProratedOverhead() pro-rates monthly recurring expenses (Rent, Software, Utilities) by days in range. Deduplicates by expenseName. Returns {monthlyTotal, daysInRange, proratedAmount, breakdown}. Integrated into calculateDashboardMetrics — netProfit now subtracts prorated overhead. Dashboard response includes 'overhead' object with breakdown and perOrder."
+
+  - task: "Purge Demo Data API"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/purge deletes all docs from: orders, skuRecipes, rawMaterials, packagingMaterials, vendors, employees, overheadExpenses. MUST preserve tenantConfig and integrations collections. Returns {purged: {collection: count}}. CRITICAL: verify tenantConfig and integrations survive the purge."
 
   - task: "Shopify Sync Error Handling"
     implemented: true
