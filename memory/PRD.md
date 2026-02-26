@@ -50,10 +50,42 @@ A white-labeled SaaS application that calculates true profit per e-commerce orde
 - GET/PUT /api/integrations
 - GET/PUT /api/tenant-config
 
-## Phase 2 (Planned)
-- Live Shopify webhook integration
-- India Post bulk tracking (auto RTO detection)
-- Meta Ads daily spend sync
-- Currency conversion via Exchange Rate API
-- CSV import/export
-- Employee daily output tracking
+## Phase 2 Features (Complete)
+
+### 1. Date Range Picker (Dashboard)
+- Today | Last 7 Days | This Month | All Time | Custom Range
+- ALL metrics, charts, and tables re-calculate based on selected range
+- GET /api/dashboard?range=today|7days|month|alltime|custom&startDate=&endDate=
+
+### 2. Advanced Reports Page
+- **Most Profitable SKUs**: Ranked by total profit with margin %, avg profit/order, RTO rates
+- **Highest RTO Pincodes/Cities**: Location-based RTO analysis with bar chart
+- **Employee Output vs Error Rate**: Performance comparison with daily averages
+
+### 3. Urgent Order Override
+- PUT /api/orders/{id}/urgent — Mark any order as urgent
+- Select courier (BlueDart, DTDC, Delhivery, FedEx) + manual shipping cost
+- Overrides India Post tariff in profit calculation
+- Visual ⚡ badge on urgent orders
+
+### 4. Employee Order Tagging
+- **Claiming Station**: Employee selects name → types Order ID → claims it
+- POST /api/employee-claim links orders to employees
+- PUT /api/orders/{id}/assign for direct assignment
+- Daily output tracking with exact order IDs per employee
+
+### 5. Shopify Product & Order Sync
+- POST /api/shopify/sync-products — Fetches all products/variants, auto-creates SKU recipes
+- POST /api/shopify/sync-orders — Syncs historical orders with bundle handling
+- Credentials fetched dynamically from DB (not hardcoded)
+
+### 6. India Post Bulk Tracking
+- POST /api/indiapost/track-bulk — Scans tracking events in chunks of 50
+- Auto-updates order status to "Delivered" (event: Item Delivered) or "RTO" (event: Returned)
+- Supports sandbox and production modes
+
+### 7. Frankfurter.app Currency Conversion
+- GET /api/currency?from=USD&to=INR&amount=100
+- Free, no-auth, live rates from ECB
+- 1-hour caching for performance
+- Live USD/INR rate shown on dashboard
