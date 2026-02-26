@@ -368,15 +368,18 @@ backend:
 
   - task: "Pro-Rata Overhead Calculation"
     implemented: true
-    working: "NA"
+    working: true
     file: "lib/profitCalculator.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
           comment: "New Phase 3 feature. calculateProratedOverhead() pro-rates monthly recurring expenses (Rent, Software, Utilities) by days in range. Deduplicates by expenseName. Returns {monthlyTotal, daysInRange, proratedAmount, breakdown}. Integrated into calculateDashboardMetrics — netProfit now subtracts prorated overhead. Dashboard response includes 'overhead' object with breakdown and perOrder."
+        - working: true
+          agent: "testing"
+          comment: "✅ PHASE 3 TESTED - Pro-rata overhead calculation working perfectly. Dashboard includes proper overhead structure with monthlyTotal (₹56499), daysInRange, proratedAmount, breakdown array with {name, category, monthly, prorated}, and perOrder fields. Monthly total correctly includes Rent (₹45,000) + Shopify (₹2,999) + Electricity (₹8,500) = ₹56,499. Pro-rated calculation correct: today (2 days) = ₹3,766.60, 7-day range (8 days inclusive) = ₹15,066.40. Net profit correctly less than gross profit (overhead subtracted). Breakdown structure validated with proper deduplication."
 
   - task: "Purge Demo Data API"
     implemented: true
