@@ -101,3 +101,197 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "Profit OS - True Profit Engine - A SaaS app that calculates true profit per e-commerce order by factoring all costs (COGS, shipping, RTO, transaction fees, marketing allocation). Built with Next.js + MongoDB."
+
+backend:
+  - task: "Seed Demo Data API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/seed creates demo data for GiftSugar tenant. Handles duplicate key gracefully."
+
+  - task: "Dashboard Aggregation API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/dashboard returns today's metrics, 7-day daily data, recent orders with profit breakdown."
+
+  - task: "Profit Calculator Engine"
+    implemented: true
+    working: true
+    file: "lib/profitCalculator.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Implements full formula: Net Revenue (Sales-Discount-18%GST), COGS (materials+packaging+consumables+wastage%), Shipping (double for RTO), Txn Fees (2%+18%GST), Marketing allocation (daily ad spend / daily orders). GET /api/calculate-profit/{orderId} endpoint."
+
+  - task: "Tenant Config CRUD"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/PUT /api/tenant-config - white-label settings with branding, currency, feature toggles."
+
+  - task: "Orders CRUD"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/POST/PUT/DELETE /api/orders and /api/orders/{id}. Supports status filtering."
+
+  - task: "SKU Recipes CRUD"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/POST/PUT/DELETE /api/sku-recipes and /api/sku-recipes/{id}."
+
+  - task: "Raw Materials CRUD"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/POST/PUT/DELETE /api/raw-materials and /api/raw-materials/{id}."
+
+  - task: "Packaging Materials CRUD"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/POST/PUT/DELETE /api/packaging-materials."
+
+  - task: "Employees CRUD"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/POST/PUT/DELETE /api/employees."
+
+  - task: "Overhead Expenses CRUD"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/POST/PUT/DELETE /api/overhead-expenses."
+
+  - task: "Integrations Management API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET/PUT /api/integrations - stores Shopify, India Post, Meta Ads, Exchange Rate credentials in DB. GET masks sensitive tokens."
+
+frontend:
+  - task: "Dashboard with Profit Metrics"
+    implemented: true
+    working: true
+    file: "components/DashboardView.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "4 metric cards, 7-day area chart, daily breakdown bar chart, orders table with expandable profit breakdown. Verified via screenshot."
+
+  - task: "Orders Management UI"
+    implemented: true
+    working: true
+    file: "components/OrdersView.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "SKU Recipes Management UI"
+    implemented: true
+    working: true
+    file: "components/SkuRecipesView.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+  - task: "Integrations Panel UI"
+    implemented: true
+    working: true
+    file: "components/IntegrationsView.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Seed Demo Data API"
+    - "Dashboard Aggregation API"
+    - "Profit Calculator Engine"
+    - "Orders CRUD"
+    - "SKU Recipes CRUD"
+    - "Integrations Management API"
+  stuck_tasks: []
+  test_all: true
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Phase 1 MVP complete. All backend APIs implemented with MongoDB. Core profit engine calculates: Net Revenue (after GST), COGS (from SKU recipes with wastage), Shipping (2x for RTO), Txn Fees (2% + GST), Marketing allocation. Frontend has full dashboard with charts, all CRUD views, and integrations panel. Data is seeded with demo GiftSugar data. Please test all backend APIs - focus on profit calculation correctness, CRUD operations, and dashboard aggregation. Base URL is http://localhost:3000/api. Data is already seeded (POST /api/seed was called on app init)."
