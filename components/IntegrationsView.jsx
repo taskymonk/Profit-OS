@@ -114,6 +114,35 @@ export default function IntegrationsView() {
               </Button>
             </div>
           </div>
+          <Separator />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button size="sm" variant="outline" disabled={syncing.shopifyProducts}
+              onClick={() => runSync('shopifyProducts', '/api/shopify/sync-products')}>
+              {syncing.shopifyProducts ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
+              Sync Products / SKUs
+            </Button>
+            <Button size="sm" variant="outline" disabled={syncing.shopifyOrders}
+              onClick={() => runSync('shopifyOrders', '/api/shopify/sync-orders')}>
+              {syncing.shopifyOrders ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
+              Sync Orders
+            </Button>
+          </div>
+          {(syncResults.shopifyProducts || syncResults.shopifyOrders) && (
+            <div className="text-xs p-2 rounded bg-muted space-y-1">
+              {syncResults.shopifyProducts && (
+                <div className="flex items-center gap-1.5">
+                  {syncResults.shopifyProducts.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
+                  <span>{syncResults.shopifyProducts.error || syncResults.shopifyProducts.message}</span>
+                </div>
+              )}
+              {syncResults.shopifyOrders && (
+                <div className="flex items-center gap-1.5">
+                  {syncResults.shopifyOrders.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
+                  <span>{syncResults.shopifyOrders.error || syncResults.shopifyOrders.message}</span>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
