@@ -853,24 +853,23 @@ def test_existing_crud_smoke_tests():
     return all(results)
 
 def main():
-    """Run all Phase 2 backend tests"""
-    print_header("PROFIT OS PHASE 2 BACKEND API TESTING SUITE")
+    """Run Phase 3 backend tests for Profit OS"""
+    print_header("PROFIT OS PHASE 3 BACKEND API TESTING SUITE")
     print_info(f"Base URL: {BASE_URL}")
     print_info(f"Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print_info("🎯 FOCUSING ONLY ON PHASE 3 FEATURES:")
+    print_info("   1. Bulk Employee Claim (POST /api/employee-claim)")
+    print_info("   2. Pro-Rata Overhead in Dashboard (GET /api/dashboard)")
+    print_info("   3. Purge Demo Data (POST /api/purge)")
     
-    # Run all test suites
+    # Run Phase 3 test suites only
     test_results = []
     
     try:
-        test_results.append(("Dashboard Date Range Filters", test_dashboard_date_ranges()))
-        test_results.append(("Reports APIs", test_reports_apis()))
-        test_results.append(("Currency Conversion", test_currency_conversion()))
-        test_results.append(("Urgent Order Override", test_urgent_order_override()))
-        test_results.append(("Employee Assignment", test_employee_assignment()))
-        test_results.append(("Employee Claim", test_employee_claim()))
-        test_results.append(("Shopify Sync Error Handling", test_shopify_sync_error_handling()))
-        test_results.append(("India Post Tracking Error Handling", test_indiapost_tracking_error_handling()))
-        test_results.append(("Existing CRUD Smoke Tests", test_existing_crud_smoke_tests()))
+        # Phase 3 specific tests
+        test_results.append(("PHASE 3: Bulk Employee Claim", test_bulk_employee_claim()))
+        test_results.append(("PHASE 3: Pro-Rata Overhead Dashboard", test_prorata_overhead_dashboard()))
+        test_results.append(("PHASE 3: Purge Demo Data", test_purge_demo_data()))
         
     except KeyboardInterrupt:
         print_error("\nTesting interrupted by user")
@@ -880,7 +879,7 @@ def main():
         return 1
     
     # Print summary
-    print_header("TEST RESULTS SUMMARY")
+    print_header("PHASE 3 TEST RESULTS SUMMARY")
     
     passed = sum(1 for _, result in test_results if result)
     total = len(test_results)
@@ -889,13 +888,13 @@ def main():
         status = "✅ PASS" if result else "❌ FAIL"
         print(f"{status} {test_name}")
     
-    print(f"\n{Colors.BOLD}Overall Results: {passed}/{total} test suites passed{Colors.END}")
+    print(f"\n{Colors.BOLD}Overall Phase 3 Results: {passed}/{total} test suites passed{Colors.END}")
     
     if passed == total:
-        print_success("🎉 ALL PHASE 2 BACKEND TESTS PASSED!")
+        print_success("🎉 ALL PHASE 3 BACKEND TESTS PASSED!")
         return 0
     else:
-        print_error(f"⚠️  {total - passed} test suite(s) failed")
+        print_error(f"⚠️  {total - passed} Phase 3 test suite(s) failed")
         return 1
 
 if __name__ == "__main__":
