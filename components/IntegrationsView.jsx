@@ -222,31 +222,6 @@ export default function IntegrationsView() {
       </Card>
 
       {/* Exchange Rate */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-teal-100 dark:bg-teal-900/30"><Globe className="w-5 h-5 text-teal-600" /></div>
-              <div><CardTitle className="text-base">Exchange Rate API</CardTitle><CardDescription>USD/INR conversion for international costs</CardDescription></div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant={exchangeRate.active ? 'default' : 'secondary'}>{exchangeRate.active ? 'Active' : 'Inactive'}</Badge>
-              <Switch checked={exchangeRate.active} onCheckedChange={v => setExchangeRate({...exchangeRate, active: v})} />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <Label>API Key</Label>
-            <div className="flex gap-2">
-              <Input type={showSecrets.exchangeKey ? 'text' : 'password'} value={exchangeRate.apiKey} onChange={e => setExchangeRate({...exchangeRate, apiKey: e.target.value})} placeholder="Your API key from exchangerate-api.com" />
-              <Button variant="outline" size="icon" onClick={() => toggleSecret('exchangeKey')}>
-                {showSecrets.exchangeKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
