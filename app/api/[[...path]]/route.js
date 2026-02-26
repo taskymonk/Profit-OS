@@ -408,6 +408,7 @@ async function getDashboardData(params = {}) {
     dateRange: { start: startDate.toISOString(), end: endDate.toISOString(), range: params.range || '7days' },
     filtered: {
       netProfit: metrics.netProfit,
+      grossOrderProfit: metrics.grossOrderProfit,
       totalOrders: metrics.totalOrders,
       rtoRate: metrics.rtoRate,
       roas: metrics.roas,
@@ -415,6 +416,7 @@ async function getDashboardData(params = {}) {
       adSpend: metrics.adSpend,
       rtoCount: metrics.rtoCount,
     },
+    overhead: metrics.overhead,
     allTime: {
       totalOrders: allTimeMetrics.totalOrders,
       netProfit: allTimeMetrics.netProfit,
