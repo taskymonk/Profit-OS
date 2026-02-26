@@ -1,463 +1,540 @@
 #!/usr/bin/env python3
 """
-Profit OS Backend API Testing Suite
-Tests all backend APIs according to test_result.md requirements
+Profit OS Phase 2 Backend API Testing Suite
+Tests all Phase 2 features including dashboard date ranges, reports APIs,
+currency conversion, urgent orders, employee management, and integration error handling.
 """
 
 import requests
 import json
 import sys
 from datetime import datetime, timedelta
-import uuid
+import time
 
-# Base URLs
+# Base URL from environment
 BASE_URL = "https://profit-dashboard-37.preview.emergentagent.com/api"
 
-class ProfitOSAPITester:
-    def __init__(self):
-        self.base_url = BASE_URL
-        self.session = requests.Session()
-        self.session.headers.update({
-            'Content-Type': 'application/json',
-            'User-Agent': 'ProfitOS-API-Test/1.0'
-        })
-        self.test_results = []
-        self.test_order_id = None
-        self.test_recipe_id = None
+class Colors:
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    END = '\033[0m'
+    BOLD = '\033[1m'
+
+def print_success(msg):
+    print(f"{Colors.GREEN}✅ {msg}{Colors.END}")
+
+def print_error(msg):
+    print(f"{Colors.RED}❌ {msg}{Colors.END}")
+
+def print_info(msg):
+    print(f"{Colors.BLUE}ℹ️  {msg}{Colors.END}")
+
+def print_warning(msg):
+    print(f"{Colors.YELLOW}⚠️  {msg}{Colors.END}")
+
+def print_header(msg):
+    print(f"\n{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.BLUE}{msg.center(60)}{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.BLUE}{'='*60}{Colors.END}\n")
+
+def make_request(method, endpoint, data=None, expected_status=200):
+    """Make HTTP request and return response"""
+    url = f"{BASE_URL}{endpoint}"
+    print_info(f"{method} {url}")
+    
+    try:
+        if method == 'GET':
+            response = requests.get(url, timeout=30)
+        elif method == 'POST':
+            response = requests.post(url, json=data, timeout=30)
+        elif method == 'PUT':
+            response = requests.put(url, json=data, timeout=30)
+        elif method == 'DELETE':
+            response = requests.delete(url, timeout=30)
         
-    def log_test_result(self, test_name, success, message="", response_data=None):
-        """Log test results for summary"""
-        self.test_results.append({
-            'test': test_name,
-            'success': success,
-            'message': message,
-            'data': response_data
-        })
-        status = "✅ PASS" if success else "❌ FAIL"
-        print(f"{status}: {test_name}")
-        if message:
-            print(f"   Details: {message}")
+        if data:
+            print_info(f"Request body: {json.dumps(data, indent=2)}")
         
-    def test_api_endpoint(self, method, endpoint, data=None, expected_status=200, test_name=None):
-        """Generic API test helper"""
-        if not test_name:
-            test_name = f"{method} {endpoint}"
-            
-        try:
-            url = f"{self.base_url}{endpoint}"
-            
-            if method.upper() == 'GET':
-                response = self.session.get(url)
-            elif method.upper() == 'POST':
-                response = self.session.post(url, json=data)
-            elif method.upper() == 'PUT':
-                response = self.session.put(url, json=data)
-            elif method.upper() == 'DELETE':
-                response = self.session.delete(url)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-                
-            success = response.status_code == expected_status
-            
+        print_info(f"Response status: {response.status_code}")
+        
+        if response.status_code == expected_status:
             try:
-                response_data = response.json()
+                result = response.json()
+                print_info(f"Response: {json.dumps(result, indent=2)[:500]}...")
+                return True, result
             except:
-                response_data = {"status_code": response.status_code, "text": response.text[:200]}
+                return True, response.text
+        else:
+            try:
+                error_data = response.json()
+                print_error(f"Unexpected status {response.status_code}: {error_data}")
+            except:
+                print_error(f"Unexpected status {response.status_code}: {response.text}")
+            return False, None
             
-            message = f"Status: {response.status_code}"
-            if not success:
-                message += f", Expected: {expected_status}"
-                
-            self.log_test_result(test_name, success, message, response_data)
-            return success, response_data
-            
-        except Exception as e:
-            self.log_test_result(test_name, False, f"Exception: {str(e)}")
-            return False, {"error": str(e)}
+    except Exception as e:
+        print_error(f"Request failed: {str(e)}")
+        return False, None
 
-    def test_seed_api(self):
-        """Test POST /api/seed - should return {seeded: false} since data already exists"""
-        print("\n=== Testing Seed API ===")
+def test_dashboard_date_ranges():
+    """Test dashboard API with different date range filters"""
+    print_header("DASHBOARD DATE RANGE FILTER TESTS")
+    
+    test_cases = [
+        ("today", "Today's data"),
+        ("7days", "Last 7 days data"),
+        ("month", "Current month data"),
+        ("alltime", "All-time data"),
+        ("custom&startDate=2026-02-25&endDate=2026-02-26", "Custom date range")
+    ]
+    
+    results = []
+    
+    for range_param, description in test_cases:
+        print_info(f"\nTesting {description} - range={range_param}")
+        success, data = make_request('GET', f'/dashboard?range={range_param}')
         
-        success, data = self.test_api_endpoint('POST', '/seed', {}, 200, "Seed API")
-        
-        if success:
-            if 'seeded' in data and data['seeded'] == False:
-                self.log_test_result("Seed API - Already Seeded Check", True, "Correctly returned seeded: false")
-            else:
-                self.log_test_result("Seed API - Already Seeded Check", False, f"Expected seeded: false, got: {data.get('seeded')}")
-
-    def test_dashboard_api(self):
-        """Test GET /api/dashboard - verify structure and data types"""
-        print("\n=== Testing Dashboard API ===")
-        
-        success, data = self.test_api_endpoint('GET', '/dashboard', None, 200, "Dashboard API")
-        
-        if success and isinstance(data, dict):
-            # Check required fields
-            required_fields = ['today', 'allTime', 'dailyData', 'recentOrders']
+        if success and data:
+            # Verify response structure
+            required_fields = ['tenant', 'exchangeRate', 'dateRange', 'filtered', 'allTime', 'dailyData', 'recentOrders']
             missing_fields = [field for field in required_fields if field not in data]
             
-            if not missing_fields:
-                self.log_test_result("Dashboard API - Structure Check", True, "All required fields present")
+            if missing_fields:
+                print_error(f"Missing required fields: {missing_fields}")
+                results.append(False)
             else:
-                self.log_test_result("Dashboard API - Structure Check", False, f"Missing fields: {missing_fields}")
-                return
-            
-            # Check today metrics
-            today = data.get('today', {})
-            today_fields = ['netProfit', 'totalOrders', 'rtoRate', 'roas']
-            today_missing = [field for field in today_fields if field not in today]
-            
-            if not today_missing:
-                self.log_test_result("Dashboard API - Today Metrics", True, 
-                    f"Profit: {today.get('netProfit')}, Orders: {today.get('totalOrders')}, RTO: {today.get('rtoRate')}%, ROAS: {today.get('roas')}")
-            else:
-                self.log_test_result("Dashboard API - Today Metrics", False, f"Missing today fields: {today_missing}")
+                # Check filtered metrics structure
+                filtered = data.get('filtered', {})
+                metric_fields = ['netProfit', 'totalOrders', 'rtoRate', 'roas', 'revenue', 'adSpend', 'rtoCount']
+                missing_metrics = [field for field in metric_fields if field not in filtered]
                 
-            # Check dailyData array
-            daily_data = data.get('dailyData', [])
-            if isinstance(daily_data, list) and len(daily_data) == 7:
-                self.log_test_result("Dashboard API - Daily Data", True, f"7 days of data present")
-            else:
-                self.log_test_result("Dashboard API - Daily Data", False, f"Expected 7 days, got: {len(daily_data) if isinstance(daily_data, list) else 'not array'}")
-                
-            # Check recent orders
-            recent_orders = data.get('recentOrders', [])
-            if isinstance(recent_orders, list) and len(recent_orders) > 0:
-                first_order = recent_orders[0]
-                if '_profitData' in first_order or 'netProfit' in first_order:
-                    self.log_test_result("Dashboard API - Recent Orders with Profit", True, f"{len(recent_orders)} orders with profit data")
+                if missing_metrics:
+                    print_error(f"Missing filtered metric fields: {missing_metrics}")
+                    results.append(False)
                 else:
-                    self.log_test_result("Dashboard API - Recent Orders with Profit", False, "Orders missing profit data")
-            else:
-                self.log_test_result("Dashboard API - Recent Orders", False, "No recent orders found")
-
-    def test_orders_crud(self):
-        """Test Orders CRUD operations"""
-        print("\n=== Testing Orders CRUD ===")
-        
-        # 1. GET /api/orders - list all orders
-        success, orders_data = self.test_api_endpoint('GET', '/orders', None, 200, "Get All Orders")
-        
-        if not success or not isinstance(orders_data, list):
-            self.log_test_result("Orders CRUD", False, "Failed to get orders list")
-            return
-            
-        original_count = len(orders_data)
-        self.log_test_result("Orders List", True, f"Found {original_count} orders")
-        
-        # Get a sample order for profit calculation test
-        sample_order = None
-        if orders_data:
-            sample_order = orders_data[0]
-            
-        # 2. GET /api/orders?status=RTO - filter by status
-        success, rto_orders = self.test_api_endpoint('GET', '/orders?status=RTO', None, 200, "Get RTO Orders")
-        if success:
-            rto_count = len(rto_orders) if isinstance(rto_orders, list) else 0
-            self.log_test_result("Orders Filter by Status", True, f"Found {rto_count} RTO orders")
-        
-        # 3. POST /api/orders - create new order
-        test_order = {
-            "orderId": "TEST-001",
-            "sku": "GS-CHOCO-PREMIUM-500",
-            "productName": "Test Chocolate Gift Box",
-            "customerName": "Test User",
-            "salePrice": 1299,
-            "discount": 0,
-            "status": "Delivered",
-            "shippingMethod": "indiapost",
-            "shippingCost": 85,
-            "orderDate": "2025-02-26T00:00:00.000Z"
-        }
-        
-        success, new_order = self.test_api_endpoint('POST', '/orders', test_order, 201, "Create New Order")
-        if success and isinstance(new_order, dict) and '_id' in new_order:
-            self.test_order_id = new_order['_id']
-            self.log_test_result("Create Order", True, f"Created order with ID: {self.test_order_id}")
-            
-            # 4. PUT /api/orders/{id} - update order status to RTO
-            update_data = {"status": "RTO"}
-            success, updated_order = self.test_api_endpoint('PUT', f'/orders/{self.test_order_id}', update_data, 200, "Update Order Status")
-            if success and isinstance(updated_order, dict):
-                if updated_order.get('status') == 'RTO':
-                    self.log_test_result("Update Order Status", True, "Order status updated to RTO")
-                else:
-                    self.log_test_result("Update Order Status", False, f"Status not updated correctly: {updated_order.get('status')}")
-        else:
-            self.log_test_result("Create Order", False, "Failed to create test order")
-            
-        # Test profit calculation if we have a sample order
-        if sample_order and '_id' in sample_order:
-            self.test_profit_calculation(sample_order['_id'])
-        
-    def test_profit_calculation(self, order_id):
-        """Test GET /api/calculate-profit/{orderId}"""
-        print("\n=== Testing Profit Calculator ===")
-        
-        success, profit_data = self.test_api_endpoint('GET', f'/calculate-profit/{order_id}', None, 200, "Calculate Order Profit")
-        
-        if success and isinstance(profit_data, dict):
-            # Check required profit fields
-            required_fields = [
-                'orderId', 'netRevenue', 'totalCOGS', 'shippingCost', 
-                'totalTransactionFee', 'marketingAllocation', 'netProfit'
-            ]
-            
-            missing_fields = [field for field in required_fields if field not in profit_data]
-            
-            if not missing_fields:
-                self.log_test_result("Profit Calculator - Structure", True, "All required fields present")
-                
-                # Verify calculation logic
-                net_profit = profit_data.get('netProfit', 0)
-                net_revenue = profit_data.get('netRevenue', 0)
-                total_cogs = profit_data.get('totalCOGS', 0)
-                shipping = profit_data.get('shippingCost', 0)
-                txn_fee = profit_data.get('totalTransactionFee', 0)
-                marketing = profit_data.get('marketingAllocation', 0)
-                
-                expected_profit = net_revenue - total_cogs - shipping - txn_fee - marketing
-                profit_diff = abs(net_profit - expected_profit)
-                
-                if profit_diff < 0.01:  # Allow for small floating point differences
-                    self.log_test_result("Profit Calculator - Formula Verification", True, 
-                        f"Net Profit: {net_profit}, Components: Revenue({net_revenue}) - COGS({total_cogs}) - Shipping({shipping}) - TxnFee({txn_fee}) - Marketing({marketing})")
-                else:
-                    self.log_test_result("Profit Calculator - Formula Verification", False, 
-                        f"Calculation mismatch. Expected: {expected_profit}, Got: {net_profit}")
+                    print_success(f"✅ {description} - Profit: ₹{filtered.get('netProfit', 0)}, Orders: {filtered.get('totalOrders', 0)}, RTO: {filtered.get('rtoRate', 0)}%, ROAS: {filtered.get('roas', 0)}")
+                    
+                    # Verify daily data structure
+                    daily_data = data.get('dailyData', [])
+                    if daily_data and isinstance(daily_data, list):
+                        sample_day = daily_data[0]
+                        day_fields = ['date', 'label', 'orders', 'revenue', 'cogs', 'shipping', 'adSpend', 'netProfit', 'rtoCount']
+                        missing_day_fields = [field for field in day_fields if field not in sample_day]
                         
-                # Check RTO doubling logic if applicable
-                if profit_data.get('isRTO'):
-                    self.log_test_result("Profit Calculator - RTO Detection", True, "RTO order detected, shipping should be doubled")
-                    
-            else:
-                self.log_test_result("Profit Calculator - Structure", False, f"Missing fields: {missing_fields}")
-
-    def test_sku_recipes_crud(self):
-        """Test SKU Recipes CRUD operations"""
-        print("\n=== Testing SKU Recipes CRUD ===")
-        
-        # 1. GET /api/sku-recipes
-        success, recipes_data = self.test_api_endpoint('GET', '/sku-recipes', None, 200, "Get All SKU Recipes")
-        
-        if success and isinstance(recipes_data, list):
-            self.log_test_result("SKU Recipes List", True, f"Found {len(recipes_data)} recipes")
+                        if missing_day_fields:
+                            print_error(f"Missing daily data fields: {missing_day_fields}")
+                            results.append(False)
+                        else:
+                            print_success(f"Daily data structure valid - {len(daily_data)} data points")
+                            results.append(True)
+                    else:
+                        print_error("Daily data is not a valid array")
+                        results.append(False)
         else:
-            self.log_test_result("SKU Recipes List", False, "Failed to get recipes list")
-            return
-            
-        # 2. POST /api/sku-recipes - create new recipe
-        test_recipe = {
-            "sku": "TEST-SKU-001",
-            "productName": "Test Product",
-            "rawMaterials": [
-                {
-                    "name": "Sugar",
-                    "quantity": 100,
-                    "pricePerUnit": 0.5,
-                    "unitMeasurement": "grams"
-                }
-            ],
-            "packaging": [
-                {
-                    "name": "Test Box",
-                    "pricePerUnit": 20
-                }
-            ],
-            "consumableCost": 5,
-            "totalWeightGrams": 300,
-            "defaultWastageBuffer": 3
-        }
-        
-        success, new_recipe = self.test_api_endpoint('POST', '/sku-recipes', test_recipe, 201, "Create New SKU Recipe")
-        if success and isinstance(new_recipe, dict) and '_id' in new_recipe:
-            self.test_recipe_id = new_recipe['_id']
-            self.log_test_result("Create SKU Recipe", True, f"Created recipe with ID: {self.test_recipe_id}")
-        else:
-            self.log_test_result("Create SKU Recipe", False, "Failed to create test recipe")
+            results.append(False)
+    
+    print(f"\nDashboard Date Range Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
 
-    def test_integrations_api(self):
-        """Test Integrations API for masked tokens"""
-        print("\n=== Testing Integrations API ===")
+def test_reports_apis():
+    """Test all reports APIs"""
+    print_header("REPORTS APIs TESTS")
+    
+    reports = [
+        ("profitable-skus", "Profitable SKUs Report", ['sku', 'productName', 'totalOrders', 'totalRevenue', 'totalProfit', 'avgProfitPerOrder', 'profitMargin', 'rtoRate']),
+        ("rto-locations", "RTO Locations Report", ['pincode', 'city', 'totalOrders', 'rtoCount', 'deliveredCount', 'rtoRate']),
+        ("employee-output", "Employee Output Report", ['name', 'role', 'totalOrdersPrepared', 'deliveredCount', 'rtoCount', 'errorRate', 'dailyAverage'])
+    ]
+    
+    results = []
+    
+    for endpoint, name, required_fields in reports:
+        print_info(f"\nTesting {name}")
+        success, data = make_request('GET', f'/reports/{endpoint}')
         
-        # 1. GET /api/integrations - should return masked tokens
-        success, integrations_data = self.test_api_endpoint('GET', '/integrations', None, 200, "Get Integrations")
-        
-        if success and isinstance(integrations_data, dict):
-            self.log_test_result("Integrations API", True, "Integrations data retrieved")
-            
-            # Check if tokens are masked (if they exist)
-            shopify = integrations_data.get('shopify', {})
-            if shopify.get('accessToken') and '*' in shopify['accessToken']:
-                self.log_test_result("Integrations - Token Masking", True, "Shopify token properly masked")
-            else:
-                self.log_test_result("Integrations - Token Masking", True, "No Shopify token to mask")
+        if success and data:
+            if isinstance(data, list) and len(data) > 0:
+                # Check first item structure
+                first_item = data[0]
+                missing_fields = [field for field in required_fields if field not in first_item]
                 
-        # 2. PUT /api/integrations - update integrations
-        update_data = {
-            "shopify": {
-                "storeUrl": "test.myshopify.com",
-                "accessToken": "test_token_123456789",
-                "active": True
-            }
-        }
-        
-        success, update_response = self.test_api_endpoint('PUT', '/integrations', update_data, 200, "Update Integrations")
-        if success:
-            self.log_test_result("Update Integrations", True, "Integrations updated successfully")
-            
-            # 3. Verify masking after update
-            success, updated_integrations = self.test_api_endpoint('GET', '/integrations', None, 200, "Verify Token Masking")
-            if success:
-                shopify_updated = updated_integrations.get('shopify', {})
-                token = shopify_updated.get('accessToken', '')
-                if '*' in token and token.endswith('9'):  # Last 4 chars should be visible
-                    self.log_test_result("Integrations - Updated Token Masking", True, f"Token properly masked: {token}")
+                if missing_fields:
+                    print_error(f"Missing required fields in {name}: {missing_fields}")
+                    results.append(False)
                 else:
-                    self.log_test_result("Integrations - Updated Token Masking", False, f"Token not masked correctly: {token}")
-
-    def test_tenant_config(self):
-        """Test Tenant Config API"""
-        print("\n=== Testing Tenant Config ===")
-        
-        # 1. GET /api/tenant-config
-        success, config_data = self.test_api_endpoint('GET', '/tenant-config', None, 200, "Get Tenant Config")
-        
-        if success and isinstance(config_data, dict):
-            original_name = config_data.get('tenantName', '')
-            self.log_test_result("Tenant Config", True, f"Current tenant: {original_name}")
-            
-            # 2. PUT /api/tenant-config - update tenant name
-            update_data = {"tenantName": "TestBrand"}
-            success, update_response = self.test_api_endpoint('PUT', '/tenant-config', update_data, 200, "Update Tenant Config")
-            
-            if success:
-                # 3. Verify update
-                success, updated_config = self.test_api_endpoint('GET', '/tenant-config', None, 200, "Verify Tenant Update")
-                if success and updated_config.get('tenantName') == 'TestBrand':
-                    self.log_test_result("Tenant Config Update", True, "Tenant name updated successfully")
+                    print_success(f"{name} - {len(data)} items returned with correct structure")
                     
-                    # Restore original name
-                    restore_data = {"tenantName": original_name}
-                    self.test_api_endpoint('PUT', '/tenant-config', restore_data, 200, "Restore Original Tenant Name")
-                else:
-                    self.log_test_result("Tenant Config Update", False, "Tenant name not updated correctly")
-
-    def test_other_crud_apis(self):
-        """Test other CRUD APIs quickly"""
-        print("\n=== Testing Other CRUD APIs ===")
-        
-        # Test various endpoints
-        endpoints = [
-            ('vendors', 'Vendors'),
-            ('raw-materials', 'Raw Materials'),
-            ('packaging-materials', 'Packaging Materials'),
-            ('employees', 'Employees'),
-            ('overhead-expenses', 'Overhead Expenses')
-        ]
-        
-        for endpoint, name in endpoints:
-            # GET - list all
-            success, data = self.test_api_endpoint('GET', f'/{endpoint}', None, 200, f"Get All {name}")
-            if success and isinstance(data, list):
-                self.log_test_result(f"{name} CRUD", True, f"Found {len(data)} {name.lower()}")
-                
-                # Quick POST test for vendors (smallest data)
-                if endpoint == 'vendors':
-                    test_vendor = {
-                        "name": "Test Vendor",
-                        "contact": "test@example.com",
-                        "phone": "+91-1234567890",
-                        "defaultCurrency": "INR"
-                    }
-                    success, new_vendor = self.test_api_endpoint('POST', f'/{endpoint}', test_vendor, 201, f"Create Test {name}")
-                    if success and '_id' in new_vendor:
-                        vendor_id = new_vendor['_id']
-                        # Clean up
-                        self.test_api_endpoint('DELETE', f'/{endpoint}/{vendor_id}', None, 200, f"Delete Test {name}")
+                    # Print sample data
+                    if endpoint == "profitable-skus":
+                        print_info(f"Top SKU: {first_item.get('sku')} - Profit: ₹{first_item.get('totalProfit', 0)}, Margin: {first_item.get('profitMargin', 0)}%")
+                    elif endpoint == "rto-locations":
+                        print_info(f"Top RTO Location: {first_item.get('city')} ({first_item.get('pincode')}) - RTO Rate: {first_item.get('rtoRate', 0)}%")
+                    elif endpoint == "employee-output":
+                        print_info(f"Top Employee: {first_item.get('name')} ({first_item.get('role')}) - {first_item.get('totalOrdersPrepared', 0)} orders prepared")
+                    
+                    results.append(True)
             else:
-                self.log_test_result(f"{name} CRUD", False, f"Failed to get {name.lower()}")
+                print_error(f"{name} returned empty array or invalid data")
+                results.append(False)
+        else:
+            results.append(False)
+    
+    print(f"\nReports Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
 
-    def cleanup_test_data(self):
-        """Clean up test data created during testing"""
-        print("\n=== Cleaning Up Test Data ===")
+def test_currency_conversion():
+    """Test currency conversion API using Frankfurter.app"""
+    print_header("CURRENCY CONVERSION TESTS")
+    
+    test_cases = [
+        ("USD", "INR", 100),
+        ("USD", "INR", 50),
+        ("EUR", "INR", 75)
+    ]
+    
+    results = []
+    
+    for from_curr, to_curr, amount in test_cases:
+        print_info(f"\nTesting conversion: {amount} {from_curr} to {to_curr}")
+        success, data = make_request('GET', f'/currency?from={from_curr}&to={to_curr}&amount={amount}')
         
-        # Delete test order if created
-        if self.test_order_id:
-            success, _ = self.test_api_endpoint('DELETE', f'/orders/{self.test_order_id}', None, 200, "Delete Test Order")
-            if success:
-                self.log_test_result("Cleanup Test Order", True, "Test order deleted")
+        if success and data:
+            required_fields = ['from', 'to', 'rate', 'amount', 'converted']
+            missing_fields = [field for field in required_fields if field not in data]
+            
+            if missing_fields:
+                print_error(f"Missing required fields: {missing_fields}")
+                results.append(False)
+            else:
+                rate = data.get('rate', 0)
+                converted = data.get('converted', 0)
                 
-        # Delete test recipe if created
-        if self.test_recipe_id:
-            success, _ = self.test_api_endpoint('DELETE', f'/sku-recipes/{self.test_recipe_id}', None, 200, "Delete Test Recipe")
-            if success:
-                self.log_test_result("Cleanup Test Recipe", True, "Test recipe deleted")
+                # Verify reasonable exchange rate for USD/INR (should be between 60-120)
+                if from_curr == "USD" and to_curr == "INR" and (rate < 60 or rate > 120):
+                    print_warning(f"Exchange rate seems unreasonable: {rate}")
+                
+                print_success(f"Conversion successful: {amount} {from_curr} = {converted} {to_curr} (rate: {rate})")
+                results.append(True)
+        else:
+            results.append(False)
+    
+    print(f"\nCurrency Conversion Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
 
-    def run_all_tests(self):
-        """Run all backend API tests"""
-        print(f"Starting Profit OS Backend API Tests")
-        print(f"Base URL: {self.base_url}")
-        print("=" * 60)
-        
-        try:
-            # Run all test suites
-            self.test_seed_api()
-            self.test_dashboard_api()
-            self.test_orders_crud()
-            self.test_sku_recipes_crud()
-            self.test_integrations_api()
-            self.test_tenant_config()
-            self.test_other_crud_apis()
-            
-            # Clean up
-            self.cleanup_test_data()
-            
-        except Exception as e:
-            print(f"❌ CRITICAL ERROR: {str(e)}")
-            self.log_test_result("CRITICAL ERROR", False, str(e))
-        
-        # Print summary
-        self.print_test_summary()
+def test_urgent_order_override():
+    """Test urgent order override functionality"""
+    print_header("URGENT ORDER OVERRIDE TESTS")
+    
+    # Step 1: Get an order ID
+    print_info("Getting orders to find a test order ID")
+    success, orders_data = make_request('GET', '/orders')
+    
+    if not success or not orders_data:
+        print_error("Failed to get orders list")
+        return False
+    
+    if not isinstance(orders_data, list) or len(orders_data) == 0:
+        print_error("No orders found in system")
+        return False
+    
+    test_order = orders_data[0]
+    order_id = test_order.get('_id')
+    original_order_id = test_order.get('orderId', 'Unknown')
+    
+    if not order_id:
+        print_error("No valid order ID found")
+        return False
+    
+    print_success(f"Selected test order: {original_order_id} (ID: {order_id})")
+    
+    # Step 2: Mark order as urgent with manual courier details
+    urgent_data = {
+        "manualCourierName": "DTDC",
+        "manualShippingCost": 200
+    }
+    
+    print_info(f"Marking order as urgent with manual courier: {urgent_data}")
+    success, updated_order = make_request('PUT', f'/orders/{order_id}/urgent', urgent_data)
+    
+    if not success:
+        return False
+    
+    # Step 3: Verify the order has been updated correctly
+    print_info("Verifying order update")
+    success, order_details = make_request('GET', f'/orders/{order_id}')
+    
+    if not success:
+        return False
+    
+    # Check if urgent fields are set correctly
+    if (order_details.get('isUrgent') == True and 
+        order_details.get('manualCourierName') == "DTDC" and 
+        order_details.get('manualShippingCost') == 200):
+        print_success("Order successfully marked as urgent with correct manual courier details")
+    else:
+        print_error(f"Order urgent fields not set correctly: isUrgent={order_details.get('isUrgent')}, courier={order_details.get('manualCourierName')}, cost={order_details.get('manualShippingCost')}")
+        return False
+    
+    # Step 4: Test profit calculation uses manual shipping cost
+    print_info("Testing profit calculation with manual shipping override")
+    success, profit_data = make_request('GET', f'/calculate-profit/{order_id}')
+    
+    if success and profit_data:
+        shipping_cost = profit_data.get('shippingCost', 0)
+        if shipping_cost == 200:
+            print_success(f"Profit calculation correctly uses manual shipping cost: ₹{shipping_cost}")
+            return True
+        else:
+            print_error(f"Profit calculation using wrong shipping cost: ₹{shipping_cost} (expected ₹200)")
+            return False
+    else:
+        print_error("Failed to get profit calculation")
+        return False
 
-    def print_test_summary(self):
-        """Print comprehensive test summary"""
-        print("\n" + "=" * 60)
-        print("TEST SUMMARY")
-        print("=" * 60)
-        
-        passed = sum(1 for result in self.test_results if result['success'])
-        failed = sum(1 for result in self.test_results if not result['success'])
-        total = len(self.test_results)
-        
-        print(f"Total Tests: {total}")
-        print(f"✅ Passed: {passed}")
-        print(f"❌ Failed: {failed}")
-        print(f"Success Rate: {(passed/total*100):.1f}%" if total > 0 else "No tests")
-        
-        # List failed tests
-        failed_tests = [result for result in self.test_results if not result['success']]
-        if failed_tests:
-            print("\n❌ FAILED TESTS:")
-            for test in failed_tests:
-                print(f"  - {test['test']}: {test['message']}")
-        
-        # Critical issues
-        critical_failures = [
-            test for test in failed_tests 
-            if any(keyword in test['test'].lower() for keyword in ['dashboard', 'profit', 'orders', 'crud'])
-        ]
-        
-        if critical_failures:
-            print("\n🚨 CRITICAL FAILURES:")
-            for test in critical_failures:
-                print(f"  - {test['test']}: {test['message']}")
-        
-        print("\n" + "=" * 60)
+def test_employee_assignment():
+    """Test employee assignment to orders"""
+    print_header("EMPLOYEE ASSIGNMENT TESTS")
+    
+    # Step 1: Get employee list
+    print_info("Getting employee list")
+    success, employees_data = make_request('GET', '/employees')
+    
+    if not success or not employees_data or len(employees_data) == 0:
+        print_error("Failed to get employees or no employees found")
+        return False
+    
+    test_employee = employees_data[0]
+    employee_id = test_employee.get('_id')
+    employee_name = test_employee.get('name', 'Unknown')
+    
+    print_success(f"Selected test employee: {employee_name} (ID: {employee_id})")
+    
+    # Step 2: Get orders list
+    print_info("Getting orders list")
+    success, orders_data = make_request('GET', '/orders')
+    
+    if not success or not orders_data or len(orders_data) == 0:
+        print_error("Failed to get orders")
+        return False
+    
+    test_order = orders_data[0]
+    order_id = test_order.get('_id')
+    original_order_id = test_order.get('orderId', 'Unknown')
+    
+    print_success(f"Selected test order: {original_order_id} (ID: {order_id})")
+    
+    # Step 3: Assign employee to order
+    assignment_data = {"employeeId": employee_id}
+    print_info(f"Assigning employee {employee_name} to order {original_order_id}")
+    success, updated_order = make_request('PUT', f'/orders/{order_id}/assign', assignment_data)
+    
+    if not success:
+        return False
+    
+    # Step 4: Verify assignment
+    if (updated_order.get('preparedBy') == employee_id and 
+        updated_order.get('preparedByName') == employee_name):
+        print_success(f"Order successfully assigned to employee: {employee_name}")
+        return True
+    else:
+        print_error(f"Employee assignment failed: preparedBy={updated_order.get('preparedBy')}, preparedByName={updated_order.get('preparedByName')}")
+        return False
 
+def test_employee_claim():
+    """Test employee claim functionality"""
+    print_header("EMPLOYEE CLAIM TESTS")
+    
+    # Step 1: Get employee and order for testing
+    print_info("Getting employee list")
+    success, employees_data = make_request('GET', '/employees')
+    
+    if not success or not employees_data:
+        print_error("Failed to get employees")
+        return False
+    
+    test_employee = employees_data[0]
+    employee_id = test_employee.get('_id')
+    employee_name = test_employee.get('name', 'Unknown')
+    
+    # Step 2: Test valid employee claim (using a known order ID from seed data)
+    claim_data = {
+        "employeeId": employee_id,
+        "orderId": "GS-1005"  # This should exist from seed data
+    }
+    
+    print_info(f"Testing employee claim: {employee_name} claiming order GS-1005")
+    success, claim_result = make_request('POST', '/employee-claim', claim_data)
+    
+    if success and claim_result:
+        if "claimed by" in str(claim_result.get('message', '')):
+            print_success(f"Employee claim successful: {claim_result.get('message')}")
+        else:
+            print_error(f"Unexpected claim response: {claim_result}")
+            return False
+    else:
+        print_error("Employee claim failed")
+        return False
+    
+    # Step 3: Test invalid order claim
+    invalid_claim_data = {
+        "employeeId": employee_id,
+        "orderId": "INVALID-ORDER-123"
+    }
+    
+    print_info("Testing invalid order claim (should return 404)")
+    success, error_result = make_request('POST', '/employee-claim', invalid_claim_data, expected_status=404)
+    
+    if success:
+        print_success("Invalid order claim correctly returned 404 error")
+        return True
+    else:
+        print_error("Invalid order claim did not return expected 404 error")
+        return False
+
+def test_shopify_sync_error_handling():
+    """Test Shopify sync APIs for proper error handling when credentials missing"""
+    print_header("SHOPIFY SYNC ERROR HANDLING TESTS")
+    
+    endpoints = [
+        ("sync-products", "Sync Products"),
+        ("sync-orders", "Sync Orders")
+    ]
+    
+    results = []
+    
+    for endpoint, description in endpoints:
+        print_info(f"Testing {description} - should return credentials error")
+        success, error_data = make_request('POST', f'/shopify/{endpoint}', expected_status=200)
+        
+        if success and error_data:
+            error_msg = error_data.get('error', '')
+            if 'credentials' in error_msg.lower() or 'not configured' in error_msg.lower():
+                print_success(f"{description} correctly returns credentials error: {error_msg}")
+                results.append(True)
+            else:
+                print_error(f"{description} returned unexpected response: {error_data}")
+                results.append(False)
+        else:
+            print_error(f"{description} failed unexpectedly")
+            results.append(False)
+    
+    print(f"\nShopify Error Handling Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
+def test_indiapost_tracking_error_handling():
+    """Test India Post tracking API for proper error handling"""
+    print_header("INDIA POST TRACKING ERROR HANDLING TESTS")
+    
+    print_info("Testing India Post bulk tracking - should return credentials error")
+    success, error_data = make_request('POST', '/indiapost/track-bulk', expected_status=200)
+    
+    if success and error_data:
+        error_msg = error_data.get('error', '')
+        if 'credentials' in error_msg.lower() or 'not configured' in error_msg.lower():
+            print_success(f"India Post tracking correctly returns credentials error: {error_msg}")
+            return True
+        else:
+            print_error(f"India Post tracking returned unexpected response: {error_data}")
+            return False
+    else:
+        print_error("India Post tracking failed unexpectedly")
+        return False
+
+def test_existing_crud_smoke_tests():
+    """Quick smoke tests on existing CRUD APIs to ensure they still work"""
+    print_header("EXISTING CRUD SMOKE TESTS")
+    
+    endpoints = [
+        ('/orders', 'Orders', ['isUrgent', 'destinationPincode', 'destinationCity', 'preparedBy']),
+        ('/sku-recipes', 'SKU Recipes', ['sku', 'productName']),
+        ('/tenant-config', 'Tenant Config', ['tenantName'])
+    ]
+    
+    results = []
+    
+    for endpoint, name, check_fields in endpoints:
+        print_info(f"Testing {name} API")
+        success, data = make_request('GET', endpoint)
+        
+        if success and data:
+            if endpoint == '/tenant-config':
+                # Single object response
+                missing_fields = [field for field in check_fields if field not in data]
+                if missing_fields:
+                    print_error(f"{name} missing fields: {missing_fields}")
+                    results.append(False)
+                else:
+                    print_success(f"{name} API working - Config: {data.get('tenantName', 'Unknown')}")
+                    results.append(True)
+            else:
+                # Array response
+                if isinstance(data, list) and len(data) > 0:
+                    first_item = data[0]
+                    if endpoint == '/orders':
+                        # Check for new Phase 2 fields
+                        phase2_fields = ['isUrgent', 'destinationPincode', 'destinationCity', 'preparedBy']
+                        found_fields = [field for field in phase2_fields if field in first_item]
+                        print_success(f"{name} API working - {len(data)} items, Phase 2 fields present: {found_fields}")
+                    else:
+                        print_success(f"{name} API working - {len(data)} items returned")
+                    results.append(True)
+                else:
+                    print_error(f"{name} returned empty or invalid data")
+                    results.append(False)
+        else:
+            results.append(False)
+    
+    print(f"\nExisting CRUD Smoke Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
+def main():
+    """Run all Phase 2 backend tests"""
+    print_header("PROFIT OS PHASE 2 BACKEND API TESTING SUITE")
+    print_info(f"Base URL: {BASE_URL}")
+    print_info(f"Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Run all test suites
+    test_results = []
+    
+    try:
+        test_results.append(("Dashboard Date Range Filters", test_dashboard_date_ranges()))
+        test_results.append(("Reports APIs", test_reports_apis()))
+        test_results.append(("Currency Conversion", test_currency_conversion()))
+        test_results.append(("Urgent Order Override", test_urgent_order_override()))
+        test_results.append(("Employee Assignment", test_employee_assignment()))
+        test_results.append(("Employee Claim", test_employee_claim()))
+        test_results.append(("Shopify Sync Error Handling", test_shopify_sync_error_handling()))
+        test_results.append(("India Post Tracking Error Handling", test_indiapost_tracking_error_handling()))
+        test_results.append(("Existing CRUD Smoke Tests", test_existing_crud_smoke_tests()))
+        
+    except KeyboardInterrupt:
+        print_error("\nTesting interrupted by user")
+        return 1
+    except Exception as e:
+        print_error(f"\nTesting failed with exception: {str(e)}")
+        return 1
+    
+    # Print summary
+    print_header("TEST RESULTS SUMMARY")
+    
+    passed = sum(1 for _, result in test_results if result)
+    total = len(test_results)
+    
+    for test_name, result in test_results:
+        status = "✅ PASS" if result else "❌ FAIL"
+        print(f"{status} {test_name}")
+    
+    print(f"\n{Colors.BOLD}Overall Results: {passed}/{total} test suites passed{Colors.END}")
+    
+    if passed == total:
+        print_success("🎉 ALL PHASE 2 BACKEND TESTS PASSED!")
+        return 0
+    else:
+        print_error(f"⚠️  {total - passed} test suite(s) failed")
+        return 1
 
 if __name__ == "__main__":
-    tester = ProfitOSAPITester()
-    tester.run_all_tests()
+    exit_code = main()
+    sys.exit(exit_code)
