@@ -103,23 +103,26 @@ async function seedData() {
     days.push(d);
   }
 
-  // Tenant Config
-  await db.collection('tenantConfig').insertOne({
-    _id: 'tenant-1',
-    tenantName: 'GiftSugar',
-    logo: '',
-    primaryColor: '#059669',
-    themePreference: 'system',
-    baseCurrency: 'INR',
-    supportedCurrencies: ['INR', 'USD'],
-    timezone: 'Asia/Kolkata',
-    gstRate: 18,
-    integrations: { shopifyActive: false, indiaPostActive: false, metaAdsActive: false },
-    maxOrdersPerMonth: 5000,
-    allowEmployeeTracking: true,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-  });
+  // Tenant Config (skip if already exists)
+  const existingConfig = await db.collection('tenantConfig').findOne({ _id: 'tenant-1' });
+  if (!existingConfig) {
+    await db.collection('tenantConfig').insertOne({
+      _id: 'tenant-1',
+      tenantName: 'GiftSugar',
+      logo: '',
+      primaryColor: '#059669',
+      themePreference: 'system',
+      baseCurrency: 'INR',
+      supportedCurrencies: ['INR', 'USD'],
+      timezone: 'Asia/Kolkata',
+      gstRate: 18,
+      integrations: { shopifyActive: false, indiaPostActive: false, metaAdsActive: false },
+      maxOrdersPerMonth: 5000,
+      allowEmployeeTracking: true,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+    });
+  }
 
   // Vendors
   const vendors = [
