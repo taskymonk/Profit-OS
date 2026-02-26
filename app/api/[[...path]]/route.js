@@ -301,15 +301,18 @@ async function seedData() {
   );
   await db.collection('overheadExpenses').insertMany(expenses);
 
-  // Integrations
-  await db.collection('integrations').insertOne({
-    _id: 'integrations-config',
-    shopify: { storeUrl: '', accessToken: '', active: false },
-    indiaPost: { username: '', password: '', clientId: '', active: false, sandboxMode: true },
-    metaAds: { token: '', adAccountId: '', active: false },
-    exchangeRate: { apiKey: '', active: false },
-    createdAt: now.toISOString(), updatedAt: now.toISOString(),
-  });
+  // Integrations (skip if already exists)
+  const existingIntegrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+  if (!existingIntegrations) {
+    await db.collection('integrations').insertOne({
+      _id: 'integrations-config',
+      shopify: { storeUrl: '', accessToken: '', active: false },
+      indiaPost: { username: '', password: '', clientId: '', active: false, sandboxMode: true },
+      metaAds: { token: '', adAccountId: '', active: false },
+      exchangeRate: { apiKey: '', active: false },
+      createdAt: now.toISOString(), updatedAt: now.toISOString(),
+    });
+  }
 
   return { message: 'Demo data seeded successfully!', seeded: true };
 }
