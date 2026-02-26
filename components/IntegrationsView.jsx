@@ -21,6 +21,8 @@ export default function IntegrationsView() {
   const [indiaPost, setIndiaPost] = useState({ username: '', password: '', clientId: '', active: false, sandboxMode: true });
   const [metaAds, setMetaAds] = useState({ token: '', adAccountId: '', active: false });
   const [exchangeRate, setExchangeRate] = useState({ apiKey: '', active: false });
+  const [syncing, setSyncing] = useState({});
+  const [syncResults, setSyncResults] = useState({});
 
   useEffect(() => {
     async function load() {
