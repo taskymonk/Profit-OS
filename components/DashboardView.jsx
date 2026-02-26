@@ -354,6 +354,45 @@ export default function DashboardView() {
         </Card>
       </div>
 
+      {/* Pro-Rata Overhead Deduction */}
+      {overhead && overhead.proratedAmount > 0 && (
+        <Card className="border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                  <Building2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Pro-Rata Overhead Deduction</p>
+                  <p className="text-xs text-muted-foreground">
+                    Monthly expenses spread across {overhead.daysInRange} days ({fmt(overhead.monthlyTotal)}/mo)
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-6">
+                {(overhead.breakdown || []).map((item, i) => (
+                  <div key={i} className="text-right">
+                    <p className="text-[11px] text-muted-foreground">{item.name}</p>
+                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">-{fmt(item.prorated)}</p>
+                  </div>
+                ))}
+                <div className="text-right pl-3 border-l border-amber-200 dark:border-amber-800">
+                  <p className="text-[11px] text-muted-foreground">Total Deduction</p>
+                  <p className="text-lg font-bold text-amber-700 dark:text-amber-300">-{fmt(overhead.proratedAmount)}</p>
+                </div>
+                {overhead.perOrder > 0 && (
+                  <div className="text-right">
+                    <p className="text-[11px] text-muted-foreground">Per Order</p>
+                    <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">-{fmt(overhead.perOrder)}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* All-Time Bar */}
       <Card>
         <CardContent className="p-4">
