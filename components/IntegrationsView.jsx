@@ -176,6 +176,20 @@ export default function IntegrationsView() {
               </Button>
             </div>
           </div>
+          <Separator />
+          <div>
+            <Button size="sm" variant="outline" disabled={syncing.indiaPost}
+              onClick={() => runSync('indiaPost', '/api/indiapost/track-bulk')}>
+              {syncing.indiaPost ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Truck className="w-3.5 h-3.5 mr-1.5" />}
+              Run Bulk Tracking Now
+            </Button>
+          </div>
+          {syncResults.indiaPost && (
+            <div className="text-xs p-2 rounded bg-muted flex items-center gap-1.5">
+              {syncResults.indiaPost.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
+              <span>{syncResults.indiaPost.error || syncResults.indiaPost.message}</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
