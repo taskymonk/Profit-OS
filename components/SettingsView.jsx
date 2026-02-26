@@ -20,6 +20,9 @@ export default function SettingsView() {
     integrations: { shopifyActive: false, indiaPostActive: false, metaAdsActive: false },
   });
   const [saving, setSaving] = useState(false);
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
 
   useEffect(() => {
     async function load() {
