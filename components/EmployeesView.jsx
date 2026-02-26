@@ -88,29 +88,49 @@ export default function EmployeesView() {
           <div className="flex items-center gap-2">
             <ScanLine className="w-5 h-5 text-primary" />
             <div>
-              <CardTitle className="text-base">Order Claiming Station</CardTitle>
-              <CardDescription>Scan or type a Shopify Order ID to claim it as prepared</CardDescription>
+              <CardTitle className="text-base">Bulk Order Claiming Station</CardTitle>
+              <CardDescription>Paste or scan multiple Order IDs (comma or newline separated)</CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1">
-              <Select value={claimForm.employeeId} onValueChange={v => setClaimForm({...claimForm, employeeId: v})}>
-                <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
-                <SelectContent>{employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name} ({e.role})</SelectItem>)}</SelectContent>
-              </Select>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="sm:w-64">
+                <Select value={claimForm.employeeId} onValueChange={v => setClaimForm({...claimForm, employeeId: v})}>
+                  <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                  <SelectContent>{employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name} ({e.role})</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <Button onClick={handleClaim} disabled={claiming} className="sm:self-start">
+                <CheckCircle className="w-4 h-4 mr-2" /> {claiming ? 'Claiming...' : 'Claim All Orders'}
+              </Button>
             </div>
-            <div className="flex-1">
-              <Input value={claimForm.orderId} onChange={e => setClaimForm({...claimForm, orderId: e.target.value})}
-                placeholder="Order ID (e.g. GS-1005)" onKeyDown={e => e.key === 'Enter' && handleClaim()} />
-            </div>
-            <Button onClick={handleClaim}><CheckCircle className="w-4 h-4 mr-2" /> Claim Order</Button>
+            <textarea
+              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono"
+              value={claimForm.orderIds}
+              onChange={e => setClaimForm({...claimForm, orderIds: e.target.value})}
+              placeholder={"Paste Order IDs here (comma or newline separated):\nGS-1005, GS-1006, GS-1007\nor\nGS-1005\nGS-1006\nGS-1007"}
+              rows={3}
+            />
+            {claimForm.orderIds.trim() && (
+              <p className="text-xs text-muted-foreground">
+                {claimForm.orderIds.split(/[,\n]+/).map(s => s.trim()).filter(Boolean).length} order(s) to claim
+              </p>
+            )}
           </div>
           {claimResult && (
-            <div className="mt-3 flex items-center gap-2 text-sm text-emerald-600">
-              <CheckCircle className="w-4 h-4" />
-              <span>{claimResult.message}</span>
+            <div className="mt-3 p-3 rounded-lg bg-background border space-y-1">
+              <div className="flex items-center gap-2 text-sm font-medium text-emerald-600">
+                <CheckCircle className="w-4 h-4" />
+                <span>{claimResult.message}</span>
+              </div>
+              {claimResult.claimed?.length > 0 && (
+                <p className="text-xs text-muted-foreground">Claimed: {claimResult.claimed.join(', ')}</p>
+              )}
+              {claimResult.notFound?.length > 0 && (
+                <p className="text-xs text-red-500">Not found: {claimResult.notFound.join(', ')}</p>
+              )}
             </div>
           )}
         </CardContent>
