@@ -111,11 +111,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "POST /api/seed creates demo data for GiftSugar tenant. Handles duplicate key gracefully."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Seed API correctly returns {seeded: false} when data already exists. Proper duplicate handling confirmed."
 
   - task: "Dashboard Aggregation API"
     implemented: true
@@ -123,11 +126,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET /api/dashboard returns today's metrics, 7-day daily data, recent orders with profit breakdown."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Dashboard API fully functional. Returns proper structure with today's metrics (Profit: ₹3,137, 10 orders, 10% RTO, ROAS: 13.07), 7-day historical data, and recent orders with profit calculations."
 
   - task: "Profit Calculator Engine"
     implemented: true
@@ -135,11 +141,14 @@ backend:
     file: "lib/profitCalculator.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "Implements full formula: Net Revenue (Sales-Discount-18%GST), COGS (materials+packaging+consumables+wastage%), Shipping (double for RTO), Txn Fees (2%+18%GST), Marketing allocation (daily ad spend / daily orders). GET /api/calculate-profit/{orderId} endpoint."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Profit calculation engine working perfectly. Formula verified: Net Profit = Net Revenue - COGS - Shipping - Transaction Fees - Marketing Allocation. RTO doubling logic confirmed. Example calculation: ₹469.52 profit from ₹1,065 revenue after all deductions."
 
   - task: "Tenant Config CRUD"
     implemented: true
@@ -147,11 +156,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/PUT /api/tenant-config - white-label settings with branding, currency, feature toggles."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Tenant Config CRUD fully functional. Successfully tested GET/PUT operations. Tenant name update from 'GiftSugar' to 'TestBrand' and back working correctly."
 
   - task: "Orders CRUD"
     implemented: true
@@ -159,11 +171,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/POST/PUT/DELETE /api/orders and /api/orders/{id}. Supports status filtering."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Orders CRUD fully operational. Found 53 orders in system. Filtering by status works (10 RTO orders). Successfully created, updated (status to RTO), and deleted test orders. UUID-based IDs working correctly."
 
   - task: "SKU Recipes CRUD"
     implemented: true
@@ -171,11 +186,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/POST/PUT/DELETE /api/sku-recipes and /api/sku-recipes/{id}."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - SKU Recipes CRUD fully functional. Found 3 existing recipes. Successfully created and deleted test recipe with proper structure (raw materials, packaging, consumable costs, wastage buffer)."
 
   - task: "Raw Materials CRUD"
     implemented: true
@@ -183,11 +201,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/POST/PUT/DELETE /api/raw-materials and /api/raw-materials/{id}."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Raw Materials CRUD working. Found 5 raw materials with proper vendor associations and pricing."
 
   - task: "Packaging Materials CRUD"
     implemented: true
@@ -195,11 +216,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/POST/PUT/DELETE /api/packaging-materials."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Packaging Materials CRUD operational. Found 5 packaging materials with vendor associations."
 
   - task: "Employees CRUD"
     implemented: true
@@ -207,11 +231,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/POST/PUT/DELETE /api/employees."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Employees CRUD working correctly. Found 3 employees with roles and salary information."
 
   - task: "Overhead Expenses CRUD"
     implemented: true
@@ -219,11 +246,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/POST/PUT/DELETE /api/overhead-expenses."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Overhead Expenses CRUD functional. Found 10 expenses including daily Meta Ads spend and monthly fixed costs."
 
   - task: "Integrations Management API"
     implemented: true
@@ -231,11 +261,14 @@ backend:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "GET/PUT /api/integrations - stores Shopify, India Post, Meta Ads, Exchange Rate credentials in DB. GET masks sensitive tokens."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Integrations API working perfectly. Token masking confirmed - test token 'test_token_123456789' properly masked as '****************6789'. GET/PUT operations functional."
 
 frontend:
   - task: "Dashboard with Profit Metrics"
