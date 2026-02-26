@@ -268,7 +268,7 @@ export default function DashboardView() {
         <MetricCard
           title="Net Profit"
           value={fmt(filtered.netProfit)}
-          subtitle={`Revenue: ${fmt(filtered.revenue)}`}
+          subtitle={overhead && overhead.proratedAmount > 0 ? `After ${fmt(overhead.proratedAmount)} overhead` : `Revenue: ${fmt(filtered.revenue)}`}
           icon={filtered.netProfit >= 0 ? TrendingUp : TrendingDown}
           variant={filtered.netProfit >= 0 ? 'profit' : 'loss'}
           trend={profitTrend}
