@@ -51,14 +51,15 @@ export default function EmployeesView() {
   };
 
   const handleClaim = async () => {
-    if (!claimForm.employeeId || !claimForm.orderId) {
-      toast.error('Both fields required'); return;
+    if (!claimForm.employeeId || !claimForm.orderIds.trim()) {
+      toast.error('Select employee and enter at least one Order ID'); return;
     }
+    setClaiming(true);
     try {
       const res = await fetch('/api/employee-claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(claimForm),
+        body: JSON.stringify({ employeeId: claimForm.employeeId, orderId: claimForm.orderIds }),
       });
       const data = await res.json();
       if (data.error) {
@@ -66,9 +67,11 @@ export default function EmployeesView() {
       } else {
         toast.success(data.message);
         setClaimResult(data);
+        setClaimForm(prev => ({ ...prev, orderIds: '' }));
         fetchData();
       }
     } catch (err) { toast.error('Claim failed'); }
+    setClaiming(false);
   };
 
   const openEdit = (emp) => {
