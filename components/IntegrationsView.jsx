@@ -57,6 +57,25 @@ export default function IntegrationsView() {
 
   const toggleSecret = (key) => setShowSecrets(prev => ({ ...prev, [key]: !prev[key] }));
 
+  const runSync = async (type, endpoint) => {
+    setSyncing(prev => ({ ...prev, [type]: true }));
+    setSyncResults(prev => ({ ...prev, [type]: null }));
+    try {
+      const res = await fetch(endpoint, { method: 'POST' });
+      const data = await res.json();
+      setSyncResults(prev => ({ ...prev, [type]: data }));
+      if (data.error) {
+        toast.error(data.error);
+      } else {
+        toast.success(data.message || 'Sync completed!');
+      }
+    } catch (err) {
+      toast.error(`Sync failed: ${err.message}`);
+      setSyncResults(prev => ({ ...prev, [type]: { error: err.message } }));
+    }
+    setSyncing(prev => ({ ...prev, [type]: false }));
+  };
+
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-48 bg-muted animate-pulse rounded-xl" />)}</div>;
 
   return (
