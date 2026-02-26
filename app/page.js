@@ -104,6 +104,7 @@ export default function App() {
       case 'inventory': return <InventoryView />;
       case 'employees': return <EmployeesView />;
       case 'expenses': return <ExpensesView />;
+      case 'reports': return <ReportsView />;
       case 'integrations': return <IntegrationsView />;
       case 'settings': return <SettingsView />;
       default: return <DashboardView />;
