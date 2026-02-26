@@ -88,8 +88,9 @@ async function getExchangeRate(from = 'USD', to = 'INR') {
 
 async function seedData() {
   const db = await getDb();
-  const existingConfig = await db.collection('tenantConfig').findOne({});
-  if (existingConfig) {
+  // Check for existing orders instead of tenantConfig (since tenantConfig is preserved during purge)
+  const existingOrders = await db.collection('orders').findOne({});
+  if (existingOrders) {
     return { message: 'Data already seeded', seeded: false };
   }
 
