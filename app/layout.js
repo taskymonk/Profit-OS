@@ -1,19 +1,24 @@
-import './globals.css'
+import './globals.css';
+import { Toaster } from 'sonner';
 
 export const metadata = {
-  title: 'Next.js MongoDB Template',
-  description: 'A simple template with App Router, MongoDB, and shadcn/ui',
-}
+  title: 'Profit OS - True Profit Engine',
+  description: 'Know your true profit per order. Track COGS, shipping, RTO, transaction fees, and ad spend in real-time.',
+  icons: { icon: '/favicon.ico' },
+};
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{__html:'window.addEventListener("error",function(e){if(e.error instanceof DOMException&&e.error.name==="DataCloneError"&&e.message&&e.message.includes("PerformanceServerTiming")){e.stopImmediatePropagation();e.preventDefault()}},true);'}} />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
-      <body>
+      <body className="font-sans antialiased bg-background text-foreground" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
         {children}
+        <Toaster position="top-right" richColors closeButton />
       </body>
     </html>
-  )
+  );
 }
