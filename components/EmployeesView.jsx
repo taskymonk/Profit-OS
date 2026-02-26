@@ -20,8 +20,9 @@ export default function EmployeesView() {
   const [claimDialogOpen, setClaimDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', role: '', monthlySalary: '', shiftStart: '09:00', shiftEnd: '18:00' });
-  const [claimForm, setClaimForm] = useState({ employeeId: '', orderId: '' });
+  const [claimForm, setClaimForm] = useState({ employeeId: '', orderIds: '' });
   const [claimResult, setClaimResult] = useState(null);
+  const [claiming, setClaiming] = useState(false);
 
   const fetchData = async () => {
     const res = await fetch('/api/employees');
