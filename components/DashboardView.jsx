@@ -13,7 +13,7 @@ import {
   TrendingUp, TrendingDown, ShoppingCart, AlertTriangle,
   Target, ChevronDown, ChevronUp, RefreshCw,
   Package, Truck, CreditCard, Megaphone, ArrowUpRight, ArrowDownRight,
-  CalendarDays, Zap
+  CalendarDays, Zap, Building2
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
