@@ -393,6 +393,369 @@ def test_employee_claim():
         print_error("Invalid order claim did not return expected 404 error")
         return False
 
+def test_bulk_employee_claim():
+    """Test Phase 3 bulk employee claim functionality"""
+    print_header("PHASE 3 BULK EMPLOYEE CLAIM TESTS")
+    
+    # Step 1: Get employee and orders for testing
+    print_info("Getting employee list")
+    success, employees_data = make_request('GET', '/employees')
+    if not success or not employees_data:
+        print_error("Failed to get employees")
+        return False
+    
+    test_employee = employees_data[0]
+    employee_id = test_employee.get('_id')
+    employee_name = test_employee.get('name', 'Unknown')
+    print_success(f"Selected test employee: {employee_name} (ID: {employee_id})")
+    
+    # Step 2: Get some order IDs for testing
+    print_info("Getting orders to find real order IDs")
+    success, orders_data = make_request('GET', '/orders')
+    if not success or not orders_data:
+        print_error("Failed to get orders")
+        return False
+    
+    # Extract real order IDs (use orderId field like GS-1005, NOT _id field)
+    real_order_ids = [order.get('orderId') for order in orders_data[:5] if order.get('orderId')]
+    if len(real_order_ids) < 3:
+        print_error(f"Not enough real order IDs found. Got: {real_order_ids}")
+        return False
+    
+    print_success(f"Found real order IDs: {real_order_ids[:3]}")
+    
+    results = []
+    
+    # Test 1: Bulk claim with comma-separated string
+    print_info("Test 1: Bulk claim with comma-separated orderId string")
+    bulk_claim_data = {
+        "employeeId": employee_id,
+        "orderId": f"{real_order_ids[0]},{real_order_ids[1]},{real_order_ids[2]}"
+    }
+    success, result = make_request('POST', '/employee-claim', bulk_claim_data)
+    
+    if success and result:
+        required_fields = ['claimed', 'notFound', 'message', 'employee']
+        missing_fields = [field for field in required_fields if field not in result]
+        
+        if missing_fields:
+            print_error(f"Missing required response fields: {missing_fields}")
+            results.append(False)
+        else:
+            claimed = result.get('claimed', [])
+            not_found = result.get('notFound', [])
+            print_success(f"Bulk claim (comma-separated) successful: {len(claimed)} claimed, {len(not_found)} not found")
+            print_info(f"Claimed: {claimed}")
+            print_info(f"Not found: {not_found}")
+            results.append(True)
+    else:
+        print_error("Bulk claim with comma-separated string failed")
+        results.append(False)
+    
+    # Test 2: Bulk claim with array of orderIds
+    print_info("Test 2: Bulk claim with orderIds array")
+    bulk_claim_array_data = {
+        "employeeId": employee_id,
+        "orderIds": [real_order_ids[0], real_order_ids[1]] if len(real_order_ids) >= 2 else [real_order_ids[0]]
+    }
+    success, result = make_request('POST', '/employee-claim', bulk_claim_array_data)
+    
+    if success and result:
+        claimed = result.get('claimed', [])
+        not_found = result.get('notFound', [])
+        print_success(f"Bulk claim (array) successful: {len(claimed)} claimed, {len(not_found)} not found")
+        results.append(True)
+    else:
+        print_error("Bulk claim with array failed")
+        results.append(False)
+    
+    # Test 3: Mix of valid and invalid order IDs
+    print_info("Test 3: Mix of valid and invalid order IDs")
+    mixed_claim_data = {
+        "employeeId": employee_id,
+        "orderId": f"{real_order_ids[0]},FAKE-999,{real_order_ids[1] if len(real_order_ids) > 1 else 'FAKE-888'}"
+    }
+    success, result = make_request('POST', '/employee-claim', mixed_claim_data)
+    
+    if success and result:
+        claimed = result.get('claimed', [])
+        not_found = result.get('notFound', [])
+        
+        if len(not_found) > 0:
+            print_success(f"Mixed claim correctly handled: {len(claimed)} claimed, {len(not_found)} not found")
+            print_info(f"Not found (should include FAKE-999): {not_found}")
+            results.append(True)
+        else:
+            print_error("Mixed claim should have some 'notFound' items but found none")
+            results.append(False)
+    else:
+        print_error("Mixed claim test failed")
+        results.append(False)
+    
+    # Test 4: Missing employeeId (should return 400)
+    print_info("Test 4: Missing employeeId (should return 400)")
+    missing_employee_data = {
+        "orderId": real_order_ids[0]
+    }
+    success, result = make_request('POST', '/employee-claim', missing_employee_data, expected_status=400)
+    
+    if success:
+        print_success("Missing employeeId correctly returned 400 error")
+        results.append(True)
+    else:
+        print_error("Missing employeeId did not return expected 400 error")
+        results.append(False)
+    
+    # Test 5: Fake employeeId (should return 404)
+    print_info("Test 5: Fake employeeId (should return 404)")
+    fake_employee_data = {
+        "employeeId": "fake-employee-id-123",
+        "orderId": real_order_ids[0]
+    }
+    success, result = make_request('POST', '/employee-claim', fake_employee_data, expected_status=404)
+    
+    if success:
+        print_success("Fake employeeId correctly returned 404 error")
+        results.append(True)
+    else:
+        print_error("Fake employeeId did not return expected 404 error")
+        results.append(False)
+    
+    print(f"\nBulk Employee Claim Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
+def test_prorata_overhead_dashboard():
+    """Test Phase 3 pro-rata overhead calculation in dashboard"""
+    print_header("PHASE 3 PRO-RATA OVERHEAD IN DASHBOARD TESTS")
+    
+    results = []
+    
+    # Test 1: Today's dashboard with overhead
+    print_info("Test 1: Dashboard range=today with pro-rata overhead")
+    success, data = make_request('GET', '/dashboard?range=today')
+    
+    if success and data:
+        # Check if overhead object exists
+        if 'overhead' not in data:
+            print_error("Dashboard response missing 'overhead' object")
+            results.append(False)
+        else:
+            overhead = data['overhead']
+            required_overhead_fields = ['monthlyTotal', 'daysInRange', 'proratedAmount', 'breakdown', 'perOrder']
+            missing_overhead_fields = [field for field in required_overhead_fields if field not in overhead]
+            
+            if missing_overhead_fields:
+                print_error(f"Overhead object missing required fields: {missing_overhead_fields}")
+                results.append(False)
+            else:
+                monthly_total = overhead.get('monthlyTotal', 0)
+                days_in_range = overhead.get('daysInRange', 0)
+                prorated_amount = overhead.get('proratedAmount', 0)
+                breakdown = overhead.get('breakdown', [])
+                per_order = overhead.get('perOrder', 0)
+                
+                print_success(f"Overhead structure valid:")
+                print_info(f"  Monthly Total: ₹{monthly_total}")
+                print_info(f"  Days in Range: {days_in_range}")
+                print_info(f"  Prorated Amount: ₹{prorated_amount}")
+                print_info(f"  Per Order: ₹{per_order}")
+                print_info(f"  Breakdown items: {len(breakdown)}")
+                
+                # Verify monthly total includes expected expenses (Rent 45000 + Shopify 2999 + Electricity 8500 = 56499)
+                expected_monthly = 56499
+                if abs(monthly_total - expected_monthly) < 100:  # Allow small variance
+                    print_success(f"Monthly total approximately correct: ₹{monthly_total} (expected ~₹{expected_monthly})")
+                else:
+                    print_warning(f"Monthly total seems off: ₹{monthly_total} (expected ~₹{expected_monthly})")
+                
+                # For today (1 day), prorated should be approximately 56499/30 ≈ 1883
+                expected_prorated_today = expected_monthly / 30 * days_in_range
+                if abs(prorated_amount - expected_prorated_today) < 100:
+                    print_success(f"Prorated amount approximately correct for {days_in_range} day(s): ₹{prorated_amount} (expected ~₹{expected_prorated_today:.2f})")
+                else:
+                    print_warning(f"Prorated amount seems off: ₹{prorated_amount} (expected ~₹{expected_prorated_today:.2f})")
+                
+                # Verify breakdown structure
+                if isinstance(breakdown, list) and len(breakdown) > 0:
+                    sample_breakdown = breakdown[0]
+                    breakdown_fields = ['name', 'category', 'monthly', 'prorated']
+                    missing_breakdown_fields = [field for field in breakdown_fields if field not in sample_breakdown]
+                    
+                    if missing_breakdown_fields:
+                        print_error(f"Breakdown items missing fields: {missing_breakdown_fields}")
+                        results.append(False)
+                    else:
+                        print_success(f"Breakdown structure valid. Sample: {sample_breakdown}")
+                        
+                        # Check that netProfit < grossOrderProfit (overhead should be subtracted)
+                        filtered = data.get('filtered', {})
+                        net_profit = filtered.get('netProfit', 0)
+                        gross_profit = filtered.get('grossOrderProfit', 0)
+                        
+                        if net_profit < gross_profit:
+                            print_success(f"Net profit (₹{net_profit}) < Gross profit (₹{gross_profit}) ✓ Overhead correctly subtracted")
+                            results.append(True)
+                        else:
+                            print_error(f"Net profit (₹{net_profit}) >= Gross profit (₹{gross_profit}) - Overhead not being subtracted?")
+                            results.append(False)
+                else:
+                    print_error("Breakdown is not a valid array or is empty")
+                    results.append(False)
+    else:
+        print_error("Failed to get dashboard data for today")
+        results.append(False)
+    
+    # Test 2: 7 days dashboard with overhead
+    print_info("Test 2: Dashboard range=7days with pro-rata overhead")
+    success, data = make_request('GET', '/dashboard?range=7days')
+    
+    if success and data:
+        overhead = data.get('overhead', {})
+        prorated_amount = overhead.get('proratedAmount', 0)
+        days_in_range = overhead.get('daysInRange', 0)
+        
+        # For 7 days, prorated should be approximately 56499/30*7 ≈ 13183
+        expected_prorated_7days = 56499 / 30 * 7
+        if abs(prorated_amount - expected_prorated_7days) < 500:
+            print_success(f"7-day prorated amount approximately correct: ₹{prorated_amount} (expected ~₹{expected_prorated_7days:.2f}) for {days_in_range} days")
+            results.append(True)
+        else:
+            print_warning(f"7-day prorated amount seems off: ₹{prorated_amount} (expected ~₹{expected_prorated_7days:.2f})")
+            results.append(False)
+    else:
+        print_error("Failed to get dashboard data for 7 days")
+        results.append(False)
+    
+    print(f"\nPro-rata Overhead Dashboard Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
+def test_purge_demo_data():
+    """Test Phase 3 purge demo data functionality"""
+    print_header("PHASE 3 PURGE DEMO DATA TESTS")
+    
+    results = []
+    
+    # Step 1: CRITICAL - Verify tenant-config and integrations exist BEFORE purge
+    print_info("Step 1: Verifying tenant-config exists before purge")
+    success, tenant_before = make_request('GET', '/tenant-config')
+    
+    if not success or not tenant_before or 'tenantName' not in tenant_before:
+        print_error("Tenant config not found or missing tenantName before purge - cannot proceed safely")
+        return False
+    
+    print_success(f"Tenant config exists before purge: {tenant_before.get('tenantName', 'Unknown')}")
+    
+    print_info("Step 1b: Verifying integrations exist before purge")
+    success, integrations_before = make_request('GET', '/integrations')
+    
+    if not success or not integrations_before:
+        print_error("Integrations config not found before purge - cannot proceed safely")
+        return False
+    
+    print_success("Integrations config exists before purge")
+    
+    # Step 2: Call POST /api/purge
+    print_info("Step 2: Calling POST /api/purge")
+    success, purge_result = make_request('POST', '/purge')
+    
+    if not success or not purge_result:
+        print_error("Purge API call failed")
+        return False
+    
+    # Verify purge response structure
+    if 'message' not in purge_result or 'purged' not in purge_result:
+        print_error(f"Purge response missing required fields. Got: {purge_result}")
+        results.append(False)
+    else:
+        purged_counts = purge_result.get('purged', {})
+        total_purged = sum(purged_counts.values()) if isinstance(purged_counts, dict) else 0
+        
+        print_success(f"Purge completed: {purge_result.get('message')}")
+        print_info(f"Purged counts: {purged_counts}")
+        
+        # Verify that something was actually purged
+        if total_purged > 0:
+            print_success(f"Total {total_purged} items purged from various collections")
+            results.append(True)
+        else:
+            print_error("No items were purged - this seems wrong")
+            results.append(False)
+    
+    # Step 3: CRITICAL - Verify tenant-config STILL exists after purge
+    print_info("Step 3: CRITICAL - Verifying tenant-config still exists after purge")
+    success, tenant_after = make_request('GET', '/tenant-config')
+    
+    if not success or not tenant_after or 'tenantName' not in tenant_after:
+        print_error("CRITICAL FAILURE: Tenant config was deleted during purge!")
+        results.append(False)
+    else:
+        tenant_name_after = tenant_after.get('tenantName', 'Unknown')
+        tenant_name_before = tenant_before.get('tenantName', 'Unknown')
+        
+        if tenant_name_after == tenant_name_before:
+            print_success(f"✅ CRITICAL CHECK PASSED: Tenant config preserved after purge: {tenant_name_after}")
+            results.append(True)
+        else:
+            print_error(f"CRITICAL FAILURE: Tenant config changed during purge! Before: {tenant_name_before}, After: {tenant_name_after}")
+            results.append(False)
+    
+    # Step 4: CRITICAL - Verify integrations STILL exist after purge
+    print_info("Step 4: CRITICAL - Verifying integrations still exist after purge")
+    success, integrations_after = make_request('GET', '/integrations')
+    
+    if not success or not integrations_after:
+        print_error("CRITICAL FAILURE: Integrations config was deleted during purge!")
+        results.append(False)
+    else:
+        print_success("✅ CRITICAL CHECK PASSED: Integrations config preserved after purge")
+        results.append(True)
+    
+    # Step 5: Verify that demo data collections are now empty
+    collections_to_check = [
+        ('/orders', 'Orders'),
+        ('/employees', 'Employees'),
+        ('/sku-recipes', 'SKU Recipes'),
+        ('/raw-materials', 'Raw Materials'),
+        ('/packaging-materials', 'Packaging Materials'),
+        ('/overhead-expenses', 'Overhead Expenses')
+    ]
+    
+    print_info("Step 5: Verifying demo data collections are empty after purge")
+    
+    for endpoint, name in collections_to_check:
+        success, data = make_request('GET', endpoint)
+        
+        if success and isinstance(data, list):
+            if len(data) == 0:
+                print_success(f"{name} collection is empty after purge ✅")
+                results.append(True)
+            else:
+                print_error(f"{name} collection still has {len(data)} items after purge")
+                results.append(False)
+        else:
+            print_error(f"Failed to check {name} collection after purge")
+            results.append(False)
+    
+    # Step 6: Re-seed and verify
+    print_info("Step 6: Re-seeding data to verify system works after purge")
+    success, seed_result = make_request('POST', '/seed')
+    
+    if success and seed_result:
+        seeded = seed_result.get('seeded', False)
+        if seeded == True:
+            print_success(f"Re-seeding successful after purge: {seed_result.get('message', 'No message')}")
+            results.append(True)
+        else:
+            print_warning(f"Re-seeding returned seeded=false: {seed_result.get('message', 'No message')}")
+            # This might be OK if data already exists
+            results.append(True)
+    else:
+        print_error("Re-seeding failed after purge")
+        results.append(False)
+    
+    print(f"\nPurge Demo Data Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
 def test_shopify_sync_error_handling():
     """Test Shopify sync APIs for proper error handling when credentials missing"""
     print_header("SHOPIFY SYNC ERROR HANDLING TESTS")
