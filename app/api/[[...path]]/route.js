@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { v4 as uuidv4 } from 'uuid';
-import { calculateOrderProfit, calculateDashboardMetrics } from '@/lib/profitCalculator';
+import { calculateOrderProfit, calculateDashboardMetrics, calculateProratedOverhead } from '@/lib/profitCalculator';
 
 function corsHeaders() {
   return {
