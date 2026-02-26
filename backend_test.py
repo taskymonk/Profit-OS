@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import time
 
 # Base URL from environment
-BASE_URL = "https://profit-dashboard-37.preview.emergentagent.com/api"
+BASE_URL = "https://profit-calc-dash.preview.emergentagent.com/api"
 
 class Colors:
     GREEN = '\033[92m'
