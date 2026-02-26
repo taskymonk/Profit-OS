@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit, Users, Clock } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Plus, Trash2, Edit, Users, Clock, ScanLine, CheckCircle, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN')}`;
@@ -15,8 +17,11 @@ const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN')}`;
 export default function EmployeesView() {
   const [employees, setEmployees] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', role: '', monthlySalary: '', shiftStart: '09:00', shiftEnd: '18:00' });
+  const [claimForm, setClaimForm] = useState({ employeeId: '', orderId: '' });
+  const [claimResult, setClaimResult] = useState(null);
 
   const fetchData = async () => {
     const res = await fetch('/api/employees');
@@ -44,6 +49,27 @@ export default function EmployeesView() {
     toast.success('Deleted'); fetchData();
   };
 
+  const handleClaim = async () => {
+    if (!claimForm.employeeId || !claimForm.orderId) {
+      toast.error('Both fields required'); return;
+    }
+    try {
+      const res = await fetch('/api/employee-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(claimForm),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error); setClaimResult(null);
+      } else {
+        toast.success(data.message);
+        setClaimResult(data);
+        fetchData();
+      }
+    } catch (err) { toast.error('Claim failed'); }
+  };
+
   const openEdit = (emp) => {
     setEditing(emp);
     setForm({ name: emp.name, role: emp.role, monthlySalary: String(emp.monthlySalary), shiftStart: emp.shiftStart || '09:00', shiftEnd: emp.shiftEnd || '18:00' });
@@ -51,9 +77,44 @@ export default function EmployeesView() {
   };
 
   return (
-    <div className="space-y-4 max-w-[1200px] mx-auto">
+    <div className="space-y-6 max-w-[1200px] mx-auto">
+      {/* Order Claiming Station */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <ScanLine className="w-5 h-5 text-primary" />
+            <div>
+              <CardTitle className="text-base">Order Claiming Station</CardTitle>
+              <CardDescription>Scan or type a Shopify Order ID to claim it as prepared</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1">
+              <Select value={claimForm.employeeId} onValueChange={v => setClaimForm({...claimForm, employeeId: v})}>
+                <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
+                <SelectContent>{employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name} ({e.role})</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="flex-1">
+              <Input value={claimForm.orderId} onChange={e => setClaimForm({...claimForm, orderId: e.target.value})}
+                placeholder="Order ID (e.g. GS-1005)" onKeyDown={e => e.key === 'Enter' && handleClaim()} />
+            </div>
+            <Button onClick={handleClaim}><CheckCircle className="w-4 h-4 mr-2" /> Claim Order</Button>
+          </div>
+          {claimResult && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-emerald-600">
+              <CheckCircle className="w-4 h-4" />
+              <span>{claimResult.message}</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Employee Management Header */}
       <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">Track team members, salaries, and shift schedules</p>
+        <p className="text-sm text-muted-foreground">Track team members, salaries, and daily output</p>
         <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditing(null); }}>
           <DialogTrigger asChild>
             <Button onClick={() => setForm({ name: '', role: '', monthlySalary: '', shiftStart: '09:00', shiftEnd: '18:00' })}>
@@ -76,32 +137,57 @@ export default function EmployeesView() {
         </Dialog>
       </div>
 
+      {/* Employee Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {employees.map(emp => (
-          <Card key={emp._id}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-primary" />
+        {employees.map(emp => {
+          const todayOutput = (emp.dailyOutputs || []).find(d => d.date === new Date().toISOString().split('T')[0]);
+          const totalOrders = (emp.dailyOutputs || []).reduce((s, d) => s + (d.ordersPrepared || 0), 0);
+          return (
+            <Card key={emp._id}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Users className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm">{emp.name}</h3>
+                      <Badge variant="outline" className="text-xs">{emp.role}</Badge>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-sm">{emp.name}</h3>
-                    <Badge variant="outline" className="text-xs">{emp.role}</Badge>
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" onClick={() => openEdit(emp)}><Edit className="w-3.5 h-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(emp._id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" onClick={() => openEdit(emp)}><Edit className="w-3.5 h-3.5" /></Button>
-                  <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(emp._id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                  <div><span className="text-muted-foreground">Salary</span><p className="font-bold text-sm">{fmt(emp.monthlySalary)}</p></div>
+                  <div><span className="text-muted-foreground">Shift</span><p className="font-medium flex items-center gap-1"><Clock className="w-3 h-3" />{emp.shiftStart} - {emp.shiftEnd}</p></div>
+                  <div><span className="text-muted-foreground">Today</span><p className="font-bold text-sm text-primary">{todayOutput?.ordersPrepared || 0} orders</p></div>
+                  <div><span className="text-muted-foreground">All Time</span><p className="font-bold text-sm">{totalOrders} orders</p></div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div><span className="text-muted-foreground">Salary</span><p className="font-bold text-sm">{fmt(emp.monthlySalary)}</p></div>
-                <div><span className="text-muted-foreground">Shift</span><p className="font-medium flex items-center gap-1"><Clock className="w-3 h-3" />{emp.shiftStart} - {emp.shiftEnd}</p></div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                {/* Recent daily outputs */}
+                {(emp.dailyOutputs || []).length > 0 && (
+                  <>
+                    <Separator className="my-2" />
+                    <p className="text-xs font-semibold mb-1">Recent Output:</p>
+                    <div className="space-y-1 max-h-24 overflow-y-auto">
+                      {(emp.dailyOutputs || []).slice(-3).reverse().map((d, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">{d.date}</span>
+                          <div className="flex items-center gap-1">
+                            <Package className="w-3 h-3 text-muted-foreground" />
+                            <span className="font-medium">{d.ordersPrepared} orders</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
       {employees.length === 0 && <Card><CardContent className="py-12 text-center text-muted-foreground">No employees added yet</CardContent></Card>}
     </div>
