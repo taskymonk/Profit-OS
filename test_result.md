@@ -270,6 +270,126 @@ backend:
           agent: "testing"
           comment: "✅ TESTED - Integrations API working perfectly. Token masking confirmed - test token 'test_token_123456789' properly masked as '****************6789'. GET/PUT operations functional."
 
+  - task: "Dashboard Date Range Filter"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/dashboard with range params: today, 7days, month, alltime, custom with startDate/endDate."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - All 5 date range filters working perfectly. Today: ₹3,279 profit (9 orders), 7days: ₹22,531 profit (50 orders), Month/Alltime: same metrics, Custom range verified. Daily data structure validated with proper aggregation."
+
+  - task: "Reports APIs"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/reports/profitable-skus, /api/reports/rto-locations, /api/reports/employee-output with proper field structures."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - All 3 reports APIs fully functional. Profitable SKUs: GS-MIXED-HAMPER-1KG leads with ₹15,135 profit (35.63% margin). RTO Locations: Delhi highest RTO rate at 50%. Employee Output: Ajay Yadav leads with 23 orders prepared. All required fields present."
+
+  - task: "Currency Conversion API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/currency?from=USD&to=INR&amount=100 using Frankfurter.app API with caching."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Currency conversion working correctly. USD/INR rate of 90.93 (reasonable range). Proper response structure with from, to, rate, amount, converted fields. Caching implemented."
+
+  - task: "Urgent Order Override"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "PUT /api/orders/{id}/urgent with manualCourierName, manualShippingCost. Overrides shipping costs in profit calculation."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Urgent order functionality working perfectly. Successfully marked order as urgent with DTDC courier (₹200 cost). Profit calculation correctly uses manual shipping cost override instead of calculated shipping. isUrgent, manualCourierName, manualShippingCost fields properly set."
+
+  - task: "Employee Assignment"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "PUT /api/orders/{id}/assign with employeeId. Sets preparedBy and preparedByName fields."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Employee assignment working correctly. Successfully assigned Ramesh Kumar to test order. preparedBy and preparedByName fields properly updated in order record."
+
+  - task: "Employee Claim API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/employee-claim with employeeId, orderId. Updates order and employee daily outputs."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Employee claim functionality working correctly. Valid claim for order GS-1005 successful. Invalid order ID correctly returns 404 error. Employee daily outputs updated properly."
+
+  - task: "Shopify Sync Error Handling"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/shopify/sync-products, /api/shopify/sync-orders return proper error messages when credentials missing."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Shopify sync error handling working correctly. Both sync-products and sync-orders properly return 'Shopify credentials not configured' errors when no credentials present. No server crashes or 500 errors."
+
+  - task: "India Post Tracking Error Handling"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/indiapost/track-bulk returns proper error when credentials missing."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - India Post tracking error handling working correctly. Returns 'India Post credentials not configured' error when no credentials present. Proper error handling without server crashes."
+
 frontend:
   - task: "Dashboard with Profit Metrics"
     implemented: true
