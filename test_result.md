@@ -314,16 +314,10 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Seed Demo Data API"
-    - "Dashboard Aggregation API"
-    - "Profit Calculator Engine"
-    - "Orders CRUD"
-    - "SKU Recipes CRUD"
-    - "Integrations Management API"
+  current_focus: []
   stuck_tasks: []
-  test_all: true
-  test_priority: "high_first"
+  test_all: false
+  test_priority: "complete"
 
 agent_communication:
     - agent: "main"
