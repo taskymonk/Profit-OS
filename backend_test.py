@@ -333,10 +333,10 @@ def test_india_post_sync_no_trackable():
         orders_with_tracking = list(db.orders.find({"trackingNumber": {"$ne": None, "$ne": ""}}))
         in_transit_orders = list(db.orders.find({"status": "In Transit"}))
         
-        # Clear tracking numbers
+        # Clear ALL tracking numbers (including empty strings)
         db.orders.update_many(
-            {"trackingNumber": {"$ne": None, "$ne": ""}},
-            {"$set": {"trackingNumber": None}}
+            {},  # Update all orders
+            {"$unset": {"trackingNumber": ""}}  # Remove the field entirely
         )
         
         # Change In Transit orders to Delivered
@@ -347,6 +347,10 @@ def test_india_post_sync_no_trackable():
         
         log(f"✅ Cleared {len(orders_with_tracking)} orders with tracking numbers")
         log(f"✅ Changed {len(in_transit_orders)} 'In Transit' orders to 'Delivered'")
+        
+        # Verify no orders have tracking numbers
+        orders_with_tracking_after = db.orders.count_documents({"trackingNumber": {"$exists": True, "$ne": None, "$ne": ""}})
+        log(f"Orders with tracking numbers after cleanup: {orders_with_tracking_after}")
         
         # Step 2: Set India Post credentials
         log("Setting India Post test credentials...")
@@ -376,12 +380,15 @@ def test_india_post_sync_no_trackable():
         message = result.get('message', '')
         tracked = result.get('tracked', -1)
         
-        log(f"Response message: {message}")
+        log(f"Response message: '{message}'")
         log(f"Tracked count: {tracked}")
         
         # Verify message indicates no orders pending tracking
         if 'no orders pending tracking' not in message.lower():
-            log(f"❌ Expected message about no orders pending tracking, got: {message}")
+            log(f"❌ Expected message about no orders pending tracking, got: '{message}'")
+            # Check if it's an error response instead
+            if 'error' in result:
+                log(f"Got error instead of expected message: {result.get('error')}")
             # Cleanup
             db.integrations.update_one(
                 {"_id": "integrations-config"},
@@ -407,14 +414,16 @@ def test_india_post_sync_no_trackable():
             {"$set": {"indiaPost.username": "", "indiaPost.password": ""}}
         )
         
-        # Restore original order states
-        log("Restoring original order states...")
+        # Restore original order states (tracking numbers)
+        log("Restoring original order tracking numbers...")
         for order in orders_with_tracking:
-            db.orders.update_one(
-                {"_id": order["_id"]},
-                {"$set": {"trackingNumber": order.get("trackingNumber")}}
-            )
+            if order.get("trackingNumber"):
+                db.orders.update_one(
+                    {"_id": order["_id"]},
+                    {"$set": {"trackingNumber": order.get("trackingNumber")}}
+                )
         
+        # Restore In Transit orders
         for order in in_transit_orders:
             db.orders.update_one(
                 {"_id": order["_id"]},
