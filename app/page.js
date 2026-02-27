@@ -38,20 +38,12 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [tenantConfig, setTenantConfig] = useState(null);
-  const [seeding, setSeeding] = useState(false);
   const [dataReady, setDataReady] = useState(false);
 
-  // Seed data and load tenant config on mount
+  // Load tenant config on mount — NO auto-seeding (live mode)
   useEffect(() => {
     async function init() {
       try {
-        // Seed demo data
-        const seedRes = await fetch('/api/seed', { method: 'POST' });
-        const seedData = await seedRes.json();
-        if (seedData.seeded) {
-          toast.success('Demo data loaded successfully!');
-        }
-        // Load tenant config
         const configRes = await fetch('/api/tenant-config');
         const config = await configRes.json();
         if (config && config.tenantName) {
