@@ -495,7 +495,7 @@ def test_simulate_ad_spend():
         
     finally:
         # Ensure cleanup even if test fails
-        if client and db:
+        if client is not None and db is not None:
             try:
                 db.dailyMarketingSpend.delete_one({"source": "test"})
                 db.integrations.update_one(
