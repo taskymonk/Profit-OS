@@ -538,3 +538,17 @@ agent_communication:
 - ✅ Fixed seed function for post-purge compatibility
 
 BONUS FIX: Updated seed function to check for orders instead of tenantConfig to enable re-seeding after purge, and handle existing tenantConfig/integrations gracefully."
+    - agent: "main"
+      message: "PHASE 4 LIVE MODE TESTING. Major changes: 1) Auto-seeder REMOVED from page.js 2) Orders API upgraded with server-side pagination 3) Shopify sync orders fixed with proper date mapping + pagination 4) MetaAds active check added to dashboard, calculate-profit, and reports 5) OrdersView.jsx fully rewritten with pagination/search/sort 6) All demo data purged (DB is clean). Base URL: http://localhost:3000/api. 
+
+SEED first since DB is empty: POST /api/seed
+
+Test these:
+1) GET /api/orders?page=1&limit=5 - returns {orders, total, page, limit, totalPages}
+2) GET /api/orders?page=2&limit=5 - different page
+3) GET /api/orders?search=GS-1005 - search filter
+4) GET /api/orders?status=RTO&page=1&limit=20 - status filter
+5) GET /api/orders?sortBy=orderDate&sortOrder=desc - newest first
+6) GET /api/dashboard?range=7days - verify filtered.adSpend = 0 (Meta inactive)
+7) GET /api/calculate-profit/{orderId} - verify marketingAllocation = 0
+8) POST /api/purge then verify tenant-config and integrations preserved, then POST /api/seed"
