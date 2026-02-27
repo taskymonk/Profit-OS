@@ -58,6 +58,28 @@ export default function OrdersView() {
   });
   const [urgentForm, setUrgentForm] = useState({ manualCourierName: 'BlueDart', manualShippingCost: '' });
   const [assignForm, setAssignForm] = useState({ employeeId: '' });
+  const [trackingEdits, setTrackingEdits] = useState({});
+  const [savingTracking, setSavingTracking] = useState({});
+
+  const saveTrackingNumber = async (orderId, value) => {
+    setSavingTracking(prev => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await fetch(`/api/orders/${orderId}/tracking`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackingNumber: value }),
+      });
+      if (res.ok) {
+        toast.success('Tracking number saved');
+        fetchOrders();
+      } else {
+        toast.error('Failed to save tracking number');
+      }
+    } catch (err) {
+      toast.error('Error saving tracking number');
+    }
+    setSavingTracking(prev => ({ ...prev, [orderId]: false }));
+  };
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
