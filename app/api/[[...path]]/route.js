@@ -1431,6 +1431,17 @@ export async function PUT(request) {
           return json(await db.collection('orders').findOne({ _id: id }));
         }
 
+        if (action === 'tracking') {
+          const db = await getDb();
+          const order = await db.collection('orders').findOne({ _id: id });
+          if (!order) return json({ error: 'Order not found' }, 404);
+          const trackingNumber = (body.trackingNumber || '').trim();
+          await db.collection('orders').updateOne({ _id: id }, {
+            $set: { trackingNumber: trackingNumber || null, updatedAt: new Date().toISOString() }
+          });
+          return json(await db.collection('orders').findOne({ _id: id }));
+        }
+
         return json(await updateDoc('orders', id, body));
       }
 
