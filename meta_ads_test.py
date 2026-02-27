@@ -86,6 +86,8 @@ def get_mongo_client():
     try:
         client = pymongo.MongoClient(MONGO_URL)
         db = client[DB_NAME]
+        # Test the connection
+        client.admin.command('ping')
         return client, db
     except Exception as e:
         print_error(f"Failed to connect to MongoDB: {e}")
