@@ -364,7 +364,7 @@ async function getDashboardData(params = {}) {
   // Get exchange rate for currency conversion
   const exchangeRate = await getExchangeRate('USD', 'INR');
 
-  const metrics = calculateDashboardMetrics(orders, skuRecipes, expenses, startDate, endDate, 1);
+  const metrics = calculateDashboardMetrics(orders, skuRecipes, effectiveExpenses, startDate, endDate, 1);
 
   // Build daily aggregation for chart
   const dailyData = [];
@@ -381,7 +381,7 @@ async function getDashboardData(params = {}) {
       return od >= dayStart && od <= dayEnd;
     });
 
-    const dayAdSpend = expenses.filter(e => {
+    const dayAdSpend = effectiveExpenses.filter(e => {
       const ed = new Date(e.date); ed.setHours(0, 0, 0, 0);
       return ed.getTime() === dayStart.getTime() && e.category === 'MetaAds';
     }).reduce((sum, e) => sum + (e.amount || 0), 0);
@@ -412,7 +412,7 @@ async function getDashboardData(params = {}) {
   }
 
   // All-time stats
-  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, expenses, new Date(2020, 0, 1), new Date(now.getFullYear() + 1, 0, 1), 1);
+  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, effectiveExpenses, new Date(2020, 0, 1), new Date(now.getFullYear() + 1, 0, 1), 1);
 
   return {
     tenant: tenantConfig,
