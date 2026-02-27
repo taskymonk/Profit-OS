@@ -446,7 +446,7 @@ export default function OrdersView() {
                 {orders.map(order => (
                   expandedId === order._id && profitData[order._id] ? (
                     <tr key={`${order._id}-detail`} className="bg-muted/20">
-                      <td colSpan={7} className="p-4">
+                      <td colSpan={8} className="p-4">
                         <div className="grid grid-cols-3 md:grid-cols-7 gap-3 text-xs">
                           <div><span className="text-muted-foreground">Net Revenue</span><p className="font-bold">{fmt(Math.round(profitData[order._id].netRevenue))}</p></div>
                           <div><span className="text-muted-foreground">COGS</span><p className="font-bold">{fmt(Math.round(profitData[order._id].totalCOGS))}</p></div>
