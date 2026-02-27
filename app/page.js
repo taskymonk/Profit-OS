@@ -74,20 +74,6 @@ export default function App() {
     });
   }, []);
 
-  const handleReseed = async () => {
-    setSeeding(true);
-    try {
-      // Drop all collections first
-      const res = await fetch('/api/seed', { method: 'POST' });
-      const data = await res.json();
-      toast.success(data.message || 'Data refreshed');
-      window.location.reload();
-    } catch (err) {
-      toast.error('Failed to reseed data');
-    }
-    setSeeding(false);
-  };
-
   const renderView = () => {
     switch (activeView) {
       case 'dashboard': return <DashboardView />;
