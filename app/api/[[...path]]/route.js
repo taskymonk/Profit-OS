@@ -910,46 +910,57 @@ async function shopifySyncOrders() {
 
 // ==================== INDIA POST TRACKING ====================
 
-async function indiaPostBulkTrack() {
+// ==================== INDIA POST AUTH & TRACKING ====================
+
+async function indiaPostAuth(username, password, baseUrl) {
+  const loginRes = await fetch(`${baseUrl}/access/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+
+  if (!loginRes.ok) {
+    const errText = await loginRes.text();
+    throw new Error(`India Post login failed (${loginRes.status}): ${errText}`);
+  }
+
+  const loginData = await loginRes.json();
+  // Handle both response shapes: { access_token } or { data: { access_token } }
+  const accessToken = loginData?.data?.access_token || loginData?.access_token;
+  if (!accessToken) {
+    throw new Error('No access_token received from India Post. Check credentials.');
+  }
+  return accessToken;
+}
+
+async function indiaPostSyncTracking() {
   const db = await getDb();
   const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
 
   if (!integrations?.indiaPost?.username || !integrations?.indiaPost?.password) {
-    return { error: 'India Post credentials not configured.', tracked: 0 };
+    return { error: 'India Post credentials not configured. Enter username & password in Integrations.', tracked: 0 };
   }
 
   const { username, password, sandboxMode } = integrations.indiaPost;
-  const baseUrl = sandboxMode ? 'https://test.cept.gov.in/beextcustomer/v1' : 'https://cept.gov.in/beextcustomer/v1';
+  const baseUrl = sandboxMode !== false
+    ? 'https://test.cept.gov.in/beextcustomer/v1'
+    : 'https://cept.gov.in/beextcustomer/v1';
 
   try {
-    // Step 1: Login to get access token
-    const loginRes = await fetch(`${baseUrl}/access/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
+    // Step 1: Authenticate
+    const accessToken = await indiaPostAuth(username, password, baseUrl);
 
-    if (!loginRes.ok) {
-      return { error: `India Post login failed: ${loginRes.status}`, tracked: 0 };
-    }
-
-    const loginData = await loginRes.json();
-    const accessToken = loginData.access_token;
-    if (!accessToken) {
-      return { error: 'No access token received from India Post', tracked: 0 };
-    }
-
-    // Step 2: Get all orders with tracking numbers that need updates
+    // Step 2: Get all orders with tracking numbers that need status updates
     const pendingOrders = await db.collection('orders').find({
-      trackingNumber: { $ne: null },
-      status: { $in: ['In Transit', 'Booked', 'Pending'] },
+      trackingNumber: { $exists: true, $ne: null, $ne: '' },
+      status: { $in: ['In Transit', 'Unfulfilled', 'Booked', 'Pending'] },
     }).toArray();
 
     if (pendingOrders.length === 0) {
-      return { message: 'No orders pending tracking updates', tracked: 0 };
+      return { message: 'No orders pending tracking updates. Add tracking numbers to orders first.', tracked: 0, total: 0 };
     }
 
-    // Step 3: Chunk into batches of 50 for bulk tracking
+    // Step 3: Chunk into batches of 50 (India Post strict limit)
     const chunks = [];
     for (let i = 0; i < pendingOrders.length; i += 50) {
       chunks.push(pendingOrders.slice(i, i + 50));
@@ -958,59 +969,106 @@ async function indiaPostBulkTrack() {
     let totalTracked = 0;
     let totalDelivered = 0;
     let totalRTO = 0;
+    let totalErrors = 0;
 
     for (const chunk of chunks) {
-      const trackingNumbers = chunk.map(o => o.trackingNumber);
-      const trackRes = await fetch(`${baseUrl}/tracking/bulk`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ bulk: trackingNumbers }),
-      });
+      const trackingNumbers = chunk.map(o => o.trackingNumber).filter(Boolean);
+      if (trackingNumbers.length === 0) continue;
 
-      if (!trackRes.ok) continue;
-      const trackData = await trackRes.json();
+      try {
+        const trackRes = await fetch(`${baseUrl}/tracking/bulk`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ bulk: trackingNumbers }),
+        });
 
-      for (const item of (trackData.data || [])) {
-        const trackingNum = item.booking_details?.article_number;
-        if (!trackingNum) continue;
+        if (!trackRes.ok) {
+          const errText = await trackRes.text();
+          console.error('India Post bulk tracking error:', trackRes.status, errText);
+          totalErrors += chunk.length;
+          continue;
+        }
 
-        const order = chunk.find(o => o.trackingNumber === trackingNum);
-        if (!order) continue;
+        const trackData = await trackRes.json();
+        const articles = trackData?.data || trackData || [];
 
-        // Scan events for delivery or RTO
-        const events = item.tracking_details || [];
-        let newStatus = order.status;
-        let tariff = item.booking_details?.tariff || order.indiaPostTariff;
+        for (const item of (Array.isArray(articles) ? articles : [])) {
+          const trackingNum = item?.booking_details?.article_number || item?.article_number;
+          if (!trackingNum) continue;
 
-        for (const event of events) {
-          const eventName = (event.event || '').toLowerCase();
-          if (eventName.includes('item delivered') || eventName.includes('delivered')) {
+          const order = chunk.find(o => o.trackingNumber === trackingNum);
+          if (!order) continue;
+
+          let newStatus = order.status;
+          let tariff = item?.booking_details?.tariff || order.indiaPostTariff || order.shippingCost;
+
+          // Check del_status object first (most reliable)
+          const delStatus = (item?.del_status || '').toLowerCase();
+          if (delStatus === 'delivered' || delStatus === 'item delivered') {
             newStatus = 'Delivered';
-            break;
-          }
-          if (eventName.includes('returned') || eventName.includes('rto') || eventName.includes('return to origin')) {
+          } else if (delStatus === 'rto' || delStatus === 'returned' || delStatus.includes('return')) {
             newStatus = 'RTO';
-            break;
+          }
+
+          // If del_status didn't resolve, scan tracking_details events
+          if (newStatus === order.status) {
+            const events = item?.tracking_details || [];
+            for (const event of events) {
+              const eventDesc = (event?.event || event?.event_description || '').toLowerCase();
+              const eventCode = (event?.event_code || event?.code || '').toUpperCase();
+
+              if (eventDesc.includes('item delivered') || eventDesc.includes('delivered to addressee')) {
+                newStatus = 'Delivered';
+                break;
+              }
+              if (eventCode === 'RT' || eventDesc.includes('return') || eventDesc.includes('rto') || eventDesc.includes('return to origin')) {
+                newStatus = 'RTO';
+                break;
+              }
+              // If item is dispatched/in transit, mark as In Transit (for Unfulfilled orders)
+              if (order.status === 'Unfulfilled' && (eventDesc.includes('dispatched') || eventDesc.includes('booked'))) {
+                newStatus = 'In Transit';
+              }
+            }
+          }
+
+          if (newStatus !== order.status) {
+            await db.collection('orders').updateOne({ _id: order._id }, {
+              $set: {
+                status: newStatus,
+                indiaPostTariff: tariff,
+                indiaPostLastEvent: (item?.tracking_details || []).slice(-1)[0]?.event || '',
+                statusUpdatedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }
+            });
+            totalTracked++;
+            if (newStatus === 'Delivered') totalDelivered++;
+            if (newStatus === 'RTO') totalRTO++;
           }
         }
-
-        if (newStatus !== order.status) {
-          await db.collection('orders').updateOne({ _id: order._id }, {
-            $set: { status: newStatus, indiaPostTariff: tariff, updatedAt: new Date().toISOString() }
-          });
-          totalTracked++;
-          if (newStatus === 'Delivered') totalDelivered++;
-          if (newStatus === 'RTO') totalRTO++;
-        }
+      } catch (chunkErr) {
+        console.error('Chunk tracking error:', chunkErr.message);
+        totalErrors += chunk.length;
       }
     }
 
+    // Mark India Post integration as active after successful sync
+    await db.collection('integrations').updateOne(
+      { _id: 'integrations-config' },
+      { $set: { 'indiaPost.active': true, 'indiaPost.lastSyncAt': new Date().toISOString() } }
+    );
+
     return {
-      message: `Tracked ${pendingOrders.length} shipments. Updated: ${totalTracked} (${totalDelivered} delivered, ${totalRTO} RTO)`,
-      tracked: totalTracked, delivered: totalDelivered, rto: totalRTO,
+      message: `Scanned ${pendingOrders.length} shipments. Updated: ${totalTracked} (${totalDelivered} delivered, ${totalRTO} RTO)${totalErrors > 0 ? `. ${totalErrors} errors.` : ''}`,
+      scanned: pendingOrders.length,
+      tracked: totalTracked,
+      delivered: totalDelivered,
+      rto: totalRTO,
+      errors: totalErrors,
     };
   } catch (err) {
     return { error: `India Post tracking failed: ${err.message}`, tracked: 0 };
