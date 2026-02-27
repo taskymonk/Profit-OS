@@ -161,8 +161,8 @@ def test_rto_double_shipping():
     """Test 3: RTO DOUBLE-SHIPPING PENALTY"""
     log("🔍 TEST 3: RTO DOUBLE-SHIPPING PENALTY")
     try:
-        # Step 1: Find or create an order to temporarily set as RTO
-        response = requests.get(f"{BASE_URL}/orders", params={"page": 1, "limit": 10, "status": "Delivered"})
+        # Step 1: Find any order to temporarily set as RTO (start with Unfulfilled since that's what we have)
+        response = requests.get(f"{BASE_URL}/orders", params={"page": 1, "limit": 10})
         
         if response.status_code != 200:
             log(f"❌ Failed to get orders: {response.status_code}")
@@ -170,7 +170,7 @@ def test_rto_double_shipping():
             
         orders_data = response.json()
         if not orders_data.get('orders') or len(orders_data['orders']) == 0:
-            log("❌ No delivered orders found to test with")
+            log("❌ No orders found to test with")
             return False
         
         test_order = orders_data['orders'][0]
