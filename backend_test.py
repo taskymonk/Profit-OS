@@ -1123,7 +1123,7 @@ def test_profit_calculator_metaads_check():
             results.append(False)
             
         # Also check that the profit calculation structure is correct
-        required_fields = ['netRevenue', 'cogs', 'shippingCost', 'transactionFees', 'marketingAllocation', 'netProfit']
+        required_fields = ['netRevenue', 'totalCOGS', 'shippingCost', 'totalTransactionFee', 'marketingAllocation', 'netProfit']
         missing_fields = [field for field in required_fields if field not in profit_data]
         
         if missing_fields:
