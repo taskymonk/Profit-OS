@@ -304,7 +304,7 @@ def test_daily_marketing_spend_endpoint():
     print_info("Test: GET /api/daily-marketing-spend → should return empty array []")
     success, spend_data = make_request('GET', '/daily-marketing-spend')
     
-    if success and spend_data:
+    if success:
         if isinstance(spend_data, list):
             if len(spend_data) == 0:
                 print_success("Daily marketing spend correctly returns empty array []")
