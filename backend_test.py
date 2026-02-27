@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Profit OS Phase 3 Backend API Testing Suite
-Tests Phase 3 features: Bulk Employee Claim, Pro-Rata Overhead in Dashboard, and Purge Demo Data.
+Profit OS Phase 4 Backend API Testing Suite
+Tests Phase 4 features: Orders Pagination, Dashboard MetaAds Check, Profit Calculator MetaAds Check, and Purge+Re-seed Flow.
 """
 
 import requests
