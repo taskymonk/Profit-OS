@@ -177,19 +177,27 @@ export default function IntegrationsView() {
             </div>
           </div>
           <Separator />
-          <div>
+          <div className="flex flex-col sm:flex-row gap-2 items-start">
             <Button size="sm" variant="outline" disabled={syncing.indiaPost}
-              onClick={() => runSync('indiaPost', '/api/indiapost/track-bulk')}>
+              onClick={() => runSync('indiaPost', '/api/indiapost/sync-tracking')}>
               {syncing.indiaPost ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Truck className="w-3.5 h-3.5 mr-1.5" />}
               Run Bulk Tracking Now
             </Button>
+            {config?.indiaPost?.lastSyncAt && (
+              <span className="text-[11px] text-muted-foreground self-center">
+                Last synced: {new Date(config.indiaPost.lastSyncAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
+            )}
           </div>
           {syncResults.indiaPost && (
             <div className="text-xs p-2 rounded bg-muted flex items-center gap-1.5">
-              {syncResults.indiaPost.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />}
+              {syncResults.indiaPost.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
               <span>{syncResults.indiaPost.error || syncResults.indiaPost.message}</span>
             </div>
           )}
+          <p className="text-[11px] text-muted-foreground">
+            Scans all "In Transit" orders with tracking numbers. Updates status to Delivered or RTO based on India Post events.
+          </p>
         </CardContent>
       </Card>
 
