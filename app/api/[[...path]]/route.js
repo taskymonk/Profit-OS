@@ -654,39 +654,94 @@ async function shopifySyncOrders() {
   const baseUrl = storeUrl.includes('https://') ? storeUrl : `https://${storeUrl}`;
 
   try {
-    const res = await fetch(`${baseUrl}/admin/api/2024-01/orders.json?limit=250&status=any`, {
-      headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' }
-    });
+    let allShopifyOrders = [];
+    let pageInfo = null;
+    let url = `${baseUrl}/admin/api/2024-01/orders.json?limit=250&status=any`;
 
-    if (!res.ok) {
-      return { error: `Shopify API error: ${res.status}`, synced: 0 };
+    // Paginate through ALL Shopify orders
+    for (let page = 0; page < 50; page++) {
+      const fetchUrl = pageInfo
+        ? `${baseUrl}/admin/api/2024-01/orders.json?limit=250&page_info=${pageInfo}`
+        : url;
+
+      const res = await fetch(fetchUrl, {
+        headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' }
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        return { error: `Shopify API error: ${res.status} - ${errText}`, synced: allShopifyOrders.length > 0 ? 'partial' : 0 };
+      }
+
+      const data = await res.json();
+      allShopifyOrders = allShopifyOrders.concat(data.orders || []);
+
+      // Check for next page via Link header
+      const linkHeader = res.headers.get('link');
+      if (linkHeader && linkHeader.includes('rel="next"')) {
+        const match = linkHeader.match(/page_info=([^>&]*)/);
+        pageInfo = match ? match[1] : null;
+        if (!pageInfo) break;
+      } else {
+        break;
+      }
     }
 
-    const data = await res.json();
     let synced = 0;
+    let updated = 0;
 
-    for (const shopifyOrder of (data.orders || [])) {
-      const existingOrder = await db.collection('orders').findOne({ shopifyOrderId: String(shopifyOrder.id) });
-      if (existingOrder) continue;
+    for (const shopifyOrder of allShopifyOrders) {
+      const shopifyOrderIdStr = String(shopifyOrder.id);
 
-      // Handle bundles - group line items under one shipping ID
+      // Map Shopify fulfillment status to our status
+      let status = 'Unfulfilled';
+      if (shopifyOrder.fulfillment_status === 'fulfilled') {
+        status = 'Delivered';
+      } else if (shopifyOrder.fulfillment_status === 'partial') {
+        status = 'In Transit';
+      } else if (shopifyOrder.cancelled_at) {
+        status = 'Cancelled';
+      }
+
+      // Use the REAL Shopify date — created_at is the order placement time
+      const shopifyDate = shopifyOrder.created_at || shopifyOrder.processed_at || shopifyOrder.updated_at;
+
+      // Check if order already exists
+      const existingOrder = await db.collection('orders').findOne({ shopifyOrderId: shopifyOrderIdStr });
+
+      if (existingOrder) {
+        // Update existing order with correct date and status if changed
+        const updateFields = {};
+        if (existingOrder.orderDate !== shopifyDate) updateFields.orderDate = shopifyDate;
+        if (existingOrder.status !== status && !existingOrder.statusOverridden) updateFields.status = status;
+        if (Object.keys(updateFields).length > 0) {
+          updateFields.updatedAt = new Date().toISOString();
+          await db.collection('orders').updateOne({ _id: existingOrder._id }, { $set: updateFields });
+          updated++;
+        }
+        continue;
+      }
+
+      // Calculate per-line-item shipping split
+      const totalLineItems = (shopifyOrder.line_items || []).length || 1;
+      const totalShipping = parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0);
+      const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
+
       for (const item of (shopifyOrder.line_items || [])) {
         const sku = item.sku || `SHOP-${item.variant_id || item.product_id}`;
-        const status = shopifyOrder.fulfillment_status === 'fulfilled' ? 'Delivered' :
-                       shopifyOrder.cancelled_at ? 'Cancelled' : 'In Transit';
 
         await db.collection('orders').insertOne({
           _id: uuidv4(),
           orderId: `SH-${shopifyOrder.order_number || shopifyOrder.id}`,
-          shopifyOrderId: String(shopifyOrder.id),
+          shopifyOrderId: shopifyOrderIdStr,
           sku: sku,
           productName: item.title || item.name,
           customerName: shopifyOrder.customer ? `${shopifyOrder.customer.first_name || ''} ${shopifyOrder.customer.last_name || ''}`.trim() : 'Unknown',
           salePrice: parseFloat(item.price) * (item.quantity || 1),
-          discount: parseFloat(shopifyOrder.total_discounts || 0) / (shopifyOrder.line_items?.length || 1),
+          discount: totalDiscount / totalLineItems,
           status,
-          shippingMethod: 'manual',
-          shippingCost: parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0) / (shopifyOrder.line_items?.length || 1),
+          shippingMethod: 'shopify',
+          shippingCost: totalShipping / totalLineItems,
           isUrgent: false,
           manualCourierName: null,
           manualShippingCost: null,
@@ -694,7 +749,7 @@ async function shopifySyncOrders() {
           preparedByName: null,
           destinationPincode: shopifyOrder.shipping_address?.zip || '',
           destinationCity: shopifyOrder.shipping_address?.city || '',
-          orderDate: shopifyOrder.created_at || new Date().toISOString(),
+          orderDate: shopifyDate,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
@@ -702,7 +757,10 @@ async function shopifySyncOrders() {
       }
     }
 
-    return { message: `Synced ${synced} new orders`, synced, totalShopifyOrders: (data.orders || []).length };
+    return {
+      message: `Synced ${synced} new orders, updated ${updated} existing. Total Shopify orders: ${allShopifyOrders.length}`,
+      synced, updated, totalShopifyOrders: allShopifyOrders.length
+    };
   } catch (err) {
     return { error: `Shopify order sync failed: ${err.message}`, synced: 0 };
   }
