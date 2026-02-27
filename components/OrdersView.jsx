@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import {
   Plus, Trash2, Edit, Zap, UserCheck, Search,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Package
 } from 'lucide-react';
 import { toast } from 'sonner';
 
