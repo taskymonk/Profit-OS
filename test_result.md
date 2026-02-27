@@ -426,6 +426,51 @@ backend:
           agent: "testing"
           comment: "✅ TESTED - India Post tracking error handling working correctly. Returns 'India Post credentials not configured' error when no credentials present. Proper error handling without server crashes."
 
+  - task: "Orders Pagination API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Phase 4 feature. GET /api/orders now supports server-side pagination with ?page=1&limit=5, search (?search=GS-1005), status filter (?status=RTO), and sorting (?sortBy=orderDate&sortOrder=desc/asc). Returns {orders, total, page, limit, totalPages}."
+        - working: true
+          agent: "testing"
+          comment: "✅ PHASE 4 TESTED - Orders pagination API fully functional. All 6 tests passed: basic pagination (page/limit), page 2 navigation, search by order ID, status filtering (RTO orders), descending/ascending sort by orderDate. Pagination structure validated with correct totalPages calculation."
+
+  - task: "Dashboard MetaAds Active Check"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Phase 4 feature. Dashboard API now checks integrations.metaAds.active and filters out MetaAds expenses when inactive, ensuring filtered.adSpend = 0 when Meta Ads is not active."
+        - working: true
+          agent: "testing"
+          comment: "✅ PHASE 4 TESTED - Dashboard MetaAds check working correctly. Verified metaAds.active = false in integrations, dashboard filtered.adSpend = 0 when MetaAds inactive, and order marketing allocations are 0. All 3 tests passed."
+
+  - task: "Profit Calculator MetaAds Active Check"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Phase 4 feature. GET /api/calculate-profit/{orderId} now checks integrations.metaAds.active and sets marketingAllocation = 0 when Meta Ads is inactive."
+        - working: true
+          agent: "testing"
+          comment: "✅ PHASE 4 TESTED - Profit calculator MetaAds check working correctly. Verified marketingAllocation = 0 when MetaAds inactive. Profit calculation structure complete with all required fields (netRevenue, totalCOGS, shippingCost, totalTransactionFee, marketingAllocation, netProfit). 2/2 tests passed."
+
 frontend:
   - task: "Dashboard with Profit Metrics"
     implemented: true
