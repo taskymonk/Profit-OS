@@ -392,6 +392,36 @@ export default function OrdersView() {
                         {order.status}
                       </Badge>
                     </td>
+                    <td className="py-2.5 px-4">
+                      {['Unfulfilled', 'In Transit'].includes(order.status) ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            className="h-7 text-xs w-32 font-mono"
+                            placeholder="Enter AWB..."
+                            value={trackingEdits[order._id] !== undefined ? trackingEdits[order._id] : (order.trackingNumber || '')}
+                            onChange={e => setTrackingEdits(prev => ({ ...prev, [order._id]: e.target.value }))}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                const val = trackingEdits[order._id] !== undefined ? trackingEdits[order._id] : (order.trackingNumber || '');
+                                saveTrackingNumber(order._id, val);
+                                setTrackingEdits(prev => { const n = {...prev}; delete n[order._id]; return n; });
+                              }
+                            }}
+                            onBlur={() => {
+                              if (trackingEdits[order._id] !== undefined && trackingEdits[order._id] !== (order.trackingNumber || '')) {
+                                saveTrackingNumber(order._id, trackingEdits[order._id]);
+                                setTrackingEdits(prev => { const n = {...prev}; delete n[order._id]; return n; });
+                              }
+                            }}
+                          />
+                          {savingTracking[order._id] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                        </div>
+                      ) : order.trackingNumber ? (
+                        <span className="text-xs font-mono text-muted-foreground">{order.trackingNumber}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/50">—</span>
+                      )}
+                    </td>
                     <td className="py-2.5 px-4 text-sm text-right font-medium">{fmt(order.salePrice)}</td>
                     <td className="py-2.5 px-4 text-xs text-muted-foreground whitespace-nowrap">{formatDate(order.orderDate)}</td>
                     <td className="py-2.5 px-4">
