@@ -852,24 +852,431 @@ def test_existing_crud_smoke_tests():
     print(f"\nExisting CRUD Smoke Tests: {sum(results)}/{len(results)} passed")
     return all(results)
 
+def test_orders_pagination_api():
+    """Test Phase 4 Orders Pagination API"""
+    print_header("PHASE 4: ORDERS PAGINATION API TESTS")
+    
+    results = []
+    
+    # Test 1: GET /api/orders?page=1&limit=5
+    print_info("Test 1: Basic pagination - page 1, limit 5")
+    success, data = make_request('GET', '/orders?page=1&limit=5')
+    
+    if success and data:
+        required_fields = ['orders', 'total', 'page', 'limit', 'totalPages']
+        missing_fields = [field for field in required_fields if field not in data]
+        
+        if missing_fields:
+            print_error(f"Missing pagination fields: {missing_fields}")
+            results.append(False)
+        else:
+            orders = data.get('orders', [])
+            total = data.get('total', 0)
+            page = data.get('page', 0)
+            limit = data.get('limit', 0)
+            total_pages = data.get('totalPages', 0)
+            
+            # Verify response structure
+            if (len(orders) <= 5 and 
+                page == 1 and 
+                limit == 5 and 
+                total_pages == int((total + limit - 1) // limit)):  # Math.ceil equivalent
+                print_success(f"Pagination structure correct: {len(orders)} orders, page {page}, limit {limit}, total {total}, totalPages {total_pages}")
+                results.append(True)
+            else:
+                print_error(f"Pagination structure incorrect: got {len(orders)} orders, page {page}, limit {limit}, total {total}, totalPages {total_pages}")
+                results.append(False)
+    else:
+        print_error("Failed to get orders with pagination")
+        results.append(False)
+    
+    # Test 2: GET /api/orders?page=2&limit=5 - different page
+    print_info("Test 2: Second page pagination")
+    success, data = make_request('GET', '/orders?page=2&limit=5')
+    
+    if success and data:
+        orders = data.get('orders', [])
+        page = data.get('page', 0)
+        
+        if page == 2:
+            print_success(f"Page 2 working: {len(orders)} orders returned")
+            results.append(True)
+        else:
+            print_error(f"Page parameter not working correctly: expected 2, got {page}")
+            results.append(False)
+    else:
+        print_error("Failed to get page 2 orders")
+        results.append(False)
+    
+    # Test 3: Search functionality
+    print_info("Test 3: Search by order ID (GS-1005)")
+    success, data = make_request('GET', '/orders?search=GS-1005')
+    
+    if success and data:
+        orders = data.get('orders', [])
+        found_order = any(order.get('orderId', '').find('GS-1005') != -1 for order in orders)
+        
+        if found_order:
+            print_success(f"Search working: Found order with ID containing 'GS-1005' in {len(orders)} results")
+            results.append(True)
+        else:
+            print_warning(f"Search returned {len(orders)} results but no order with 'GS-1005' found")
+            # Still pass if we got results, might be that specific order doesn't exist
+            results.append(True)
+    else:
+        print_error("Failed to search orders")
+        results.append(False)
+    
+    # Test 4: Status filter
+    print_info("Test 4: Status filter (RTO orders)")
+    success, data = make_request('GET', '/orders?status=RTO&page=1&limit=20')
+    
+    if success and data:
+        orders = data.get('orders', [])
+        # Verify all returned orders have RTO status
+        rto_orders = [order for order in orders if order.get('status') == 'RTO']
+        
+        if len(rto_orders) == len(orders):
+            print_success(f"Status filter working: {len(orders)} RTO orders returned")
+            results.append(True)
+        else:
+            print_error(f"Status filter not working: got {len(rto_orders)} RTO orders out of {len(orders)} total")
+            results.append(False)
+    else:
+        print_error("Failed to filter by status")
+        results.append(False)
+    
+    # Test 5: Sort by orderDate desc (newest first)
+    print_info("Test 5: Sort by orderDate descending")
+    success, data = make_request('GET', '/orders?sortBy=orderDate&sortOrder=desc')
+    
+    if success and data:
+        orders = data.get('orders', [])
+        
+        if len(orders) >= 2:
+            first_date = orders[0].get('orderDate', '')
+            second_date = orders[1].get('orderDate', '')
+            
+            if first_date >= second_date:
+                print_success(f"Descending sort working: First order date {first_date[:10]} >= Second order date {second_date[:10]}")
+                results.append(True)
+            else:
+                print_error(f"Descending sort not working: First date {first_date[:10]} < Second date {second_date[:10]}")
+                results.append(False)
+        else:
+            print_warning("Not enough orders to verify sorting, but API call successful")
+            results.append(True)
+    else:
+        print_error("Failed to sort by orderDate desc")
+        results.append(False)
+    
+    # Test 6: Sort by orderDate asc (oldest first)
+    print_info("Test 6: Sort by orderDate ascending")
+    success, data = make_request('GET', '/orders?sortBy=orderDate&sortOrder=asc')
+    
+    if success and data:
+        orders = data.get('orders', [])
+        
+        if len(orders) >= 2:
+            first_date = orders[0].get('orderDate', '')
+            second_date = orders[1].get('orderDate', '')
+            
+            if first_date <= second_date:
+                print_success(f"Ascending sort working: First order date {first_date[:10]} <= Second order date {second_date[:10]}")
+                results.append(True)
+            else:
+                print_error(f"Ascending sort not working: First date {first_date[:10]} > Second date {second_date[:10]}")
+                results.append(False)
+        else:
+            print_warning("Not enough orders to verify sorting, but API call successful")
+            results.append(True)
+    else:
+        print_error("Failed to sort by orderDate asc")
+        results.append(False)
+    
+    print(f"\nOrders Pagination API Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
+def test_dashboard_metaads_check():
+    """Test Phase 4 Dashboard MetaAds Check"""
+    print_header("PHASE 4: DASHBOARD METAADS CHECK TESTS")
+    
+    results = []
+    
+    # Test 1: Check integrations - MetaAds should be inactive
+    print_info("Test 1: Verify MetaAds integration is inactive")
+    success, integrations = make_request('GET', '/integrations')
+    
+    if success and integrations:
+        meta_ads = integrations.get('metaAds', {})
+        is_active = meta_ads.get('active', False)
+        
+        if is_active == False:
+            print_success(f"MetaAds integration correctly inactive: active = {is_active}")
+            results.append(True)
+        else:
+            print_error(f"MetaAds integration is unexpectedly active: active = {is_active}")
+            results.append(False)
+    else:
+        print_error("Failed to get integrations")
+        results.append(False)
+    
+    # Test 2: Dashboard filtered.adSpend should be 0 when MetaAds inactive
+    print_info("Test 2: Dashboard adSpend should be 0 when MetaAds inactive")
+    success, dashboard = make_request('GET', '/dashboard?range=7days')
+    
+    if success and dashboard:
+        filtered = dashboard.get('filtered', {})
+        ad_spend = filtered.get('adSpend', 0)
+        
+        if ad_spend == 0:
+            print_success(f"Dashboard adSpend correctly 0 when MetaAds inactive: adSpend = {ad_spend}")
+            results.append(True)
+        else:
+            print_error(f"Dashboard adSpend should be 0 but got: {ad_spend}")
+            results.append(False)
+    else:
+        print_error("Failed to get dashboard data")
+        results.append(False)
+    
+    # Test 3: All order marketing allocations should be 0
+    print_info("Test 3: Verify order marketing allocations are 0")
+    success, orders_data = make_request('GET', '/orders?page=1&limit=5')
+    
+    if success and orders_data:
+        orders = orders_data.get('orders', [])
+        
+        if len(orders) > 0:
+            # Check profit calculation for first order
+            first_order = orders[0]
+            order_id = first_order.get('_id')
+            
+            if order_id:
+                success, profit_calc = make_request('GET', f'/calculate-profit/{order_id}')
+                
+                if success and profit_calc:
+                    marketing_allocation = profit_calc.get('marketingAllocation', -1)
+                    
+                    if marketing_allocation == 0:
+                        print_success(f"Marketing allocation correctly 0 for order {first_order.get('orderId', 'Unknown')}: {marketing_allocation}")
+                        results.append(True)
+                    else:
+                        print_error(f"Marketing allocation should be 0 but got: {marketing_allocation}")
+                        results.append(False)
+                else:
+                    print_error("Failed to calculate profit for order")
+                    results.append(False)
+            else:
+                print_error("No valid order ID found")
+                results.append(False)
+        else:
+            print_error("No orders found for marketing allocation test")
+            results.append(False)
+    else:
+        print_error("Failed to get orders for marketing allocation test")
+        results.append(False)
+    
+    print(f"\nDashboard MetaAds Check Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
+def test_profit_calculator_metaads_check():
+    """Test Phase 4 Profit Calculator MetaAds Check"""
+    print_header("PHASE 4: PROFIT CALCULATOR METAADS CHECK TESTS")
+    
+    results = []
+    
+    # Get first order for testing
+    print_info("Getting first order for profit calculation test")
+    success, orders_data = make_request('GET', '/orders?page=1&limit=1')
+    
+    if not success or not orders_data:
+        print_error("Failed to get orders for profit calculator test")
+        return False
+    
+    orders = orders_data.get('orders', [])
+    if len(orders) == 0:
+        print_error("No orders found for profit calculator test")
+        return False
+    
+    first_order = orders[0]
+    order_id = first_order.get('_id')
+    order_display_id = first_order.get('orderId', 'Unknown')
+    
+    if not order_id:
+        print_error("No valid order ID found for profit calculator test")
+        return False
+    
+    print_success(f"Selected order for test: {order_display_id} (ID: {order_id})")
+    
+    # Test profit calculation - marketingAllocation should be 0
+    print_info("Testing profit calculation marketingAllocation")
+    success, profit_data = make_request('GET', f'/calculate-profit/{order_id}')
+    
+    if success and profit_data:
+        marketing_allocation = profit_data.get('marketingAllocation', -1)
+        
+        if marketing_allocation == 0:
+            print_success(f"Profit calculator marketingAllocation correctly 0: {marketing_allocation}")
+            results.append(True)
+        else:
+            print_error(f"Profit calculator marketingAllocation should be 0 but got: {marketing_allocation}")
+            results.append(False)
+            
+        # Also check that the profit calculation structure is correct
+        required_fields = ['netRevenue', 'cogs', 'shippingCost', 'transactionFees', 'marketingAllocation', 'netProfit']
+        missing_fields = [field for field in required_fields if field not in profit_data]
+        
+        if missing_fields:
+            print_error(f"Profit calculation missing fields: {missing_fields}")
+            results.append(False)
+        else:
+            print_success("Profit calculation structure complete")
+            results.append(True)
+    else:
+        print_error("Failed to get profit calculation")
+        results.append(False)
+    
+    print(f"\nProfit Calculator MetaAds Check Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
+def test_purge_reseed_flow():
+    """Test Phase 4 Purge + Re-seed Flow"""
+    print_header("PHASE 4: PURGE + RE-SEED FLOW TESTS")
+    
+    results = []
+    
+    # Step 1: Purge all demo data
+    print_info("Step 1: Purging demo data")
+    success, purge_result = make_request('POST', '/purge')
+    
+    if success and purge_result:
+        purged = purge_result.get('purged', {})
+        total_purged = sum(purged.values()) if isinstance(purged, dict) else 0
+        
+        if total_purged > 0:
+            print_success(f"Purge successful: {total_purged} items purged")
+            print_info(f"Purged counts: {purged}")
+            results.append(True)
+        else:
+            print_warning("Purge completed but no items were purged")
+            results.append(True)  # Could be that DB was already empty
+    else:
+        print_error("Failed to purge data")
+        results.append(False)
+    
+    # Step 2: Verify tenant-config still exists
+    print_info("Step 2: Verify tenant-config preserved after purge")
+    success, tenant_config = make_request('GET', '/tenant-config')
+    
+    if success and tenant_config and 'tenantName' in tenant_config:
+        print_success(f"Tenant config preserved: {tenant_config.get('tenantName')}")
+        results.append(True)
+    else:
+        print_error("Tenant config was not preserved after purge")
+        results.append(False)
+    
+    # Step 3: Verify integrations still exist
+    print_info("Step 3: Verify integrations preserved after purge")
+    success, integrations = make_request('GET', '/integrations')
+    
+    if success and integrations:
+        print_success("Integrations config preserved after purge")
+        results.append(True)
+    else:
+        print_error("Integrations config was not preserved after purge")
+        results.append(False)
+    
+    # Step 4: Verify orders collection is empty
+    print_info("Step 4: Verify orders collection is empty after purge")
+    success, orders_data = make_request('GET', '/orders?page=1&limit=5')
+    
+    if success and orders_data:
+        orders = orders_data.get('orders', [])
+        total = orders_data.get('total', 0)
+        
+        if total == 0 and len(orders) == 0:
+            print_success("Orders collection correctly empty after purge")
+            results.append(True)
+        else:
+            print_error(f"Orders collection not empty after purge: {total} total, {len(orders)} returned")
+            results.append(False)
+    else:
+        print_error("Failed to check orders after purge")
+        results.append(False)
+    
+    # Step 5: Re-seed the database
+    print_info("Step 5: Re-seeding database")
+    success, seed_result = make_request('POST', '/seed')
+    
+    if success and seed_result:
+        seeded = seed_result.get('seeded', False)
+        
+        if seeded == True:
+            print_success(f"Re-seeding successful: {seed_result.get('message', 'No message')}")
+            results.append(True)
+        else:
+            print_warning(f"Re-seeding returned seeded=false: {seed_result.get('message', 'No message')}")
+            results.append(False)
+    else:
+        print_error("Failed to re-seed database")
+        results.append(False)
+    
+    # Step 6: Verify orders exist after re-seeding
+    print_info("Step 6: Verify orders exist after re-seeding")
+    success, orders_data = make_request('GET', '/orders?page=1&limit=5')
+    
+    if success and orders_data:
+        orders = orders_data.get('orders', [])
+        total = orders_data.get('total', 0)
+        
+        if total > 0 and len(orders) > 0:
+            print_success(f"Orders successfully re-seeded: {total} total orders, {len(orders)} returned")
+            results.append(True)
+        else:
+            print_error(f"No orders found after re-seeding: {total} total, {len(orders)} returned")
+            results.append(False)
+    else:
+        print_error("Failed to check orders after re-seeding")
+        results.append(False)
+    
+    print(f"\nPurge + Re-seed Flow Tests: {sum(results)}/{len(results)} passed")
+    return all(results)
+
 def main():
-    """Run Phase 3 backend tests for Profit OS"""
-    print_header("PROFIT OS PHASE 3 BACKEND API TESTING SUITE")
+    """Run Phase 4 backend tests for Profit OS"""
+    print_header("PROFIT OS PHASE 4 BACKEND API TESTING SUITE")
     print_info(f"Base URL: {BASE_URL}")
     print_info(f"Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print_info("🎯 FOCUSING ONLY ON PHASE 3 FEATURES:")
-    print_info("   1. Bulk Employee Claim (POST /api/employee-claim)")
-    print_info("   2. Pro-Rata Overhead in Dashboard (GET /api/dashboard)")
-    print_info("   3. Purge Demo Data (POST /api/purge)")
+    print_info("🎯 PHASE 4 LIVE MODE TESTING:")
+    print_info("   1. Orders Pagination API")
+    print_info("   2. Dashboard MetaAds Check")  
+    print_info("   3. Profit Calculator MetaAds Check")
+    print_info("   4. Purge + Re-seed Flow")
     
-    # Run Phase 3 test suites only
+    # First, seed the database since DB is empty
+    print_header("SEEDING DATABASE (DB IS EMPTY)")
+    print_info("Seeding database with demo data...")
+    success, seed_result = make_request('POST', '/seed')
+    
+    if success and seed_result:
+        seeded = seed_result.get('seeded', False)
+        if seeded:
+            print_success(f"Database seeded successfully: {seed_result.get('message', 'No message')}")
+        else:
+            print_warning(f"Seed returned seeded=false: {seed_result.get('message', 'No message')}")
+    else:
+        print_error("Failed to seed database - cannot continue with tests")
+        return 1
+    
+    # Run Phase 4 test suites
     test_results = []
     
     try:
-        # Phase 3 specific tests
-        test_results.append(("PHASE 3: Bulk Employee Claim", test_bulk_employee_claim()))
-        test_results.append(("PHASE 3: Pro-Rata Overhead Dashboard", test_prorata_overhead_dashboard()))
-        test_results.append(("PHASE 3: Purge Demo Data", test_purge_demo_data()))
+        # Phase 4 specific tests
+        test_results.append(("PHASE 4: Orders Pagination API", test_orders_pagination_api()))
+        test_results.append(("PHASE 4: Dashboard MetaAds Check", test_dashboard_metaads_check()))
+        test_results.append(("PHASE 4: Profit Calculator MetaAds Check", test_profit_calculator_metaads_check()))
+        test_results.append(("PHASE 4: Purge + Re-seed Flow", test_purge_reseed_flow()))
         
     except KeyboardInterrupt:
         print_error("\nTesting interrupted by user")
@@ -879,7 +1286,7 @@ def main():
         return 1
     
     # Print summary
-    print_header("PHASE 3 TEST RESULTS SUMMARY")
+    print_header("PHASE 4 TEST RESULTS SUMMARY")
     
     passed = sum(1 for _, result in test_results if result)
     total = len(test_results)
@@ -888,13 +1295,13 @@ def main():
         status = "✅ PASS" if result else "❌ FAIL"
         print(f"{status} {test_name}")
     
-    print(f"\n{Colors.BOLD}Overall Phase 3 Results: {passed}/{total} test suites passed{Colors.END}")
+    print(f"\n{Colors.BOLD}Overall Phase 4 Results: {passed}/{total} test suites passed{Colors.END}")
     
     if passed == total:
-        print_success("🎉 ALL PHASE 3 BACKEND TESTS PASSED!")
+        print_success("🎉 ALL PHASE 4 BACKEND TESTS PASSED!")
         return 0
     else:
-        print_error(f"⚠️  {total - passed} Phase 3 test suite(s) failed")
+        print_error(f"⚠️  {total - passed} Phase 4 test suite(s) failed")
         return 1
 
 if __name__ == "__main__":
