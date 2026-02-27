@@ -329,7 +329,7 @@ def test_simulate_ad_spend():
     try:
         # Get MongoDB connection
         client, db = get_mongo_client()
-        if not client or not db:
+        if client is None or db is None:
             print_error("Cannot connect to MongoDB - skipping simulation test")
             return False
         
