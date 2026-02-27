@@ -441,9 +441,16 @@ async function getDashboardData(params = {}) {
   const tenantConfig = await db.collection('tenantConfig').findOne({});
   const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
 
-  // If Meta Ads is NOT active, filter out MetaAds expenses so marketing = ₹0
+  // Always filter out old MetaAds expense entries — ad spend now lives in dailyMarketingSpend
+  const overheadExpenses = expenses.filter(e => e.category !== 'MetaAds');
+
+  // Build adSpendMap from dailyMarketingSpend collection (only if Meta active)
   const isMetaActive = integrations?.metaAds?.active === true;
-  const effectiveExpenses = isMetaActive ? expenses : expenses.filter(e => e.category !== 'MetaAds');
+  const dailySpends = isMetaActive
+    ? await db.collection('dailyMarketingSpend').find({}).toArray()
+    : [];
+  const adSpendMap = {};
+  dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
 
   // Date range handling
   const now = new Date();
