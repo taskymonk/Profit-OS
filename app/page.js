@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Users, Receipt,
   Settings, Plug, ChevronLeft, ChevronRight, Menu, X,
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
-  Boxes, Moon, Sun, RefreshCw, Database, BarChart3, RefreshCcw
+  Boxes, Moon, Sun, BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
