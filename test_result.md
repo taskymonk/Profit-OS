@@ -584,19 +584,38 @@ agent_communication:
 
 BONUS FIX: Updated seed function to check for orders instead of tenantConfig to enable re-seeding after purge, and handle existing tenantConfig/integrations gracefully."
     - agent: "main"
-      message: "PHASE 4 LIVE MODE TESTING. Major changes: 1) Auto-seeder REMOVED from page.js 2) Orders API upgraded with server-side pagination 3) Shopify sync orders fixed with proper date mapping + pagination 4) MetaAds active check added to dashboard, calculate-profit, and reports 5) OrdersView.jsx fully rewritten with pagination/search/sort 6) All demo data purged (DB is clean). Base URL: http://localhost:3000/api. 
+      message: "META ADS INTEGRATION TESTING. Major changes: 1) New metaAdsSyncSpend() function added to route.js 2) New dailyMarketingSpend collection 3) calculateDashboardMetrics now takes adSpendMap parameter 4) Dashboard, calculate-profit, and reports all use dailyMarketingSpend instead of overheadExpenses for MetaAds 5) POST /api/meta-ads/sync endpoint added 6) GET /api/daily-marketing-spend endpoint added. Base URL: http://localhost:3000/api.
 
-SEED first since DB is empty: POST /api/seed
+SEED DATA FIRST since DB is empty: POST /api/seed
 
 Test these:
-1) GET /api/orders?page=1&limit=5 - returns {orders, total, page, limit, totalPages}
-2) GET /api/orders?page=2&limit=5 - different page
-3) GET /api/orders?search=GS-1005 - search filter
-4) GET /api/orders?status=RTO&page=1&limit=20 - status filter
-5) GET /api/orders?sortBy=orderDate&sortOrder=desc - newest first
-6) GET /api/dashboard?range=7days - verify filtered.adSpend = 0 (Meta inactive)
-7) GET /api/calculate-profit/{orderId} - verify marketingAllocation = 0
-8) POST /api/purge then verify tenant-config and integrations preserved, then POST /api/seed"
+
+1) META ADS SYNC ERROR HANDLING:
+   - POST /api/meta-ads/sync without credentials → expect error about missing credentials
+   - Verify integrations.metaAds.active stays false when sync hasn't happened
+
+2) DASHBOARD AD SPEND MAP FLOW (with no MetaAds data):
+   - GET /api/dashboard?range=alltime → filtered.adSpend MUST be 0
+   - All marketing allocations in recentOrders should be 0
+
+3) CALCULATE-PROFIT with no MetaAds:
+   - Get an order: GET /api/orders?page=1&limit=1
+   - GET /api/calculate-profit/{_id} → marketingAllocation MUST be 0
+
+4) DAILY MARKETING SPEND API:
+   - GET /api/daily-marketing-spend → should return empty array []
+   - Insert a test spend directly:
+     Use POST to insert test data: run a PUT/POST to manually insert to test the flow
+     Actually, just verify the endpoint returns an array
+
+5) SIMULATE AD SPEND (to test the math):
+   - Use MongoDB to directly insert a record into dailyMarketingSpend: {date: '2026-02-25', spendAmount: 5000, currency: 'INR', source: 'test'}
+   - Also insert into integrations to set metaAds.active = true
+   - Then GET /api/dashboard?range=alltime → filtered.adSpend should include 5000
+   - GET /api/calculate-profit/{orderId} for an order on that date → marketingAllocation should be 5000 / totalOrders_on_that_date
+   - Clean up: remove the test record and reset metaAds.active to false
+
+NOTE: The Meta Graph API calls will fail without real credentials. That's expected. Test the error handling and the internal logic paths."
     - agent: "testing"
       message: "✅ PHASE 4 BACKEND TESTING COMPLETE - ALL 4 FEATURES TESTED SUCCESSFULLY!
 
