@@ -1138,19 +1138,24 @@ export async function GET(request) {
         const recipe = await db.collection('skuRecipes').findOne({ sku: order.sku });
         const integ = await db.collection('integrations').findOne({ _id: 'integrations-config' });
         const metaActive = integ?.metaAds?.active === true;
-        const adExpenses = metaActive
-          ? await db.collection('overheadExpenses').find({ category: 'MetaAds' }).toArray()
-          : [];
+
+        // Look up the order's date in dailyMarketingSpend
         const orderDate = new Date(order.orderDate); orderDate.setHours(0, 0, 0, 0);
+        const dateKey = orderDate.toISOString().split('T')[0];
+
+        let dayAdSpend = 0;
+        if (metaActive) {
+          const dailySpend = await db.collection('dailyMarketingSpend').findOne({ date: dateKey });
+          dayAdSpend = dailySpend?.spendAmount || 0;
+        }
+
+        // Count total orders on that day for per-order allocation
         const allOrders = await db.collection('orders').find({}).toArray();
         const dayOrders = allOrders.filter(o => {
           const d = new Date(o.orderDate); d.setHours(0, 0, 0, 0);
           return d.getTime() === orderDate.getTime();
         });
-        const dayAdSpend = adExpenses.filter(e => {
-          const d = new Date(e.date); d.setHours(0, 0, 0, 0);
-          return d.getTime() === orderDate.getTime();
-        }).reduce((sum, e) => sum + (e.amount || 0), 0);
+
         const profit = calculateOrderProfit(order, recipe, dayAdSpend, dayOrders.length || 1, 1);
         return json(profit);
       }
