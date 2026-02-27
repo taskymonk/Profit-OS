@@ -552,3 +552,33 @@ Test these:
 6) GET /api/dashboard?range=7days - verify filtered.adSpend = 0 (Meta inactive)
 7) GET /api/calculate-profit/{orderId} - verify marketingAllocation = 0
 8) POST /api/purge then verify tenant-config and integrations preserved, then POST /api/seed"
+    - agent: "testing"
+      message: "✅ PHASE 4 BACKEND TESTING COMPLETE - ALL 4 FEATURES TESTED SUCCESSFULLY!
+
+🎯 ORDERS PAGINATION API: 6/6 tests passed
+- ✅ Basic pagination working: page 1, limit 5 returns correct structure {orders, total, page, limit, totalPages}
+- ✅ Page 2 pagination working: different set of orders returned
+- ✅ Search by order ID working: GS-1005 found successfully
+- ✅ Status filter working: 9 RTO orders returned correctly
+- ✅ Sort by orderDate desc working: newest orders first 
+- ✅ Sort by orderDate asc working: oldest orders first
+- ✅ Pagination structure validated: totalPages = Math.ceil(total/limit)
+
+🎯 DASHBOARD METAADS CHECK: 3/3 tests passed
+- ✅ MetaAds integration correctly inactive (active = false)
+- ✅ Dashboard filtered.adSpend correctly 0 when MetaAds inactive
+- ✅ Order marketing allocations correctly 0 (verified with profit calculation)
+
+🎯 PROFIT CALCULATOR METAADS CHECK: 2/2 tests passed  
+- ✅ Profit calculation marketingAllocation correctly 0 when MetaAds inactive
+- ✅ Profit calculation structure complete with all required fields
+
+🎯 PURGE + RE-SEED FLOW: 6/6 tests passed
+- ✅ Successfully purged 90 demo items (orders: 61, skuRecipes: 3, rawMaterials: 5, etc.)
+- ✅ CRITICAL: tenantConfig preserved after purge (GiftSugar)
+- ✅ CRITICAL: integrations config preserved after purge  
+- ✅ Orders collection correctly empty after purge (total: 0)
+- ✅ Re-seeding successful after purge (63 new orders created)
+- ✅ Full purge→empty→re-seed cycle working perfectly
+
+PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
