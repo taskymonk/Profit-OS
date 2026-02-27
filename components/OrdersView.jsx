@@ -367,6 +367,7 @@ export default function OrdersView() {
                 <th className="py-3 px-4 text-xs font-medium text-muted-foreground hidden lg:table-cell">Product</th>
                 <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Customer</th>
                 <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Status</th>
+                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">AWB / Tracking</th>
                 <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Sale Price</th>
                 <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Date</th>
                 <th className="py-3 px-4 text-xs font-medium text-muted-foreground w-28">Actions</th>
