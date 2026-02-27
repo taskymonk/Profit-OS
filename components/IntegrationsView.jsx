@@ -217,7 +217,29 @@ export default function IntegrationsView() {
               </Button>
             </div>
           </div>
-          <div><Label>Ad Account ID</Label><Input value={metaAds.adAccountId} onChange={e => setMetaAds({...metaAds, adAccountId: e.target.value})} placeholder="act_123456" /></div>
+          <div><Label>Ad Account ID</Label><Input value={metaAds.adAccountId} onChange={e => setMetaAds({...metaAds, adAccountId: e.target.value})} placeholder="act_123456789" /></div>
+          <Separator />
+          <div className="flex flex-col sm:flex-row gap-2 items-start">
+            <Button size="sm" variant="outline" disabled={syncing.metaAds}
+              onClick={() => runSync('metaAds', '/api/meta-ads/sync')}>
+              {syncing.metaAds ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
+              Sync Ad Spend (Last 30 Days)
+            </Button>
+            {metaAds.lastSyncAt && (
+              <span className="text-[11px] text-muted-foreground self-center">
+                Last synced: {new Date(metaAds.lastSyncAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
+            )}
+          </div>
+          {syncResults.metaAds && (
+            <div className="text-xs p-2 rounded bg-muted flex items-center gap-1.5">
+              {syncResults.metaAds.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+              <span>{syncResults.metaAds.error || syncResults.metaAds.message}</span>
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            When active, daily ad spend is divided equally among all orders placed that day. If inactive, marketing cost = ₹0 for all orders.
+          </p>
         </CardContent>
       </Card>
 
