@@ -485,7 +485,7 @@ async function getDashboardData(params = {}) {
   // Get exchange rate for currency conversion
   const exchangeRate = await getExchangeRate('USD', 'INR');
 
-  const metrics = calculateDashboardMetrics(orders, skuRecipes, effectiveExpenses, startDate, endDate, 1);
+  const metrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, startDate, endDate, 1, adSpendMap);
 
   // Build daily aggregation for chart
   const dailyData = [];
@@ -493,22 +493,21 @@ async function getDashboardData(params = {}) {
   const chartStart = new Date(startDate);
   const chartEnd = new Date(endDate);
 
+  const skuMap = {};
+  skuRecipes.forEach(r => { skuMap[r.sku] = r; });
+
   for (let d = new Date(chartStart); d <= chartEnd; d = new Date(d.getTime() + dayMs)) {
     const dayStart = new Date(d); dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(d); dayEnd.setHours(23, 59, 59, 999);
+    const dateKey = dayStart.toISOString().split('T')[0];
 
     const dayOrders = orders.filter(o => {
       const od = new Date(o.orderDate);
       return od >= dayStart && od <= dayEnd;
     });
 
-    const dayAdSpend = effectiveExpenses.filter(e => {
-      const ed = new Date(e.date); ed.setHours(0, 0, 0, 0);
-      return ed.getTime() === dayStart.getTime() && e.category === 'MetaAds';
-    }).reduce((sum, e) => sum + (e.amount || 0), 0);
-
-    const skuMap = {};
-    skuRecipes.forEach(r => { skuMap[r.sku] = r; });
+    // Use adSpendMap for daily ad spend lookup
+    const dayAdSpend = adSpendMap[dateKey] || 0;
 
     let dayProfit = 0, dayRevenue = 0, dayCOGS = 0, dayShipping = 0;
     dayOrders.forEach(order => {
@@ -520,20 +519,20 @@ async function getDashboardData(params = {}) {
     });
 
     dailyData.push({
-      date: dayStart.toISOString().split('T')[0],
+      date: dateKey,
       label: dayStart.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }),
       orders: dayOrders.length,
       revenue: Math.round(dayRevenue),
       cogs: Math.round(dayCOGS),
       shipping: Math.round(dayShipping),
-      adSpend: dayAdSpend,
+      adSpend: Math.round(dayAdSpend),
       netProfit: Math.round(dayProfit),
       rtoCount: dayOrders.filter(o => o.status === 'RTO').length,
     });
   }
 
   // All-time stats
-  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, effectiveExpenses, new Date(2020, 0, 1), new Date(now.getFullYear() + 1, 0, 1), 1);
+  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, new Date(2020, 0, 1), new Date(now.getFullYear() + 1, 0, 1), 1, adSpendMap);
 
   return {
     tenant: tenantConfig,
