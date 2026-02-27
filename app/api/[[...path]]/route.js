@@ -1265,7 +1265,7 @@ export async function POST(request) {
         return json({ error: 'Unknown Shopify action' }, 404);
 
       case 'indiapost':
-        if (subResource === 'track-bulk') return json(await indiaPostBulkTrack());
+        if (subResource === 'track-bulk' || subResource === 'sync-tracking') return json(await indiaPostSyncTracking());
         return json({ error: 'Unknown India Post action' }, 404);
 
       case 'meta-ads':
