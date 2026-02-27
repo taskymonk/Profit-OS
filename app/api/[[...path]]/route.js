@@ -325,6 +325,11 @@ async function getDashboardData(params = {}) {
   const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
   const expenses = await db.collection('overheadExpenses').find({}).toArray();
   const tenantConfig = await db.collection('tenantConfig').findOne({});
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+
+  // If Meta Ads is NOT active, filter out MetaAds expenses so marketing = ₹0
+  const isMetaActive = integrations?.metaAds?.active === true;
+  const effectiveExpenses = isMetaActive ? expenses : expenses.filter(e => e.category !== 'MetaAds');
 
   // Date range handling
   const now = new Date();
