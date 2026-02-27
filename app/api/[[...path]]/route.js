@@ -936,10 +936,48 @@ export async function GET(request) {
 
       case 'orders': {
         if (subResource) return json(await getDoc('orders', subResource));
+
+        const db = await getDb();
         const query = {};
-        if (params.status) query.status = params.status;
+        if (params.status && params.status !== 'all') query.status = params.status;
         if (params.sku) query.sku = params.sku;
-        return json(await listDocs('orders', query));
+
+        // Search by orderId or customerName (case-insensitive)
+        if (params.search && params.search.trim()) {
+          const s = params.search.trim();
+          query.$or = [
+            { orderId: { $regex: s, $options: 'i' } },
+            { customerName: { $regex: s, $options: 'i' } },
+            { sku: { $regex: s, $options: 'i' } },
+            { productName: { $regex: s, $options: 'i' } },
+          ];
+        }
+
+        // Pagination
+        const page = Math.max(1, parseInt(params.page) || 1);
+        const limit = Math.max(1, Math.min(100, parseInt(params.limit) || 20));
+        const skip = (page - 1) * limit;
+
+        // Sort — default: orderDate descending (newest first)
+        const sortBy = params.sortBy || 'orderDate';
+        const sortOrder = params.sortOrder === 'asc' ? 1 : -1;
+        const sortObj = { [sortBy]: sortOrder };
+
+        const total = await db.collection('orders').countDocuments(query);
+        const orders = await db.collection('orders')
+          .find(query)
+          .sort(sortObj)
+          .skip(skip)
+          .limit(limit)
+          .toArray();
+
+        return json({
+          orders,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        });
       }
 
       case 'employees':
