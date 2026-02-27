@@ -450,7 +450,10 @@ async function getReportProfitableSkus(params) {
   const db = await getDb();
   const orders = await db.collection('orders').find({}).toArray();
   const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
-  const expenses = await db.collection('overheadExpenses').find({}).toArray();
+  const allExpenses = await db.collection('overheadExpenses').find({}).toArray();
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+  const isMetaActive = integrations?.metaAds?.active === true;
+  const expenses = isMetaActive ? allExpenses : allExpenses.filter(e => e.category !== 'MetaAds');
 
   const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
   const endDate = params.endDate ? new Date(params.endDate) : new Date();
