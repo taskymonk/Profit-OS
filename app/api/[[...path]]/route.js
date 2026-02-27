@@ -570,10 +570,15 @@ async function getReportProfitableSkus(params) {
   const db = await getDb();
   const orders = await db.collection('orders').find({}).toArray();
   const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
-  const allExpenses = await db.collection('overheadExpenses').find({}).toArray();
   const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
   const isMetaActive = integrations?.metaAds?.active === true;
-  const expenses = isMetaActive ? allExpenses : allExpenses.filter(e => e.category !== 'MetaAds');
+
+  // Build adSpendMap from dailyMarketingSpend collection
+  const dailySpends = isMetaActive
+    ? await db.collection('dailyMarketingSpend').find({}).toArray()
+    : [];
+  const adSpendMap = {};
+  dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
 
   const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
   const endDate = params.endDate ? new Date(params.endDate) : new Date();
@@ -588,6 +593,14 @@ async function getReportProfitableSkus(params) {
   const skuMap = {};
   skuRecipes.forEach(r => { skuMap[r.sku] = r; });
 
+  // Pre-compute orders per day
+  const ordersPerDay = {};
+  filteredOrders.forEach(order => {
+    const d = new Date(order.orderDate); d.setHours(0, 0, 0, 0);
+    const dk = d.toISOString().split('T')[0];
+    ordersPerDay[dk] = (ordersPerDay[dk] || 0) + 1;
+  });
+
   // Group by SKU
   const skuStats = {};
   filteredOrders.forEach(order => {
@@ -600,10 +613,11 @@ async function getReportProfitableSkus(params) {
     if (order.status === 'RTO') s.rtoCount++;
 
     const orderDate = new Date(order.orderDate); orderDate.setHours(0, 0, 0, 0);
-    const dayOrders = filteredOrders.filter(o => { const d = new Date(o.orderDate); d.setHours(0, 0, 0, 0); return d.getTime() === orderDate.getTime(); });
-    const dayAd = expenses.filter(e => { const d = new Date(e.date); d.setHours(0, 0, 0, 0); return d.getTime() === orderDate.getTime() && e.category === 'MetaAds'; }).reduce((sum, e) => sum + (e.amount || 0), 0);
+    const dateKey = orderDate.toISOString().split('T')[0];
+    const dayOrderCount = ordersPerDay[dateKey] || 1;
+    const dayAd = adSpendMap[dateKey] || 0;
 
-    const profit = calculateOrderProfit(order, skuMap[order.sku], dayAd, dayOrders.length, 1);
+    const profit = calculateOrderProfit(order, skuMap[order.sku], dayAd, dayOrderCount, 1);
     s.totalProfit += profit.netProfit;
     s.totalCOGS += profit.totalCOGS;
   });
