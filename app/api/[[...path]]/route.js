@@ -1013,15 +1013,18 @@ export async function GET(request) {
         const order = await db.collection('orders').findOne({ _id: subResource });
         if (!order) return json({ error: 'Order not found' }, 404);
         const recipe = await db.collection('skuRecipes').findOne({ sku: order.sku });
-        const expenses = await db.collection('overheadExpenses').find({ category: 'MetaAds' }).toArray();
+        const integ = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+        const metaActive = integ?.metaAds?.active === true;
+        const adExpenses = metaActive
+          ? await db.collection('overheadExpenses').find({ category: 'MetaAds' }).toArray()
+          : [];
         const orderDate = new Date(order.orderDate); orderDate.setHours(0, 0, 0, 0);
-        const nextDay = new Date(orderDate.getTime() + 86400000);
         const allOrders = await db.collection('orders').find({}).toArray();
         const dayOrders = allOrders.filter(o => {
           const d = new Date(o.orderDate); d.setHours(0, 0, 0, 0);
           return d.getTime() === orderDate.getTime();
         });
-        const dayAdSpend = expenses.filter(e => {
+        const dayAdSpend = adExpenses.filter(e => {
           const d = new Date(e.date); d.setHours(0, 0, 0, 0);
           return d.getTime() === orderDate.getTime();
         }).reduce((sum, e) => sum + (e.amount || 0), 0);
