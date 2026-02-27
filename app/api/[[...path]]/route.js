@@ -1204,6 +1204,10 @@ export async function POST(request) {
         if (subResource === 'track-bulk') return json(await indiaPostBulkTrack());
         return json({ error: 'Unknown India Post action' }, 404);
 
+      case 'meta-ads':
+        if (subResource === 'sync') return json(await metaAdsSyncSpend());
+        return json({ error: 'Unknown Meta Ads action' }, 404);
+
       case 'employee-claim': {
         // Bulk claim: accepts single orderId or array of orderIds
         const { employeeId, orderId, orderIds: rawOrderIds } = body;
