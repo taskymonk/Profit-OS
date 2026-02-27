@@ -1130,6 +1130,12 @@ export async function GET(request) {
         if (subResource) return json(await getDoc('overheadExpenses', subResource));
         return json(await listDocs('overheadExpenses'));
 
+      case 'daily-marketing-spend': {
+        const db = await getDb();
+        const spends = await db.collection('dailyMarketingSpend').find({}).sort({ date: -1 }).toArray();
+        return json(spends);
+      }
+
       case 'integrations': {
         const db = await getDb();
         const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
