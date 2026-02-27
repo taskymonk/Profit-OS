@@ -317,6 +317,120 @@ async function seedData() {
   return { message: 'Demo data seeded successfully!', seeded: true };
 }
 
+// ==================== META ADS SYNC ====================
+
+async function metaAdsSyncSpend() {
+  const db = await getDb();
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+
+  if (!integrations?.metaAds?.token || !integrations?.metaAds?.adAccountId) {
+    return { error: 'Meta Ads credentials not configured. Please enter your Access Token and Ad Account ID.', synced: 0 };
+  }
+
+  const { token, adAccountId } = integrations.metaAds;
+  // Ensure act_ prefix
+  const accountId = adAccountId.startsWith('act_') ? adAccountId : `act_${adAccountId}`;
+
+  try {
+    // Step 1: Get ad account currency
+    const acctRes = await fetch(
+      `https://graph.facebook.com/v19.0/${accountId}?fields=currency&access_token=${token}`
+    );
+    if (!acctRes.ok) {
+      const errData = await acctRes.json().catch(() => ({}));
+      return { error: `Meta API auth error: ${errData?.error?.message || acctRes.status}. Check your token and account ID.`, synced: 0 };
+    }
+    const acctData = await acctRes.json();
+    const adCurrency = acctData.currency || 'USD';
+
+    // Step 2: Get exchange rate if ad account is not in INR
+    let exchangeRate = 1;
+    if (adCurrency !== 'INR') {
+      try {
+        exchangeRate = await getExchangeRate(adCurrency, 'INR');
+      } catch (e) {
+        console.error('Exchange rate fetch failed, using fallback:', e.message);
+        exchangeRate = adCurrency === 'USD' ? 83 : 1;
+      }
+    }
+
+    // Step 3: Fetch daily insights for last 30 days
+    let allInsights = [];
+    let url = `https://graph.facebook.com/v19.0/${accountId}/insights?time_increment=1&date_preset=last_30d&fields=spend,date_start&access_token=${token}&limit=100`;
+
+    while (url) {
+      const insightsRes = await fetch(url);
+      if (!insightsRes.ok) {
+        const errData = await insightsRes.json().catch(() => ({}));
+        return {
+          error: `Meta Insights API error: ${errData?.error?.message || insightsRes.status}`,
+          synced: allInsights.length,
+        };
+      }
+      const insightsData = await insightsRes.json();
+      allInsights = allInsights.concat(insightsData.data || []);
+      url = insightsData.paging?.next || null;
+    }
+
+    if (allInsights.length === 0) {
+      return { message: 'No ad spend data found for the last 30 days.', synced: 0, currency: adCurrency };
+    }
+
+    // Step 4: Upsert each day into dailyMarketingSpend collection
+    let synced = 0;
+    let totalSpendINR = 0;
+    for (const day of allInsights) {
+      const dateStr = day.date_start; // "YYYY-MM-DD"
+      const rawSpend = parseFloat(day.spend) || 0;
+      const spendInINR = adCurrency !== 'INR'
+        ? Math.round(rawSpend * exchangeRate * 100) / 100
+        : rawSpend;
+
+      totalSpendINR += spendInINR;
+
+      await db.collection('dailyMarketingSpend').updateOne(
+        { date: dateStr },
+        {
+          $set: {
+            date: dateStr,
+            spendAmount: spendInINR,
+            rawSpend: rawSpend,
+            rawCurrency: adCurrency,
+            exchangeRate: exchangeRate,
+            currency: 'INR',
+            source: 'meta_ads',
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        { upsert: true }
+      );
+      synced++;
+    }
+
+    // Mark Meta Ads integration as active
+    await db.collection('integrations').updateOne(
+      { _id: 'integrations-config' },
+      {
+        $set: {
+          'metaAds.active': true,
+          'metaAds.lastSyncAt': new Date().toISOString(),
+          'metaAds.adCurrency': adCurrency,
+        },
+      }
+    );
+
+    return {
+      message: `Synced ${synced} days of ad spend. Total: \u20B9${Math.round(totalSpendINR).toLocaleString('en-IN')}${adCurrency !== 'INR' ? ` (converted from ${adCurrency} at ${exchangeRate.toFixed(2)})` : ''}`,
+      synced,
+      totalSpendINR: Math.round(totalSpendINR * 100) / 100,
+      currency: adCurrency,
+      exchangeRate: adCurrency !== 'INR' ? exchangeRate : 1,
+    };
+  } catch (err) {
+    return { error: `Meta Ads sync failed: ${err.message}`, synced: 0 };
+  }
+}
+
 // ==================== DASHBOARD (with date range) ====================
 
 async function getDashboardData(params = {}) {
