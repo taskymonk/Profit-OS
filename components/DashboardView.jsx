@@ -254,11 +254,32 @@ export default function DashboardView() {
           ))}
         </div>
         {dateRange === 'custom' && (
-          <div className="flex gap-2 items-center">
-            <Input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="w-36 h-9" />
-            <span className="text-muted-foreground text-sm">to</span>
-            <Input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="w-36 h-9" />
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="h-9 px-3 gap-2 text-sm font-normal">
+                <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                {customStart && customEnd
+                  ? `${format(new Date(customStart + 'T00:00:00'), 'dd MMM yyyy')} — ${format(new Date(customEnd + 'T00:00:00'), 'dd MMM yyyy')}`
+                  : 'Pick date range'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start" sideOffset={8}>
+              <Calendar
+                mode="range"
+                selected={{
+                  from: customStart ? new Date(customStart + 'T00:00:00') : undefined,
+                  to: customEnd ? new Date(customEnd + 'T00:00:00') : undefined,
+                }}
+                onSelect={(range) => {
+                  if (range?.from) setCustomStart(format(range.from, 'yyyy-MM-dd'));
+                  if (range?.to) setCustomEnd(format(range.to, 'yyyy-MM-dd'));
+                  else if (range?.from) setCustomEnd('');
+                }}
+                numberOfMonths={2}
+                disabled={{ after: new Date() }}
+              />
+            </PopoverContent>
+          </Popover>
         )}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>USD/INR: {exchangeRate?.toFixed(2)}</span>
