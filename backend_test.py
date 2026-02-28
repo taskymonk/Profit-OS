@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-Phase 8.7 Enterprise BOM Architecture, Analytics Polish & UX Guides - Backend Testing
-Tests 7 critical areas:
-1. INVENTORY BOM SCHEMA (new fields: purchasePrice, purchaseQuantity, unit, baseCostPerUnit)
-2. EXPENSE CATEGORY RENAME ENDPOINT 
-3. DASHBOARD P&L BREAKDOWN WITH REFUNDS
-4. SHOPIFY REFUND EXTRACTION (source code check)
-5. PROFIT CALCULATOR BOM SUPPORT (source code check)
-6. DASHBOARD DATA INTEGRITY
-7. AD SPEND TAX STILL WORKS
+Phase 8.8 "The Absolute Parity Patch" - Backend Testing
+Tests 5 critical areas:
+1. BULLETPROOF PAGINATION (source code check)
+2. STRICT ACCOUNTING PARITY (Cancelled/Voided/Pending filter)
+3. TIMEZONE DOUBLE-SHIFT FIX (source code check) 
+4. DASHBOARD DATA INTEGRITY POST-FILTER
+5. AD SPEND TAX STILL WORKS
 """
 
 import json
@@ -18,7 +16,7 @@ import sys
 from pymongo import MongoClient
 from datetime import datetime
 
-# Get base URL from environment
+# Get base URL from environment  
 BASE_URL = "http://localhost:3000/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "profitos"
