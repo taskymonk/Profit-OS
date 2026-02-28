@@ -1548,6 +1548,7 @@ export async function DELETE(request) {
       'orders': 'orders',
       'employees': 'employees',
       'overhead-expenses': 'overheadExpenses',
+      'inventory-items': 'inventoryItems',
     };
 
     const collection = collectionMap[resource];
