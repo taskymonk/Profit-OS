@@ -601,11 +601,10 @@ async function getReportProfitableSkus(params) {
   const skuMap = {};
   skuRecipes.forEach(r => { skuMap[r.sku] = r; });
 
-  // Pre-compute orders per day
+  // Pre-compute orders per day using IST keys
   const ordersPerDay = {};
   filteredOrders.forEach(order => {
-    const d = new Date(order.orderDate); d.setHours(0, 0, 0, 0);
-    const dk = d.toISOString().split('T')[0];
+    const dk = getISTDateKey(order.orderDate);
     ordersPerDay[dk] = (ordersPerDay[dk] || 0) + 1;
   });
 
@@ -620,8 +619,7 @@ async function getReportProfitableSkus(params) {
     s.totalRevenue += order.salePrice || 0;
     if (order.status === 'RTO') s.rtoCount++;
 
-    const orderDate = new Date(order.orderDate); orderDate.setHours(0, 0, 0, 0);
-    const dateKey = orderDate.toISOString().split('T')[0];
+    const dateKey = getISTDateKey(order.orderDate);
     const dayOrderCount = ordersPerDay[dateKey] || 1;
     const dayAd = adSpendMap[dateKey] || 0;
 
