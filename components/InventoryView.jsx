@@ -1,18 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit, Package, Boxes, ArrowDownUp } from 'lucide-react';
+import { Plus, Trash2, Edit, Package, Boxes, Info, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-
 const DEFAULT_CATEGORIES = ['Raw Material', 'Packaging', 'Consumables', 'Labels & Stickers'];
 
 export default function InventoryView() {
@@ -22,10 +21,11 @@ export default function InventoryView() {
   const [editingItem, setEditingItem] = useState(null);
   const [filterCategory, setFilterCategory] = useState('all');
   const [customCategory, setCustomCategory] = useState('');
+  const [showGuide, setShowGuide] = useState(true);
 
   const [form, setForm] = useState({
     name: '', category: 'Raw Material', purchasePrice: '',
-    purchaseQuantity: '1', unitMeasurement: 'grams', yieldFromTotalPurchase: '1',
+    purchaseQuantity: '1', unit: 'meters',
   });
 
   const fetchItems = async () => {
@@ -40,18 +40,20 @@ export default function InventoryView() {
 
   useEffect(() => { fetchItems(); }, []);
 
-  // Get all unique categories from data + defaults
   const allCategories = [...new Set([...DEFAULT_CATEGORIES, ...items.map(i => i.category).filter(Boolean)])];
-
   const filteredItems = filterCategory === 'all' ? items : items.filter(i => i.category === filterCategory);
-
-  // Group by category for display
   const grouped = {};
   filteredItems.forEach(item => {
     const cat = item.category || 'Uncategorized';
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(item);
   });
+
+  const getBaseCost = (item) => {
+    const price = item.purchasePrice ?? item.costPerUnit ?? 0;
+    const qty = item.purchaseQuantity || 1;
+    return price / Math.max(1, qty);
+  };
 
   const handleSubmit = async () => {
     const finalCategory = form.category === '__custom__' ? customCategory : form.category;
@@ -60,8 +62,7 @@ export default function InventoryView() {
       category: finalCategory,
       purchasePrice: Number(form.purchasePrice) || 0,
       purchaseQuantity: Math.max(1, Number(form.purchaseQuantity) || 1),
-      unitMeasurement: form.unitMeasurement,
-      yieldFromTotalPurchase: Math.max(1, Number(form.yieldFromTotalPurchase) || 1),
+      unit: form.unit,
     };
     try {
       if (editingItem) {
@@ -92,8 +93,7 @@ export default function InventoryView() {
       name: item.name, category: isCustom ? '__custom__' : item.category,
       purchasePrice: String(item.purchasePrice ?? item.costPerUnit ?? ''),
       purchaseQuantity: String(item.purchaseQuantity || 1),
-      unitMeasurement: item.unitMeasurement || 'units',
-      yieldFromTotalPurchase: String(item.yieldFromTotalPurchase ?? item.yieldPerUnit ?? 1),
+      unit: item.unit || item.unitMeasurement || 'units',
     });
     if (isCustom) setCustomCategory(item.category);
     setDialogOpen(true);
@@ -101,25 +101,38 @@ export default function InventoryView() {
 
   const openNew = () => {
     setEditingItem(null); setCustomCategory('');
-    setForm({ name: '', category: 'Raw Material', purchasePrice: '', purchaseQuantity: '1', unitMeasurement: 'grams', yieldFromTotalPurchase: '1' });
+    setForm({ name: '', category: 'Raw Material', purchasePrice: '', purchaseQuantity: '1', unit: 'meters' });
     setDialogOpen(true);
-  };
-
-  // Compute cost per use for display
-  const getCostPerUse = (item) => {
-    const price = item.purchasePrice ?? item.costPerUnit ?? 0;
-    const yld = item.yieldFromTotalPurchase ?? item.yieldPerUnit ?? 1;
-    return price / Math.max(1, yld);
   };
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Unified inventory with realistic purchase-to-yield costing. Cost per use = Purchase Price / Yield from Total Purchase.
-          </p>
+      {/* Inline UX Guide */}
+      {showGuide && (
+        <div className="relative rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 p-5">
+          <button onClick={() => setShowGuide(false)} className="absolute top-3 right-3 text-blue-400 hover:text-blue-600 transition">
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/50">
+              <Info className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm text-blue-900 dark:text-blue-100">How Inventory Works</h3>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                Enter your bulk purchases here. <strong>Example:</strong> If you buy a <strong>50-meter roll of bubble wrap for {"\u20B9"}500</strong>, enter Price: 500, Qty: 50, Unit: meters.
+                The True Profit Engine will automatically calculate the <strong>per-meter cost ({"\u20B9"}10.00/meter)</strong> for your recipes.
+              </p>
+              <p className="text-xs text-blue-500 dark:text-blue-400 mt-2">Base Cost Per Unit = Purchase Price / Purchase Quantity</p>
+            </div>
+          </div>
         </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
+        <p className="text-sm text-muted-foreground">
+          Unified inventory with automatic cost-per-unit calculation.
+        </p>
         <div className="flex gap-2 items-center">
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="w-44 h-9 text-sm"><SelectValue /></SelectTrigger>
@@ -135,7 +148,7 @@ export default function InventoryView() {
             <DialogContent className="max-w-lg">
               <DialogHeader><DialogTitle>{editingItem ? 'Edit' : 'Add'} Inventory Item</DialogTitle></DialogHeader>
               <div className="space-y-4">
-                <div><Label>Item Name</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Belgian Chocolate 500g, BOPP Tape Roll" /></div>
+                <div><Label>Item Name</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Bubble Wrap Roll, Belgian Chocolate Slab" /></div>
 
                 <div>
                   <Label>Category</Label>
@@ -152,13 +165,13 @@ export default function InventoryView() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div><Label>Purchase Price ({"\u20B9"})</Label><Input type="number" value={form.purchasePrice} onChange={e => setForm({...form, purchasePrice: e.target.value})} placeholder="500" /></div>
-                  <div><Label>Purchase Qty</Label><Input type="number" min="1" value={form.purchaseQuantity} onChange={e => setForm({...form, purchaseQuantity: e.target.value})} placeholder="1" /></div>
+                  <div><Label>Total Price Paid ({"\u20B9"})</Label><Input type="number" value={form.purchasePrice} onChange={e => setForm({...form, purchasePrice: e.target.value})} placeholder="500" /></div>
+                  <div><Label>Total Quantity Received</Label><Input type="number" min="1" value={form.purchaseQuantity} onChange={e => setForm({...form, purchaseQuantity: e.target.value})} placeholder="50" /></div>
                 </div>
 
                 <div>
                   <Label>Unit of Measurement</Label>
-                  <Select value={form.unitMeasurement} onValueChange={v => setForm({...form, unitMeasurement: v})}>
+                  <Select value={form.unit} onValueChange={v => setForm({...form, unit: v})}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="grams">grams</SelectItem>
@@ -175,21 +188,12 @@ export default function InventoryView() {
                   </Select>
                 </div>
 
-                <div className="p-3 rounded-md bg-muted/50 border space-y-2">
-                  <div className="flex items-center gap-2">
-                    <ArrowDownUp className="w-4 h-4 text-primary" />
-                    <Label className="font-semibold text-sm">Yield from Total Purchase</Label>
+                {Number(form.purchasePrice) > 0 && Number(form.purchaseQuantity) > 0 && (
+                  <div className="p-3 rounded-md bg-primary/5 border border-primary/20 text-center">
+                    <p className="text-xs text-muted-foreground">Calculated Base Cost Per Unit</p>
+                    <p className="text-2xl font-bold text-primary">{fmt(Number(form.purchasePrice) / Number(form.purchaseQuantity))}<span className="text-sm font-normal text-muted-foreground"> / {form.unit}</span></p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    How many uses do you get from this purchase? Example: Buy 1 roll of tape for {"\u20B9"}500 that packs 100 boxes. Yield = 100 → Cost per use = {"\u20B9"}5.00
-                  </p>
-                  <Input type="number" min="1" value={form.yieldFromTotalPurchase} onChange={e => setForm({...form, yieldFromTotalPurchase: e.target.value})} placeholder="1" />
-                  {Number(form.purchasePrice) > 0 && Number(form.yieldFromTotalPurchase) > 0 && (
-                    <p className="text-sm font-medium text-primary">
-                      Cost per use: {fmt(Number(form.purchasePrice) / Number(form.yieldFromTotalPurchase))}
-                    </p>
-                  )}
-                </div>
+                )}
               </div>
               <Button onClick={handleSubmit} className="w-full mt-2">{editingItem ? 'Update' : 'Add'} Item</Button>
             </DialogContent>
@@ -197,7 +201,6 @@ export default function InventoryView() {
         </div>
       </div>
 
-      {/* Items grouped by category */}
       {Object.entries(grouped).map(([category, categoryItems]) => (
         <div key={category} className="space-y-2">
           <div className="flex items-center gap-2">
@@ -207,10 +210,10 @@ export default function InventoryView() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {categoryItems.map(item => {
-              const costPerUse = getCostPerUse(item);
-              const purchasePrice = item.purchasePrice ?? item.costPerUnit ?? 0;
-              const purchaseQty = item.purchaseQuantity || 1;
-              const yld = item.yieldFromTotalPurchase ?? item.yieldPerUnit ?? 1;
+              const baseCost = getBaseCost(item);
+              const price = item.purchasePrice ?? item.costPerUnit ?? 0;
+              const qty = item.purchaseQuantity || 1;
+              const unit = item.unit || item.unitMeasurement || 'units';
               return (
                 <Card key={item._id} className="group hover:shadow-sm transition-shadow">
                   <CardContent className="p-4">
@@ -218,9 +221,8 @@ export default function InventoryView() {
                       <div className="space-y-1 flex-1 min-w-0">
                         <h4 className="font-medium text-sm truncate">{item.name}</h4>
                         <div className="flex gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-[10px]">{item.unitMeasurement}</Badge>
-                          {purchaseQty > 1 && <Badge variant="secondary" className="text-[10px]">Qty: {purchaseQty}</Badge>}
-                          {yld > 1 && <Badge variant="secondary" className="text-[10px]">Yield: {yld}</Badge>}
+                          <Badge variant="outline" className="text-[10px]">{unit}</Badge>
+                          <Badge variant="secondary" className="text-[10px]">{qty} {unit} purchased</Badge>
                         </div>
                       </div>
                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -234,12 +236,12 @@ export default function InventoryView() {
                     </div>
                     <div className="mt-3 flex justify-between items-end">
                       <div>
-                        <p className="text-xs text-muted-foreground">Purchase Price</p>
-                        <p className="text-sm font-bold">{fmt(purchasePrice)}<span className="text-xs font-normal text-muted-foreground"> / {purchaseQty > 1 ? `${purchaseQty} ${item.unitMeasurement}` : item.unitMeasurement}</span></p>
+                        <p className="text-xs text-muted-foreground">Total Price Paid</p>
+                        <p className="text-sm font-bold">{fmt(price)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Cost Per Use</p>
-                        <p className="text-lg font-bold text-primary">{fmt(costPerUse)}</p>
+                        <p className="text-xs text-muted-foreground">Base Cost / {unit}</p>
+                        <p className="text-lg font-bold text-primary">{fmt(baseCost)}</p>
                       </div>
                     </div>
                   </CardContent>
