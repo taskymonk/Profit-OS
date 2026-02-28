@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Edit, Package, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
@@ -34,7 +35,9 @@ export default function SkuRecipesView() {
         fetch('/api/raw-materials').then(r => r.json()),
         fetch('/api/packaging-materials').then(r => r.json()),
       ]);
-      setRecipes(r); setRawMaterials(rm); setPackagingMaterials(pm);
+      setRecipes(Array.isArray(r) ? r : []);
+      setRawMaterials(Array.isArray(rm) ? rm : []);
+      setPackagingMaterials(Array.isArray(pm) ? pm : []);
     } catch (err) { toast.error('Failed to load'); }
     setLoading(false);
   };
@@ -74,12 +77,65 @@ export default function SkuRecipesView() {
     toast.success('Deleted'); fetchData();
   };
 
-  const addRawMaterial = () => {
-    setForm({ ...form, rawMaterials: [...form.rawMaterials, { materialId: '', name: '', quantity: 1, pricePerUnit: 0, unitMeasurement: 'grams' }] });
+  // Add raw material from dropdown
+  const addRawMaterial = (materialId) => {
+    if (!materialId) return;
+    const mat = rawMaterials.find(m => m._id === materialId);
+    if (!mat) return;
+    // Prevent duplicates
+    if (form.rawMaterials.some(rm => rm.materialId === materialId)) {
+      toast.error('Material already added');
+      return;
+    }
+    setForm({
+      ...form,
+      rawMaterials: [...form.rawMaterials, {
+        materialId: mat._id,
+        name: mat.name,
+        quantity: 1,
+        pricePerUnit: mat.pricePerUnit || 0,
+        unitMeasurement: mat.unitMeasurement || 'grams'
+      }]
+    });
   };
 
-  const addPackaging = () => {
-    setForm({ ...form, packaging: [...form.packaging, { materialId: '', name: '', pricePerUnit: 0 }] });
+  // Add raw material manually (when no materials in DB)
+  const addManualRawMaterial = () => {
+    setForm({
+      ...form,
+      rawMaterials: [...form.rawMaterials, {
+        materialId: '', name: '', quantity: 1, pricePerUnit: 0, unitMeasurement: 'grams'
+      }]
+    });
+  };
+
+  // Add packaging from dropdown
+  const addPackaging = (materialId) => {
+    if (!materialId) return;
+    const mat = packagingMaterials.find(m => m._id === materialId);
+    if (!mat) return;
+    if (form.packaging.some(p => p.materialId === materialId)) {
+      toast.error('Packaging already added');
+      return;
+    }
+    setForm({
+      ...form,
+      packaging: [...form.packaging, {
+        materialId: mat._id,
+        name: mat.name,
+        pricePerUnit: mat.pricePerUnit || 0,
+      }]
+    });
+  };
+
+  // Add packaging manually
+  const addManualPackaging = () => {
+    setForm({
+      ...form,
+      packaging: [...form.packaging, {
+        materialId: '', name: '', pricePerUnit: 0
+      }]
+    });
   };
 
   const openEdit = (recipe) => {
@@ -94,6 +150,10 @@ export default function SkuRecipesView() {
     });
     setDialogOpen(true);
   };
+
+  // Get materials not yet added to the form
+  const availableRawMaterials = rawMaterials.filter(m => !form.rawMaterials.some(rm => rm.materialId === m._id));
+  const availablePackaging = packagingMaterials.filter(m => !form.packaging.some(p => p.materialId === m._id));
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
@@ -115,34 +175,129 @@ export default function SkuRecipesView() {
                 <div><Label>Product Name</Label><Input value={form.productName} onChange={e => setForm({...form, productName: e.target.value})} /></div>
                 <div><Label>Consumable Cost</Label><Input type="number" value={form.consumableCost} onChange={e => setForm({...form, consumableCost: e.target.value})} /></div>
                 <div><Label>Weight (grams)</Label><Input type="number" value={form.totalWeightGrams} onChange={e => setForm({...form, totalWeightGrams: e.target.value})} /></div>
-                <div><Label>Wastage Buffer %</Label><Input type="number" value={form.defaultWastageBuffer} onChange={e => setForm({...form, defaultWastageBuffer: e.target.value})} /></div>
+                <div className="col-span-2"><Label>Wastage Buffer %</Label><Input type="number" value={form.defaultWastageBuffer} onChange={e => setForm({...form, defaultWastageBuffer: e.target.value})} /></div>
               </div>
 
+              {/* ============ RAW MATERIALS ============ */}
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <Label className="text-sm font-semibold">Raw Materials</Label>
-                  <Button size="sm" variant="outline" onClick={addRawMaterial}><Plus className="w-3 h-3 mr-1" /> Add</Button>
+                  <div className="flex gap-2">
+                    {rawMaterials.length > 0 ? (
+                      <Select onValueChange={addRawMaterial}>
+                        <SelectTrigger className="w-48 h-8 text-xs">
+                          <SelectValue placeholder="Select material..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableRawMaterials.map(m => (
+                            <SelectItem key={m._id} value={m._id}>
+                              {m.name} ({fmt(m.pricePerUnit)}/{m.unitMeasurement || 'unit'})
+                            </SelectItem>
+                          ))}
+                          {availableRawMaterials.length === 0 && (
+                            <SelectItem value="_none" disabled>All materials added</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={addManualRawMaterial}>
+                        <Plus className="w-3 h-3 mr-1" /> Add Manually
+                      </Button>
+                    )}
+                  </div>
                 </div>
+                {rawMaterials.length === 0 && form.rawMaterials.length === 0 && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1 mb-2">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    No materials in inventory. Add materials in the Inventory page, or type manually below.
+                  </p>
+                )}
                 {form.rawMaterials.map((rm, i) => (
                   <div key={i} className="flex gap-2 mb-2 items-end">
-                    <div className="flex-1"><Input placeholder="Name" value={rm.name} onChange={e => { const arr = [...form.rawMaterials]; arr[i].name = e.target.value; setForm({...form, rawMaterials: arr}); }} /></div>
-                    <div className="w-20"><Input type="number" placeholder="Qty" value={rm.quantity} onChange={e => { const arr = [...form.rawMaterials]; arr[i].quantity = Number(e.target.value); setForm({...form, rawMaterials: arr}); }} /></div>
-                    <div className="w-24"><Input type="number" placeholder="Price" value={rm.pricePerUnit} onChange={e => { const arr = [...form.rawMaterials]; arr[i].pricePerUnit = Number(e.target.value); setForm({...form, rawMaterials: arr}); }} /></div>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => { const arr = form.rawMaterials.filter((_, j) => j !== i); setForm({...form, rawMaterials: arr}); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    <div className="flex-1">
+                      {rm.materialId && rawMaterials.find(m => m._id === rm.materialId) ? (
+                        <div className="h-9 px-3 border rounded-md bg-muted/30 flex items-center text-sm">{rm.name}</div>
+                      ) : (
+                        <Input placeholder="Material name" value={rm.name} onChange={e => {
+                          const arr = [...form.rawMaterials]; arr[i] = { ...arr[i], name: e.target.value };
+                          setForm({...form, rawMaterials: arr});
+                        }} />
+                      )}
+                    </div>
+                    <div className="w-20">
+                      <Input type="number" placeholder="Qty" value={rm.quantity} onChange={e => {
+                        const arr = [...form.rawMaterials]; arr[i] = { ...arr[i], quantity: Number(e.target.value) };
+                        setForm({...form, rawMaterials: arr});
+                      }} />
+                    </div>
+                    <div className="w-24">
+                      <Input type="number" placeholder="Price/unit" value={rm.pricePerUnit} onChange={e => {
+                        const arr = [...form.rawMaterials]; arr[i] = { ...arr[i], pricePerUnit: Number(e.target.value) };
+                        setForm({...form, rawMaterials: arr});
+                      }} />
+                    </div>
+                    <Button size="icon" variant="ghost" className="text-destructive h-9 w-9" onClick={() => {
+                      setForm({...form, rawMaterials: form.rawMaterials.filter((_, j) => j !== i)});
+                    }}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 ))}
               </div>
 
+              {/* ============ PACKAGING ============ */}
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <Label className="text-sm font-semibold">Packaging</Label>
-                  <Button size="sm" variant="outline" onClick={addPackaging}><Plus className="w-3 h-3 mr-1" /> Add</Button>
+                  <div className="flex gap-2">
+                    {packagingMaterials.length > 0 ? (
+                      <Select onValueChange={addPackaging}>
+                        <SelectTrigger className="w-48 h-8 text-xs">
+                          <SelectValue placeholder="Select packaging..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availablePackaging.map(m => (
+                            <SelectItem key={m._id} value={m._id}>
+                              {m.name} ({fmt(m.pricePerUnit)})
+                            </SelectItem>
+                          ))}
+                          {availablePackaging.length === 0 && (
+                            <SelectItem value="_none" disabled>All packaging added</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={addManualPackaging}>
+                        <Plus className="w-3 h-3 mr-1" /> Add Manually
+                      </Button>
+                    )}
+                  </div>
                 </div>
+                {packagingMaterials.length === 0 && form.packaging.length === 0 && (
+                  <p className="text-xs text-amber-600 flex items-center gap-1 mb-2">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    No packaging in inventory. Add items in the Inventory page, or type manually below.
+                  </p>
+                )}
                 {form.packaging.map((pkg, i) => (
                   <div key={i} className="flex gap-2 mb-2 items-end">
-                    <div className="flex-1"><Input placeholder="Name" value={pkg.name} onChange={e => { const arr = [...form.packaging]; arr[i].name = e.target.value; setForm({...form, packaging: arr}); }} /></div>
-                    <div className="w-24"><Input type="number" placeholder="Price" value={pkg.pricePerUnit} onChange={e => { const arr = [...form.packaging]; arr[i].pricePerUnit = Number(e.target.value); setForm({...form, packaging: arr}); }} /></div>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => { const arr = form.packaging.filter((_, j) => j !== i); setForm({...form, packaging: arr}); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    <div className="flex-1">
+                      {pkg.materialId && packagingMaterials.find(m => m._id === pkg.materialId) ? (
+                        <div className="h-9 px-3 border rounded-md bg-muted/30 flex items-center text-sm">{pkg.name}</div>
+                      ) : (
+                        <Input placeholder="Packaging name" value={pkg.name} onChange={e => {
+                          const arr = [...form.packaging]; arr[i] = { ...arr[i], name: e.target.value };
+                          setForm({...form, packaging: arr});
+                        }} />
+                      )}
+                    </div>
+                    <div className="w-24">
+                      <Input type="number" placeholder="Price" value={pkg.pricePerUnit} onChange={e => {
+                        const arr = [...form.packaging]; arr[i] = { ...arr[i], pricePerUnit: Number(e.target.value) };
+                        setForm({...form, packaging: arr});
+                      }} />
+                    </div>
+                    <Button size="icon" variant="ghost" className="text-destructive h-9 w-9" onClick={() => {
+                      setForm({...form, packaging: form.packaging.filter((_, j) => j !== i)});
+                    }}><Trash2 className="w-3.5 h-3.5" /></Button>
                   </div>
                 ))}
               </div>
@@ -215,7 +370,7 @@ export default function SkuRecipesView() {
         })}
       </div>
       {recipes.length === 0 && !loading && (
-        <Card><CardContent className="py-12 text-center text-muted-foreground">No SKU recipes yet. Create one to start calculating COGS.</CardContent></Card>
+        <Card><CardContent className="py-12 text-center text-muted-foreground">No SKU recipes yet. Sync from Shopify or create one manually to start calculating COGS.</CardContent></Card>
       )}
     </div>
   );
