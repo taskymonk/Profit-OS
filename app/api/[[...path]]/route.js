@@ -545,7 +545,7 @@ async function getDashboardData(params = {}) {
   }
 
   // All-time stats
-  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, new Date(2020, 0, 1), new Date(now.getFullYear() + 1, 0, 1), 1, adSpendMap);
+  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, new Date(2020, 0, 1), new Date(now.getFullYear() + 1, 0, 1), 1, adSpendMap, adSpendTaxMultiplier);
 
   return {
     tenant: tenantConfig,
