@@ -1520,6 +1520,9 @@ export async function PUT(request) {
       case 'overhead-expenses':
         if (!id) return json({ error: 'ID required' }, 400);
         return json(await updateDoc('overheadExpenses', id, body));
+      case 'inventory-items':
+        if (!id) return json({ error: 'ID required' }, 400);
+        return json(await updateDoc('inventoryItems', id, body));
 
       default:
         return json({ error: 'Not found' }, 404);
