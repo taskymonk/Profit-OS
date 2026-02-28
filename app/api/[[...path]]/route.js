@@ -843,13 +843,18 @@ async function shopifySyncOrders() {
       const data = await res.json();
       allShopifyOrders = allShopifyOrders.concat(data.orders || []);
 
-      // Follow cursor pagination via Link header
+      // Follow cursor pagination via Link header — bulletproof multi-rel parsing
       nextUrl = null;
       const linkHeader = res.headers.get('link');
-      if (linkHeader && linkHeader.includes('rel="next"')) {
-        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-        if (nextMatch) {
-          nextUrl = nextMatch[1];
+      if (linkHeader) {
+        // Split by comma to isolate each rel entry, then find rel="next" specifically
+        const links = linkHeader.split(',');
+        for (const link of links) {
+          const match = link.match(/<([^>]+)>;\s*rel="next"/);
+          if (match) {
+            nextUrl = match[1];
+            break;
+          }
         }
       }
     }
