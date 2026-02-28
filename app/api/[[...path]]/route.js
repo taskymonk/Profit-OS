@@ -460,6 +460,10 @@ async function getDashboardData(params = {}) {
   const adSpendMap = {};
   dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
 
+  // Ad spend tax multiplier from tenant config (18% GST in India)
+  const adSpendTaxRate = tenantConfig?.adSpendTaxRate ?? 18;
+  const adSpendTaxMultiplier = 1 + (adSpendTaxRate / 100);
+
   // Date range handling
   const now = new Date();
   let startDate, endDate;
