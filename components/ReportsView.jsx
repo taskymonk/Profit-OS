@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, MapPin, Users, CalendarDays, AlertTriangle,
-  Package, Crown, ShieldAlert
+  Package, Crown, ShieldAlert, DollarSign, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const fmt = (val) => `\u20B9${Math.abs(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
