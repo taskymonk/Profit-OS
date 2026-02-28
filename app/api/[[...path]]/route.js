@@ -575,6 +575,7 @@ async function getDashboardData(params = {}) {
       rtoCount: metrics.rtoCount,
     },
     overhead: metrics.overhead,
+    plBreakdown: metrics.plBreakdown,
     allTime: {
       totalOrders: allTimeMetrics.totalOrders,
       netProfit: allTimeMetrics.netProfit,
