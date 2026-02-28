@@ -26,6 +26,19 @@ function getSearchParams(request) {
   return Object.fromEntries(url.searchParams.entries());
 }
 
+// ==================== STRICT IST DATE CONVERSION ====================
+// Converts any date string to an ISO string anchored at Asia/Kolkata (+05:30)
+// Prevents date drift where a UTC midnight order shows as the wrong calendar day in IST
+function toISTISO(dateStr) {
+  if (!dateStr) return new Date().toISOString();
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const opts = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+  const parts = new Intl.DateTimeFormat('en-CA', opts).formatToParts(d);
+  const g = (type) => parts.find(p => p.type === type)?.value || '00';
+  return `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}:${g('second')}+05:30`;
+}
+
 // ==================== CRUD HELPERS ====================
 
 async function listDocs(collectionName, query = {}) {
