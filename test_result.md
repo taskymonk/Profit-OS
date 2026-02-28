@@ -731,3 +731,75 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 - ✅ Cleanup and restoration working correctly
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
+    - agent: "main"
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://profit-calc-dash.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+
+1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
+   - Get an order: GET /api/orders?page=1&limit=1
+   - GET /api/calculate-profit/{order._id}
+   - Verify: gstOnRevenue = (grossRevenue - discount) - ((grossRevenue - discount) / 1.18)
+   - Verify: netRevenue = (grossRevenue - discount) / 1.18
+   - Example: if revenueAfterDiscount=1000, gstOnRevenue should be ~152.54, netRevenue ~847.46
+   - Verify: grossRevenue - discount - gstOnRevenue = netRevenue (must be exactly equal)
+
+2. **GHOST AD SPEND FIX** (GET /api/dashboard?range=7days):
+   - Response must have filtered.adSpend > 0 (Meta is active)
+   - filtered.grossOrderProfit must be > filtered.netProfit
+   - The math: netProfit ≈ grossOrderProfit - adSpend - overhead.proratedAmount
+   - Verify this equation holds: |netProfit - (grossOrderProfit - adSpend - overhead.proratedAmount)| < 1
+
+3. **IST DATE KEYS**:
+   - GET /api/daily-marketing-spend → all dates in YYYY-MM-DD format
+   - GET /api/dashboard?range=7days → dailyData dates should be YYYY-MM-DD
+
+4. **MARKETING LEDGER DATA** (GET /api/daily-marketing-spend):
+   - Returns array of objects with date, spendAmount, currency fields
+   - spendAmount values should be numbers > 0
+   - Should have multiple entries (Meta was synced)
+
+5. **RTO DOUBLE SHIPPING**:
+   - Use pymongo (mongodb://localhost:27017, db: profitos) to set one order's status to 'RTO'
+   - GET /api/calculate-profit/{_id} → isRTO must be true
+   - shippingCost in response must be 2x the order's stored shippingCost
+   - Verify by reading the original shippingCost from the order document in MongoDB
+   - RESTORE original status after test"
+    - agent: "testing"
+      message: "🎉 CORE ENGINE V3 TESTING COMPLETE - ALL 5 CRITICAL AREAS PASSED!
+
+🎯 **INCLUSIVE GST MATH**: ✅ 4/4 TESTS PASSED
+- ✅ GST Calculation Formula: ₹90.00 (exact match with revenue - revenue/1.18 formula)
+- ✅ Net Revenue Formula: ₹500.00 (exact match with revenue/1.18 formula)
+- ✅ GST Balance Equation: Verified grossRevenue - discount - gstOnRevenue = netRevenue
+- ✅ Formula Example Validation: ₹1000 → GST: ₹152.54, Net: ₹847.46 (matches spec exactly)
+
+🎯 **GHOST AD SPEND FIX**: ✅ 3/3 TESTS PASSED  
+- ✅ Meta Ads Active Check: Ad Spend ₹3,840.56 > 0 (real Meta data confirmed)
+- ✅ Profit Hierarchy Check: Gross ₹12,654.45 > Net ₹8,813.89 (proper deductions)
+- ✅ Ghost Ad Spend Math: Net Profit = Gross - Ad Spend - Overhead (equation verified within ₹1 tolerance)
+
+🎯 **IST DATE KEYS**: ✅ 2/2 TESTS PASSED
+- ✅ Daily Marketing Spend Date Format: 2026-02-26 (YYYY-MM-DD confirmed)
+- ✅ Dashboard Daily Data Date Format: 2026-02-22 (YYYY-MM-DD confirmed)
+
+🎯 **MARKETING LEDGER DATA**: ✅ 5/5 TESTS PASSED
+- ✅ Data Structure: Array with 30 entries returned
+- ✅ Required Fields: date, spendAmount, currency all present
+- ✅ Data Quality: 30/30 entries have positive spendAmount values
+- ✅ Meta Integration: Real synced data confirmed (₹658.69 sample spend)
+
+🎯 **RTO DOUBLE SHIPPING**: ✅ 6/6 TESTS PASSED
+- ✅ Test Order Selection: Non-RTO order identified for testing
+- ✅ RTO Status Change: MongoDB update successful via pymongo
+- ✅ RTO Flag Verification: isRTO = true in profit calculation response
+- ✅ Shipping Cost Doubling: Formula verified (original × 2)
+- ✅ MongoDB Verification: Original shippingCost preserved in database
+- ✅ Status Restoration: Order status restored to original value
+
+**CRITICAL VALIDATIONS CONFIRMED:**
+✓ Inclusive GST formula implementation: revenue/1.18 (not revenue*0.82)
+✓ Ghost ad spend fix: Global subtraction prevents phantom profits
+✓ IST timezone handling: Proper YYYY-MM-DD date keys prevent UTC drift
+✓ Marketing ledger integration: Real Meta Ads data flowing correctly
+✓ RTO penalty logic: Double shipping cost applied only in calculations
+
+**CORE ENGINE V3 PATCHES FULLY VERIFIED AND FUNCTIONAL!** All mathematical formulas, date handling, ad spend allocation, and RTO penalties working as designed. Real Shopify data (521 orders) and Meta Ads integration confirmed operational."
