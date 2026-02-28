@@ -584,14 +584,36 @@ agent_communication:
 
 BONUS FIX: Updated seed function to check for orders instead of tenantConfig to enable re-seeding after purge, and handle existing tenantConfig/integrations gracefully."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING. Changes: 1) indiaPostSyncTracking() replaces indiaPostBulkTrack() with improved auth, event parsing (del_status + event_code), and Unfulfilled support 2) PUT /api/orders/{id}/tracking endpoint for saving AWB numbers 3) POST /api/indiapost/sync-tracking route added 4) OrdersView has AWB/Tracking column with inline edit 5) RTO penalty verified (2x shipping). Base URL: http://localhost:3000/api.
+      message: "CORE ENGINE V3 TESTING. Changes: 1) Inclusive GST: revenue/1.18 instead of revenue*0.18 2) Ghost ad spend fix: global subtraction in dashboard 3) IST timezone: getISTDateKey() replaces .toISOString().split 4) Shopify cursor pagination 5) Meta Ads graceful error handling 6) SKU Recipe dynamic dropdowns 7) Marketing Ledger in Reports. Base URL: http://localhost:3000/api. Real Shopify data exists (521 orders).
 
 Test these:
-1) PUT /api/orders/{id}/tracking - save a tracking number to an order (get order from GET /api/orders?page=1&limit=1&status=Unfulfilled)
-2) GET that order back and verify trackingNumber is set
-3) POST /api/indiapost/sync-tracking without credentials → error message about missing credentials
-4) Verify RTO double-shipping: In profitCalculator, when status=RTO, shippingCost doubles. The calculate-profit endpoint should show this.
-5) Demo data cleanup verification: GET /api/employees returns [], GET /api/overhead-expenses returns [], GET /api/raw-materials returns [], GET /api/packaging-materials returns [], GET /api/vendors returns []"
+
+1) INCLUSIVE GST MATH (GET /api/calculate-profit/{orderId}):
+   - Get an order: GET /api/orders?page=1&limit=1
+   - GET /api/calculate-profit/{_id}
+   - Verify: gstOnRevenue = grossRevenue - discount - (grossRevenue - discount) / 1.18
+   - Verify: netRevenue = (grossRevenue - discount) / 1.18
+   - Example: if grossRevenue=1000, discount=0, then gstOnRevenue should be ~152.54, netRevenue should be ~847.46
+
+2) GHOST AD SPEND FIX (GET /api/dashboard?range=7days):
+   - Response must have filtered.adSpend > 0 (Meta is active with real data)
+   - Verify filtered.grossOrderProfit > filtered.netProfit (because ad spend + overhead subtracted)
+   - Verify filtered.adSpend is subtracted globally from grossOrderProfit
+   - The math: netProfit ≈ grossOrderProfit - adSpend - overhead.proratedAmount
+
+3) IST DATE KEY:
+   - GET /api/daily-marketing-spend → dates should be in YYYY-MM-DD format
+   - GET /api/dashboard?range=7days → dailyData[].date should be YYYY-MM-DD format
+
+4) MARKETING LEDGER DATA (GET /api/daily-marketing-spend):
+   - Should return array of objects with: date, spendAmount, currency
+   - Should have data (Meta was already synced)
+   - All spendAmount values should be > 0
+
+5) RTO DOUBLE SHIPPING VERIFICATION:
+   - Using pymongo (mongodb://localhost:27017, db: profitos), set one order status to 'RTO'
+   - GET /api/calculate-profit/{_id} → verify isRTO=true, shippingCost is 2x the stored value
+   - Restore original status after test"
     - agent: "testing"
       message: "✅ PHASE 4 BACKEND TESTING COMPLETE - ALL 4 FEATURES TESTED SUCCESSFULLY!
 
