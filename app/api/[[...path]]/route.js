@@ -1222,6 +1222,13 @@ export async function GET(request) {
         if (subResource) return json(await getDoc('overheadExpenses', subResource));
         return json(await listDocs('overheadExpenses'));
 
+      case 'inventory-items': {
+        if (subResource) return json(await getDoc('inventoryItems', subResource));
+        const db = await getDb();
+        const items = await db.collection('inventoryItems').find({}).sort({ category: 1, name: 1 }).toArray();
+        return json(items);
+      }
+
       case 'daily-marketing-spend': {
         const db = await getDb();
         const spends = await db.collection('dailyMarketingSpend').find({}).sort({ date: -1 }).toArray();
