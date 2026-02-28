@@ -497,7 +497,7 @@ async function getDashboardData(params = {}) {
   // Get exchange rate for currency conversion
   const exchangeRate = await getExchangeRate('USD', 'INR');
 
-  const metrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, startDate, endDate, 1, adSpendMap);
+  const metrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, startDate, endDate, 1, adSpendMap, adSpendTaxMultiplier);
 
   // Build daily aggregation for chart
   const dailyData = [];
