@@ -1404,6 +1404,21 @@ export async function POST(request) {
         return json(await createDoc('employees', body), 201);
       case 'overhead-expenses':
         return json(await createDoc('overheadExpenses', body), 201);
+      case 'inventory-items': {
+        const db = await getDb();
+        const item = {
+          _id: uuidv4(),
+          name: body.name || '',
+          category: body.category || 'Raw Material',
+          costPerUnit: Number(body.costPerUnit) || 0,
+          unitMeasurement: body.unitMeasurement || 'units',
+          yieldPerUnit: Number(body.yieldPerUnit) || 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await db.collection('inventoryItems').insertOne(item);
+        return json(item, 201);
+      }
 
       default:
         return json({ error: 'Not found' }, 404);
