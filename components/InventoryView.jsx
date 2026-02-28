@@ -24,8 +24,8 @@ export default function InventoryView() {
   const [customCategory, setCustomCategory] = useState('');
 
   const [form, setForm] = useState({
-    name: '', category: 'Raw Material', costPerUnit: '',
-    unitMeasurement: 'grams', yieldPerUnit: '1',
+    name: '', category: 'Raw Material', purchasePrice: '',
+    purchaseQuantity: '1', unitMeasurement: 'grams', yieldFromTotalPurchase: '1',
   });
 
   const fetchItems = async () => {
@@ -58,9 +58,10 @@ export default function InventoryView() {
     const data = {
       name: form.name,
       category: finalCategory,
-      costPerUnit: Number(form.costPerUnit) || 0,
+      purchasePrice: Number(form.purchasePrice) || 0,
+      purchaseQuantity: Math.max(1, Number(form.purchaseQuantity) || 1),
       unitMeasurement: form.unitMeasurement,
-      yieldPerUnit: Math.max(1, Number(form.yieldPerUnit) || 1),
+      yieldFromTotalPurchase: Math.max(1, Number(form.yieldFromTotalPurchase) || 1),
     };
     try {
       if (editingItem) {
@@ -89,9 +90,10 @@ export default function InventoryView() {
     const isCustom = !DEFAULT_CATEGORIES.includes(item.category);
     setForm({
       name: item.name, category: isCustom ? '__custom__' : item.category,
-      costPerUnit: String(item.costPerUnit || ''),
+      purchasePrice: String(item.purchasePrice ?? item.costPerUnit ?? ''),
+      purchaseQuantity: String(item.purchaseQuantity || 1),
       unitMeasurement: item.unitMeasurement || 'units',
-      yieldPerUnit: String(item.yieldPerUnit || 1),
+      yieldFromTotalPurchase: String(item.yieldFromTotalPurchase ?? item.yieldPerUnit ?? 1),
     });
     if (isCustom) setCustomCategory(item.category);
     setDialogOpen(true);
@@ -99,8 +101,15 @@ export default function InventoryView() {
 
   const openNew = () => {
     setEditingItem(null); setCustomCategory('');
-    setForm({ name: '', category: 'Raw Material', costPerUnit: '', unitMeasurement: 'grams', yieldPerUnit: '1' });
+    setForm({ name: '', category: 'Raw Material', purchasePrice: '', purchaseQuantity: '1', unitMeasurement: 'grams', yieldFromTotalPurchase: '1' });
     setDialogOpen(true);
+  };
+
+  // Compute cost per use for display
+  const getCostPerUse = (item) => {
+    const price = item.purchasePrice ?? item.costPerUnit ?? 0;
+    const yld = item.yieldFromTotalPurchase ?? item.yieldPerUnit ?? 1;
+    return price / Math.max(1, yld);
   };
 
   return (
@@ -108,7 +117,7 @@ export default function InventoryView() {
       <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
         <div>
           <p className="text-sm text-muted-foreground">
-            Unified inventory with yield-per-unit costing. Cost per use = Cost / Yield.
+            Unified inventory with realistic purchase-to-yield costing. Cost per use = Purchase Price / Yield from Total Purchase.
           </p>
         </div>
         <div className="flex gap-2 items-center">
@@ -143,39 +152,41 @@ export default function InventoryView() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div><Label>Cost Per Unit ({'\u20B9'})</Label><Input type="number" value={form.costPerUnit} onChange={e => setForm({...form, costPerUnit: e.target.value})} placeholder="50" /></div>
-                  <div>
-                    <Label>Unit</Label>
-                    <Select value={form.unitMeasurement} onValueChange={v => setForm({...form, unitMeasurement: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="grams">grams</SelectItem>
-                        <SelectItem value="kg">kg</SelectItem>
-                        <SelectItem value="ml">ml</SelectItem>
-                        <SelectItem value="liters">liters</SelectItem>
-                        <SelectItem value="meters">meters</SelectItem>
-                        <SelectItem value="units">units</SelectItem>
-                        <SelectItem value="pieces">pieces</SelectItem>
-                        <SelectItem value="rolls">rolls</SelectItem>
-                        <SelectItem value="boxes">boxes</SelectItem>
-                        <SelectItem value="sheets">sheets</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <div><Label>Purchase Price ({"\u20B9"})</Label><Input type="number" value={form.purchasePrice} onChange={e => setForm({...form, purchasePrice: e.target.value})} placeholder="500" /></div>
+                  <div><Label>Purchase Qty</Label><Input type="number" min="1" value={form.purchaseQuantity} onChange={e => setForm({...form, purchaseQuantity: e.target.value})} placeholder="1" /></div>
+                </div>
+
+                <div>
+                  <Label>Unit of Measurement</Label>
+                  <Select value={form.unitMeasurement} onValueChange={v => setForm({...form, unitMeasurement: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="grams">grams</SelectItem>
+                      <SelectItem value="kg">kg</SelectItem>
+                      <SelectItem value="ml">ml</SelectItem>
+                      <SelectItem value="liters">liters</SelectItem>
+                      <SelectItem value="meters">meters</SelectItem>
+                      <SelectItem value="units">units</SelectItem>
+                      <SelectItem value="pieces">pieces</SelectItem>
+                      <SelectItem value="rolls">rolls</SelectItem>
+                      <SelectItem value="boxes">boxes</SelectItem>
+                      <SelectItem value="sheets">sheets</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="p-3 rounded-md bg-muted/50 border space-y-2">
                   <div className="flex items-center gap-2">
                     <ArrowDownUp className="w-4 h-4 text-primary" />
-                    <Label className="font-semibold text-sm">Yield Per Unit</Label>
+                    <Label className="font-semibold text-sm">Yield from Total Purchase</Label>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    How many uses do you get from one purchase unit? Example: 1 roll of tape ({'\u20B9'}50) packs 100 boxes → Yield = 100 → Cost per use = {'\u20B9'}0.50
+                    How many uses do you get from this purchase? Example: Buy 1 roll of tape for {"\u20B9"}500 that packs 100 boxes. Yield = 100 → Cost per use = {"\u20B9"}5.00
                   </p>
-                  <Input type="number" min="1" value={form.yieldPerUnit} onChange={e => setForm({...form, yieldPerUnit: e.target.value})} placeholder="1" />
-                  {Number(form.costPerUnit) > 0 && Number(form.yieldPerUnit) > 0 && (
+                  <Input type="number" min="1" value={form.yieldFromTotalPurchase} onChange={e => setForm({...form, yieldFromTotalPurchase: e.target.value})} placeholder="1" />
+                  {Number(form.purchasePrice) > 0 && Number(form.yieldFromTotalPurchase) > 0 && (
                     <p className="text-sm font-medium text-primary">
-                      Cost per use: {fmt(Number(form.costPerUnit) / Number(form.yieldPerUnit))}
+                      Cost per use: {fmt(Number(form.purchasePrice) / Number(form.yieldFromTotalPurchase))}
                     </p>
                   )}
                 </div>
@@ -196,7 +207,10 @@ export default function InventoryView() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {categoryItems.map(item => {
-              const costPerUse = (item.costPerUnit || 0) / Math.max(1, item.yieldPerUnit || 1);
+              const costPerUse = getCostPerUse(item);
+              const purchasePrice = item.purchasePrice ?? item.costPerUnit ?? 0;
+              const purchaseQty = item.purchaseQuantity || 1;
+              const yld = item.yieldFromTotalPurchase ?? item.yieldPerUnit ?? 1;
               return (
                 <Card key={item._id} className="group hover:shadow-sm transition-shadow">
                   <CardContent className="p-4">
@@ -205,7 +219,8 @@ export default function InventoryView() {
                         <h4 className="font-medium text-sm truncate">{item.name}</h4>
                         <div className="flex gap-2 flex-wrap">
                           <Badge variant="outline" className="text-[10px]">{item.unitMeasurement}</Badge>
-                          {item.yieldPerUnit > 1 && <Badge variant="secondary" className="text-[10px]">Yield: {item.yieldPerUnit}</Badge>}
+                          {purchaseQty > 1 && <Badge variant="secondary" className="text-[10px]">Qty: {purchaseQty}</Badge>}
+                          {yld > 1 && <Badge variant="secondary" className="text-[10px]">Yield: {yld}</Badge>}
                         </div>
                       </div>
                       <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -219,8 +234,8 @@ export default function InventoryView() {
                     </div>
                     <div className="mt-3 flex justify-between items-end">
                       <div>
-                        <p className="text-xs text-muted-foreground">Purchase Cost</p>
-                        <p className="text-sm font-bold">{fmt(item.costPerUnit)}<span className="text-xs font-normal text-muted-foreground">/{item.unitMeasurement}</span></p>
+                        <p className="text-xs text-muted-foreground">Purchase Price</p>
+                        <p className="text-sm font-bold">{fmt(purchasePrice)}<span className="text-xs font-normal text-muted-foreground"> / {purchaseQty > 1 ? `${purchaseQty} ${item.unitMeasurement}` : item.unitMeasurement}</span></p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-muted-foreground">Cost Per Use</p>

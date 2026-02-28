@@ -8,18 +8,27 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit, Receipt, Megaphone, Home, Laptop, Zap } from 'lucide-react';
+import { Plus, Trash2, Edit, Receipt, Megaphone, Home, Laptop, Zap, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN')}`;
+
+// Default icon/color mapping — dynamic categories get a generic style
 const catIcons = { MetaAds: Megaphone, Rent: Home, Software: Laptop, Utilities: Zap };
-const catColors = { MetaAds: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300', Rent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300', Software: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300', Utilities: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' };
+const catColors = {
+  MetaAds: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+  Rent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  Software: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  Utilities: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+};
+const PRESET_CATEGORIES = ['MetaAds', 'Rent', 'Software', 'Utilities'];
 
 export default function ExpensesView() {
   const [expenses, setExpenses] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ expenseName: '', category: 'MetaAds', amount: '', currency: 'INR', frequency: 'recurring', date: new Date().toISOString().split('T')[0] });
+  const [customCategory, setCustomCategory] = useState('');
+  const [form, setForm] = useState({ expenseName: '', category: 'Rent', amount: '', currency: 'INR', frequency: 'recurring', date: new Date().toISOString().split('T')[0] });
 
   const fetchData = async () => {
     const res = await fetch('/api/overhead-expenses');
@@ -27,8 +36,16 @@ export default function ExpensesView() {
   };
   useEffect(() => { fetchData(); }, []);
 
+  // Build dynamic category list: presets + any user-created ones from existing data
+  const allCategories = [...new Set([
+    ...PRESET_CATEGORIES,
+    ...expenses.map(e => e.category).filter(Boolean)
+  ])];
+
   const handleSubmit = async () => {
-    const data = { ...form, amount: Number(form.amount) };
+    const finalCategory = form.category === '__custom__' ? customCategory.trim() : form.category;
+    if (!finalCategory) { toast.error('Category is required'); return; }
+    const data = { ...form, category: finalCategory, amount: Number(form.amount) };
     try {
       if (editing) {
         await fetch(`/api/overhead-expenses/${editing._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -37,7 +54,7 @@ export default function ExpensesView() {
         await fetch('/api/overhead-expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         toast.success('Expense added');
       }
-      setDialogOpen(false); setEditing(null); fetchData();
+      setDialogOpen(false); setEditing(null); setCustomCategory(''); fetchData();
     } catch (err) { toast.error('Failed to save'); }
   };
 
@@ -49,7 +66,22 @@ export default function ExpensesView() {
 
   const openEdit = (exp) => {
     setEditing(exp);
-    setForm({ expenseName: exp.expenseName, category: exp.category, amount: String(exp.amount), currency: exp.currency || 'INR', frequency: exp.frequency || 'recurring', date: exp.date?.split('T')[0] || '' });
+    const isPreset = PRESET_CATEGORIES.includes(exp.category);
+    setForm({
+      expenseName: exp.expenseName,
+      category: isPreset ? exp.category : '__custom__',
+      amount: String(exp.amount),
+      currency: exp.currency || 'INR',
+      frequency: exp.frequency || 'recurring',
+      date: exp.date?.split('T')[0] || '',
+    });
+    if (!isPreset) setCustomCategory(exp.category);
+    setDialogOpen(true);
+  };
+
+  const openNew = () => {
+    setEditing(null); setCustomCategory('');
+    setForm({ expenseName: '', category: 'Rent', amount: '', currency: 'INR', frequency: 'recurring', date: new Date().toISOString().split('T')[0] });
     setDialogOpen(true);
   };
 
@@ -60,28 +92,31 @@ export default function ExpensesView() {
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
       <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">Track overhead costs that impact your true profit</p>
-        <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditing(null); }}>
+        <p className="text-sm text-muted-foreground">Track overhead costs that impact your true profit. Create your own expense categories.</p>
+        <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) { setEditing(null); setCustomCategory(''); } }}>
           <DialogTrigger asChild>
-            <Button onClick={() => setForm({ expenseName: '', category: 'MetaAds', amount: '', currency: 'INR', frequency: 'recurring', date: new Date().toISOString().split('T')[0] })}>
+            <Button onClick={openNew}>
               <Plus className="w-4 h-4 mr-2" /> Add Expense
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>{editing ? 'Edit' : 'Add'} Expense</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div><Label>Name</Label><Input value={form.expenseName} onChange={e => setForm({...form, expenseName: e.target.value})} placeholder="Meta Ads - Daily" /></div>
+              <div><Label>Name</Label><Input value={form.expenseName} onChange={e => setForm({...form, expenseName: e.target.value})} placeholder="e.g. Kitchen Rent, Shopify Subscription" /></div>
               <div>
                 <Label>Category</Label>
-                <Select value={form.category} onValueChange={v => setForm({...form, category: v})}>
+                <Select value={form.category} onValueChange={v => { setForm({...form, category: v}); if (v !== '__custom__') setCustomCategory(''); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MetaAds">Meta Ads</SelectItem>
-                    <SelectItem value="Rent">Rent</SelectItem>
-                    <SelectItem value="Software">Software</SelectItem>
-                    <SelectItem value="Utilities">Utilities</SelectItem>
+                    {allCategories.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">+ Create New Category</SelectItem>
                   </SelectContent>
                 </Select>
+                {form.category === '__custom__' && (
+                  <Input className="mt-2" placeholder="Enter new category name" value={customCategory} onChange={e => setCustomCategory(e.target.value)} />
+                )}
               </div>
               <div><Label>Amount (INR)</Label><Input type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} /></div>
               <div>
@@ -89,7 +124,7 @@ export default function ExpensesView() {
                 <Select value={form.frequency} onValueChange={v => setForm({...form, frequency: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="recurring">Recurring</SelectItem>
+                    <SelectItem value="recurring">Recurring (Monthly)</SelectItem>
                     <SelectItem value="one-time">One-time</SelectItem>
                   </SelectContent>
                 </Select>
@@ -104,11 +139,11 @@ export default function ExpensesView() {
       {/* Category Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {totalByCategory.map(({ category, total, count }) => {
-          const Icon = catIcons[category] || Receipt;
+          const Icon = catIcons[category] || Tag;
           return (
             <Card key={category}>
               <CardContent className="p-4 flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${catColors[category] || 'bg-muted'}`}><Icon className="w-5 h-5" /></div>
+                <div className={`p-2 rounded-lg ${catColors[category] || 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}><Icon className="w-5 h-5" /></div>
                 <div>
                   <p className="text-xs text-muted-foreground">{category}</p>
                   <p className="font-bold">{fmt(total)}</p>
@@ -137,7 +172,7 @@ export default function ExpensesView() {
                 {expenses.map(exp => (
                   <tr key={exp._id} className="border-b hover:bg-muted/30">
                     <td className="py-3 px-4 text-sm font-medium">{exp.expenseName}</td>
-                    <td className="py-3 px-4"><Badge className={`text-xs ${catColors[exp.category] || ''}`}>{exp.category}</Badge></td>
+                    <td className="py-3 px-4"><Badge className={`text-xs ${catColors[exp.category] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>{exp.category}</Badge></td>
                     <td className="py-3 px-4 text-sm text-right font-mono">{fmt(exp.amount)}</td>
                     <td className="py-3 px-4 text-sm text-muted-foreground">{exp.frequency}</td>
                     <td className="py-3 px-4 text-xs text-muted-foreground">{exp.date?.split('T')[0]}</td>
@@ -150,7 +185,7 @@ export default function ExpensesView() {
               </tbody>
             </table>
           </div>
-          {expenses.length === 0 && <div className="text-center py-12 text-muted-foreground">No expenses recorded yet</div>}
+          {expenses.length === 0 && <div className="text-center py-12 text-muted-foreground">No expenses recorded yet. Add your first overhead expense above.</div>}
         </CardContent>
       </Card>
     </div>
