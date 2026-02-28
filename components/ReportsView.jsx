@@ -41,18 +41,23 @@ export default function ReportsView() {
   const [skuData, setSkuData] = useState([]);
   const [rtoData, setRtoData] = useState([]);
   const [empData, setEmpData] = useState([]);
+  const [ledgerData, setLedgerData] = useState([]);
+  const [ledgerPage, setLedgerPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const LEDGER_PAGE_SIZE = 15;
 
   const fetchReports = async () => {
     setLoading(true);
     try {
       const qs = `?startDate=${startDate}&endDate=${endDate}`;
-      const [s, r, e] = await Promise.all([
+      const [s, r, e, l] = await Promise.all([
         fetch(`/api/reports/profitable-skus${qs}`).then(r => r.json()),
         fetch(`/api/reports/rto-locations${qs}`).then(r => r.json()),
         fetch(`/api/reports/employee-output${qs}`).then(r => r.json()),
+        fetch('/api/daily-marketing-spend').then(r => r.json()),
       ]);
       setSkuData(s); setRtoData(r); setEmpData(e);
+      setLedgerData(Array.isArray(l) ? l : []);
     } catch (err) { console.error(err); }
     setLoading(false);
   };
