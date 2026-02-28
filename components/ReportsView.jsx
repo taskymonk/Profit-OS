@@ -286,6 +286,93 @@ export default function ReportsView() {
             </>
           )}
         </TabsContent>
+
+        {/* Marketing Ledger */}
+        <TabsContent value="ledger" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Marketing Ledger</CardTitle>
+              <CardDescription>Daily ad spend synced from Meta Ads. This data drives the per-order marketing deduction in the True Profit engine.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {ledgerData.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <DollarSign className="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
+                  <p className="font-medium">No ad spend data yet</p>
+                  <p className="text-sm mt-1">Sync from Meta Ads in the Integrations panel to populate this ledger.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead><tr className="border-b bg-muted/50">
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Date</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Spend (INR)</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Raw Spend</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Currency</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Exchange Rate</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Source</th>
+                      </tr></thead>
+                      <tbody>
+                        {ledgerData
+                          .slice((ledgerPage - 1) * LEDGER_PAGE_SIZE, ledgerPage * LEDGER_PAGE_SIZE)
+                          .map((row, i) => (
+                          <tr key={row._id || i} className="border-b hover:bg-muted/30">
+                            <td className="py-2.5 px-4 text-sm font-medium">
+                              {(() => {
+                                try {
+                                  const d = new Date(row.date + 'T00:00:00+05:30');
+                                  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                                } catch { return row.date; }
+                              })()}
+                            </td>
+                            <td className="py-2.5 px-4 text-sm text-right font-bold">{fmt(Math.round(row.spendAmount))}</td>
+                            <td className="py-2.5 px-4 text-sm text-right text-muted-foreground">
+                              {row.rawCurrency && row.rawCurrency !== 'INR' ? `${row.rawCurrency} ${(row.rawSpend || 0).toFixed(2)}` : '—'}
+                            </td>
+                            <td className="py-2.5 px-4 text-xs"><Badge variant="outline">{row.currency || 'INR'}</Badge></td>
+                            <td className="py-2.5 px-4 text-sm text-right text-muted-foreground">
+                              {row.exchangeRate && row.exchangeRate !== 1 ? row.exchangeRate.toFixed(2) : '—'}
+                            </td>
+                            <td className="py-2.5 px-4 text-xs text-muted-foreground">{row.source || 'meta_ads'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 bg-muted/30">
+                          <td className="py-3 px-4 text-sm font-bold">Total ({ledgerData.length} days)</td>
+                          <td className="py-3 px-4 text-sm text-right font-bold text-primary">
+                            {fmt(Math.round(ledgerData.reduce((s, r) => s + (r.spendAmount || 0), 0)))}
+                          </td>
+                          <td colSpan={4}></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                  {/* Ledger Pagination */}
+                  {ledgerData.length > LEDGER_PAGE_SIZE && (
+                    <div className="flex items-center justify-between mt-3">
+                      <span className="text-xs text-muted-foreground">
+                        Page {ledgerPage} of {Math.ceil(ledgerData.length / LEDGER_PAGE_SIZE)}
+                      </span>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="outline" className="h-8 w-8" disabled={ledgerPage <= 1}
+                          onClick={() => setLedgerPage(p => Math.max(1, p - 1))}>
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="outline" className="h-8 w-8"
+                          disabled={ledgerPage >= Math.ceil(ledgerData.length / LEDGER_PAGE_SIZE)}
+                          onClick={() => setLedgerPage(p => p + 1)}>
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
