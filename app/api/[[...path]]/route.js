@@ -826,7 +826,7 @@ async function shopifySyncOrders() {
 
   try {
     let allShopifyOrders = [];
-    let nextUrl = `${baseUrl}/admin/api/2024-01/orders.json?limit=250&status=any`;
+    let nextUrl = `${baseUrl}/admin/api/2024-01/orders.json?limit=250&status=any&fulfillment_status=any&financial_status=any`;
 
     // True cursor-based pagination — no arbitrary page limit
     while (nextUrl) {
