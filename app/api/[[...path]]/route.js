@@ -338,7 +338,15 @@ async function metaAdsSyncSpend() {
     );
     if (!acctRes.ok) {
       const errData = await acctRes.json().catch(() => ({}));
-      return { error: `Meta API auth error: ${errData?.error?.message || acctRes.status}. Check your token and account ID.`, synced: 0 };
+      const errMsg = errData?.error?.message || `HTTP ${acctRes.status}`;
+      // Graceful handling for common Meta auth errors
+      if (errMsg.includes('Invalid OAuth') || errMsg.includes('access token') || acctRes.status === 190) {
+        return { error: `Invalid Meta Ads Access Token. Please regenerate your token in Meta Business Manager and update it in the Integrations panel.`, synced: 0 };
+      }
+      if (errMsg.includes('ad account') || acctRes.status === 100) {
+        return { error: `Invalid Ad Account ID "${adAccountId}". Please verify the ID in Meta Ads Manager (format: act_XXXXXXXXX).`, synced: 0 };
+      }
+      return { error: `Meta API error: ${errMsg}`, synced: 0 };
     }
     const acctData = await acctRes.json();
     const adCurrency = acctData.currency || 'USD';
