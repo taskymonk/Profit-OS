@@ -573,6 +573,7 @@ async function getDashboardData(params = {}) {
       revenue: metrics.revenue,
       adSpend: metrics.adSpend,
       rtoCount: metrics.rtoCount,
+      cancelledCount: metrics.cancelledCount || 0,
     },
     overhead: metrics.overhead,
     plBreakdown: metrics.plBreakdown,
