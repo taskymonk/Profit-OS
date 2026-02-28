@@ -1001,3 +1001,44 @@ DO NOT test Shopify sync by calling the actual Shopify API. Clean up all test da
 ✓ Ad Spend Tax Multiplier: Precise 18% GST calculation on raw ad spend
 
 **PHASE 8.7 ENTERPRISE BOM ARCHITECTURE, ANALYTICS POLISH & UX GUIDES FULLY FUNCTIONAL AND TESTED!** All 7 critical areas working perfectly with comprehensive validation. BOM architecture implemented, analytics enhanced with refunds tracking, and data integrity verified across all endpoints."
+    - agent: "main"
+      message: "PHASE 8.8 ABSOLUTE PARITY PATCH - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data (1962+ orders incl. cancelled) and Meta Ads data exist. Test these 5 areas:
+
+1. **BULLETPROOF PAGINATION (source code check)**:
+   - Read /app/app/api/[[...path]]/route.js
+   - Find the Shopify pagination section and verify:
+     a. The Link header is SPLIT by comma before regex matching: should contain linkHeader.split(',')
+     b. Each link entry is matched with /<([^>]+)>;\s*rel=\"next\"/ individually
+     c. The loop breaks after finding rel=\"next\"
+   - Verify it does NOT just match against the full concatenated header string
+
+2. **STRICT ACCOUNTING PARITY (Cancelled/Voided/Pending filter)**:
+   - Read /app/lib/profitCalculator.js
+   - Verify EXCLUDED_STATUSES array exists containing 'Cancelled', 'Voided', 'Pending'
+   - Verify accountingOrders is created by filtering out EXCLUDED_STATUSES
+   - Verify totalOrders uses accountingOrders.length (not filteredOrders.length)
+   - Verify totalRevenue sums accountingOrders (not filteredOrders)
+   - Verify grossOrderProfits maps over accountingOrders
+   - Verify orderProfits still maps over ALL filteredOrders (for table display)
+   - GET /api/dashboard?range=alltime -> verify 'cancelledCount' field exists in response
+   - Use pymongo to count orders with status 'Cancelled': db.orders.count_documents({'status': 'Cancelled'})
+   - Dashboard totalOrders should be LESS than total orders in DB if cancelled orders exist
+
+3. **TIMEZONE DOUBLE-SHIFT FIX (source code check)**:
+   - Read /app/app/api/[[...path]]/route.js
+   - Verify the Shopify date mapping does NOT call toISTISO
+   - It should use: new Date(shopifyDateRaw).toISOString() directly
+   - Verify the comment mentions 'no artificial IST shift' or 'double-shift'
+
+4. **DASHBOARD DATA INTEGRITY POST-FILTER**:
+   - GET /api/dashboard?range=alltime -> verify:
+     a. plBreakdown.grossRevenue == filtered.revenue
+     b. plBreakdown.netProfit == filtered.netProfit
+     c. waterfall math: netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead (within ±1)
+     d. totalOrders > 0
+
+5. **AD SPEND TAX STILL WORKS**:
+   - GET /api/dashboard?range=alltime -> get filtered.adSpend
+   - Use pymongo to verify adSpend matches rawTotal * (1 + adSpendTaxRate/100)
+
+DO NOT test Shopify sync by calling the actual Shopify API. Clean up all test data."
