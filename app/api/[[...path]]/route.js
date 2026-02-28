@@ -936,6 +936,7 @@ async function shopifySyncOrders() {
           customerPhone: customerPhone,
           salePrice: parseFloat(item.price) * (item.quantity || 1),
           discount: totalDiscount / totalLineItems,
+          refundAmount: totalRefunds / totalLineItems,
           totalTax: totalTax / totalLineItems,
           status,
           shippingMethod: 'shopify',
