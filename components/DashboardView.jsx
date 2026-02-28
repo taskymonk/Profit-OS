@@ -333,22 +333,49 @@ export default function DashboardView() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Cost Breakdown</CardTitle>
-            <CardDescription>COGS, Shipping & Ads per day</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Cost Breakdown</CardTitle>
+                <CardDescription>COGS, Shipping & Ads per day</CardDescription>
+              </div>
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+                <Button size="sm" variant={chartType === 'bar' ? 'default' : 'ghost'}
+                  className="h-7 px-2.5 text-xs gap-1" onClick={() => setChartType('bar')}>
+                  <BarChart3 className="w-3.5 h-3.5" /> Bar
+                </Button>
+                <Button size="sm" variant={chartType === 'line' ? 'default' : 'ghost'}
+                  className="h-7 px-2.5 text-xs gap-1" onClick={() => setChartType('line')}>
+                  <LineChartIcon className="w-3.5 h-3.5" /> Line
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} className="text-muted-foreground" />
-                  <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" tickFormatter={v => `\u20B9${(v/1000).toFixed(0)}k`} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
-                  <Bar dataKey="cogs" name="COGS" fill="#f59e0b" radius={[2,2,0,0]} />
-                  <Bar dataKey="shipping" name="Shipping" fill="#8b5cf6" radius={[2,2,0,0]} />
-                  <Bar dataKey="adSpend" name="Ads" fill="#ec4899" radius={[2,2,0,0]} />
-                </BarChart>
+                {chartType === 'bar' ? (
+                  <BarChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" tickFormatter={v => `\u20B9${(v/1000).toFixed(0)}k`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
+                    <Bar dataKey="cogs" name="COGS" fill="#f59e0b" radius={[2,2,0,0]} />
+                    <Bar dataKey="shipping" name="Shipping" fill="#8b5cf6" radius={[2,2,0,0]} />
+                    <Bar dataKey="adSpend" name="Ads" fill="#ec4899" radius={[2,2,0,0]} />
+                  </BarChart>
+                ) : (
+                  <LineChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+                    <YAxis tick={{ fontSize: 10 }} className="text-muted-foreground" tickFormatter={v => `\u20B9${(v/1000).toFixed(0)}k`} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
+                    <Line type="monotone" dataKey="cogs" name="COGS" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="shipping" name="Shipping" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="adSpend" name="Ads" stroke="#ec4899" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                )}
               </ResponsiveContainer>
             </div>
           </CardContent>
