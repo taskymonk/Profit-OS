@@ -310,8 +310,9 @@ export default function ReportsView() {
                     <table className="w-full text-left">
                       <thead><tr className="border-b bg-muted/50">
                         <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Date</th>
-                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Spend (INR)</th>
-                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Raw Spend</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Raw Meta Spend</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Tax Applied</th>
+                        <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Total Billed Amount</th>
                         <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Currency</th>
                         <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Exchange Rate</th>
                         <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Source</th>
@@ -319,7 +320,12 @@ export default function ReportsView() {
                       <tbody>
                         {ledgerData
                           .slice((ledgerPage - 1) * LEDGER_PAGE_SIZE, ledgerPage * LEDGER_PAGE_SIZE)
-                          .map((row, i) => (
+                          .map((row, i) => {
+                          const rawSpendINR = row.spendAmount || 0;
+                          const taxMultiplier = 1 + (adSpendTaxRate / 100);
+                          const totalBilled = rawSpendINR * taxMultiplier;
+                          const taxAmount = totalBilled - rawSpendINR;
+                          return (
                           <tr key={row._id || i} className="border-b hover:bg-muted/30">
                             <td className="py-2.5 px-4 text-sm font-medium">
                               {(() => {
@@ -329,25 +335,33 @@ export default function ReportsView() {
                                 } catch { return row.date; }
                               })()}
                             </td>
-                            <td className="py-2.5 px-4 text-sm text-right font-bold">{fmt(Math.round(row.spendAmount))}</td>
-                            <td className="py-2.5 px-4 text-sm text-right text-muted-foreground">
-                              {row.rawCurrency && row.rawCurrency !== 'INR' ? `${row.rawCurrency} ${(row.rawSpend || 0).toFixed(2)}` : '—'}
+                            <td className="py-2.5 px-4 text-sm text-right font-medium">{fmt(Math.round(rawSpendINR))}</td>
+                            <td className="py-2.5 px-4 text-sm text-right text-amber-600 dark:text-amber-400">
+                              +{fmt(Math.round(taxAmount))} <span className="text-[10px] text-muted-foreground">({adSpendTaxRate}%)</span>
                             </td>
+                            <td className="py-2.5 px-4 text-sm text-right font-bold text-primary">{fmt(Math.round(totalBilled))}</td>
                             <td className="py-2.5 px-4 text-xs"><Badge variant="outline">{row.currency || 'INR'}</Badge></td>
                             <td className="py-2.5 px-4 text-sm text-right text-muted-foreground">
                               {row.exchangeRate && row.exchangeRate !== 1 ? row.exchangeRate.toFixed(2) : '—'}
                             </td>
                             <td className="py-2.5 px-4 text-xs text-muted-foreground">{row.source || 'meta_ads'}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                       <tfoot>
                         <tr className="border-t-2 bg-muted/30">
                           <td className="py-3 px-4 text-sm font-bold">Total ({ledgerData.length} days)</td>
-                          <td className="py-3 px-4 text-sm text-right font-bold text-primary">
+                          <td className="py-3 px-4 text-sm text-right font-bold">
                             {fmt(Math.round(ledgerData.reduce((s, r) => s + (r.spendAmount || 0), 0)))}
                           </td>
-                          <td colSpan={4}></td>
+                          <td className="py-3 px-4 text-sm text-right font-bold text-amber-600 dark:text-amber-400">
+                            +{fmt(Math.round(ledgerData.reduce((s, r) => s + (r.spendAmount || 0), 0) * (adSpendTaxRate / 100)))}
+                          </td>
+                          <td className="py-3 px-4 text-sm text-right font-bold text-primary">
+                            {fmt(Math.round(ledgerData.reduce((s, r) => s + (r.spendAmount || 0), 0) * (1 + adSpendTaxRate / 100)))}
+                          </td>
+                          <td colSpan={3}></td>
                         </tr>
                       </tfoot>
                     </table>
