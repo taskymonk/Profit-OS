@@ -875,9 +875,10 @@ async function shopifySyncOrders() {
         status = 'Cancelled';
       }
 
-      // Use the REAL Shopify date, strictly converted to IST (+05:30) for calendar-day accuracy
+      // Direct parsing — no artificial IST shift. Shopify timestamps already include
+      // the correct timezone offset. Forcing toISTISO double-shifts midnight orders.
       const shopifyDateRaw = shopifyOrder.created_at || shopifyOrder.processed_at || shopifyOrder.updated_at;
-      const shopifyDate = toISTISO(shopifyDateRaw);
+      const shopifyDate = shopifyDateRaw ? new Date(shopifyDateRaw).toISOString() : new Date().toISOString();
 
       // Shipping address object
       const addr = shopifyOrder.shipping_address || {};
