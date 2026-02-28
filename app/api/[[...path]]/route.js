@@ -936,8 +936,6 @@ async function shopifySyncOrders() {
   }
 }
 
-// ==================== INDIA POST TRACKING ====================
-
 // ==================== INDIA POST AUTH & TRACKING ====================
 
 async function indiaPostAuth(username, password, baseUrl) {
