@@ -234,17 +234,37 @@ def test_ad_spend_tax_multiplier():
             log_test("Dashboard Ad Spend Check", "FAIL", f"Status: {response.status_code}")
             return False
         
-        # Get first order and check profit calculation
-        orders_url = f"{BASE_URL}/orders?page=1&limit=1"
-        response = requests.get(orders_url, timeout=30)
+        # Find an order that has marketing spend data for its date
+        # Get available marketing spend dates from database
+        marketing_dates = [spend['date'] for spend in db.dailyMarketingSpend.find({}, {'date': 1}).sort('date', -1)]
         
-        if response.status_code == 200:
-            orders_data = response.json()
-            orders = orders_data.get('orders', [])
-            if orders and len(orders) > 0:
-                first_order = orders[0]
-                order_id = first_order.get('_id')
-                log_test("Get First Order", "PASS", f"Order ID: {order_id}")
+        order_id = None
+        marketing_allocation = 0
+        
+        # Try to find an order that matches a marketing spend date
+        for date in marketing_dates[:10]:  # Check first 10 dates
+            # Create a test order for this date if none exist
+            test_order_data = {
+                "orderId": f"TEST-{date}",
+                "sku": "TEST-SKU",
+                "productName": "Test Product",
+                "customerName": "Test Customer",
+                "salePrice": 1000,
+                "discount": 0,
+                "status": "Delivered",
+                "shippingMethod": "indiapost",
+                "shippingCost": 50,
+                "orderDate": f"{date}T12:00:00+05:30"
+            }
+            
+            # Create the test order
+            create_url = f"{BASE_URL}/orders"
+            response = requests.post(create_url, json=test_order_data, timeout=30)
+            
+            if response.status_code == 201:
+                created_order = response.json()
+                order_id = created_order.get('_id')
+                log_test("Create Test Order", "PASS", f"Created test order for {date}: {order_id}")
                 
                 # Get profit calculation for this order
                 profit_url = f"{BASE_URL}/calculate-profit/{order_id}"
@@ -254,26 +274,29 @@ def test_ad_spend_tax_multiplier():
                     profit_data = response.json()
                     marketing_allocation = profit_data.get('marketingAllocation', 0)
                     
-                    # Check if Meta is active - if so, marketing allocation should be > 0
-                    if marketing_allocation > 0:
-                        log_test("Marketing Allocation Tax", "PASS", f"Marketing allocation: ₹{marketing_allocation:.2f} > 0 (includes 1.18 multiplier)")
-                    else:
-                        # Check if Meta Ads is actually active
-                        integrations = db.integrations.find_one({'_id': 'integrations-config'})
-                        meta_active = integrations and integrations.get('metaAds', {}).get('active', False)
-                        if meta_active:
-                            log_test("Marketing Allocation Tax", "FAIL", f"Meta Ads active but marketing allocation: ₹{marketing_allocation:.2f}")
-                            return False
-                        else:
-                            log_test("Marketing Allocation Tax", "PASS", f"Meta Ads inactive, marketing allocation correctly 0")
+                    # Clean up the test order
+                    delete_url = f"{BASE_URL}/orders/{order_id}"
+                    requests.delete(delete_url, timeout=10)
+                    
+                    break
                 else:
-                    log_test("Profit Calculation Check", "FAIL", f"Status: {response.status_code}")
-                    return False
-            else:
-                log_test("Get First Order", "FAIL", "No orders found")
+                    # Clean up the test order if profit calculation failed
+                    delete_url = f"{BASE_URL}/orders/{order_id}"
+                    requests.delete(delete_url, timeout=10)
+            
+        if order_id and marketing_allocation > 0:
+            log_test("Marketing Allocation Tax", "PASS", f"Marketing allocation: ₹{marketing_allocation:.2f} > 0 (includes 1.18 multiplier)")
+        elif order_id:
+            # Check if Meta Ads is actually active
+            integrations = db.integrations.find_one({'_id': 'integrations-config'})
+            meta_active = integrations and integrations.get('metaAds', {}).get('active', False)
+            if meta_active:
+                log_test("Marketing Allocation Tax", "FAIL", f"Meta Ads active but marketing allocation: ₹{marketing_allocation:.2f}")
                 return False
+            else:
+                log_test("Marketing Allocation Tax", "PASS", f"Meta Ads inactive, marketing allocation correctly 0")
         else:
-            log_test("Orders API Check", "FAIL", f"Status: {response.status_code}")
+            log_test("Marketing Allocation Test Setup", "FAIL", "Could not create test order or get profit calculation")
             return False
         
         return True
