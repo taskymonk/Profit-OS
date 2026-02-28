@@ -1421,14 +1421,16 @@ export async function POST(request) {
         return json(await createDoc('overheadExpenses', body), 201);
       case 'inventory-items': {
         const db = await getDb();
+        const purchasePrice = Number(body.purchasePrice) || 0;
+        const purchaseQuantity = Math.max(1, Number(body.purchaseQuantity) || 1);
         const item = {
           _id: uuidv4(),
           name: body.name || '',
           category: body.category || 'Raw Material',
-          purchasePrice: Number(body.purchasePrice) || 0,
-          purchaseQuantity: Math.max(1, Number(body.purchaseQuantity) || 1),
-          unitMeasurement: body.unitMeasurement || 'units',
-          yieldFromTotalPurchase: Math.max(1, Number(body.yieldFromTotalPurchase) || 1),
+          purchasePrice,
+          purchaseQuantity,
+          unit: body.unit || 'units',
+          baseCostPerUnit: Math.round((purchasePrice / purchaseQuantity) * 100) / 100,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
