@@ -1217,9 +1217,8 @@ export async function GET(request) {
         const integ = await db.collection('integrations').findOne({ _id: 'integrations-config' });
         const metaActive = integ?.metaAds?.active === true;
 
-        // Look up the order's date in dailyMarketingSpend
-        const orderDate = new Date(order.orderDate); orderDate.setHours(0, 0, 0, 0);
-        const dateKey = orderDate.toISOString().split('T')[0];
+        // Look up the order's date in dailyMarketingSpend using IST key
+        const dateKey = getISTDateKey(order.orderDate);
 
         let dayAdSpend = 0;
         if (metaActive) {
@@ -1229,10 +1228,7 @@ export async function GET(request) {
 
         // Count total orders on that day for per-order allocation
         const allOrders = await db.collection('orders').find({}).toArray();
-        const dayOrders = allOrders.filter(o => {
-          const d = new Date(o.orderDate); d.setHours(0, 0, 0, 0);
-          return d.getTime() === orderDate.getTime();
-        });
+        const dayOrders = allOrders.filter(o => getISTDateKey(o.orderDate) === dateKey);
 
         const profit = calculateOrderProfit(order, recipe, dayAdSpend, dayOrders.length || 1, 1);
         return json(profit);
