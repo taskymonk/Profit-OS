@@ -795,3 +795,60 @@ INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking numb
 ✓ RTO penalty logic: Double shipping cost applied only in calculations
 
 **CORE ENGINE V3 PATCHES FULLY VERIFIED AND FUNCTIONAL!** All mathematical formulas, date handling, ad spend allocation, and RTO penalties working as designed. Real Shopify data (521 orders) and Meta Ads integration confirmed operational."
+    - agent: "main"
+      message: "PHASE 8.5 REALITY RECONCILIATION PATCHES TESTING NEEDED. Base URL: https://profit-calc-dash.preview.emergentagent.com/api. Real Shopify data (521 orders) and Meta Ads data exist. Test these 3 areas:
+
+1. **INVENTORY ITEMS CRUD** (all endpoints):
+   - POST /api/inventory-items with body: {\"name\":\"Belgian Chocolate 500g\",\"category\":\"Raw Material\",\"costPerUnit\":200,\"unitMeasurement\":\"grams\",\"yieldPerUnit\":1} → verify 201, has _id
+   - POST /api/inventory-items with body: {\"name\":\"BOPP Tape Roll\",\"category\":\"Packaging\",\"costPerUnit\":50,\"unitMeasurement\":\"rolls\",\"yieldPerUnit\":100} → verify 201
+   - Verify tape's yieldPerUnit is 100 and costPerUnit is 50 (effective cost = 50/100 = 0.50)
+   - GET /api/inventory-items → array with 2 items
+   - PUT /api/inventory-items/{chocolate_id} with body: {\"costPerUnit\":220} → verify updated
+   - GET /api/inventory-items/{chocolate_id} → verify costPerUnit is 220
+   - DELETE /api/inventory-items/{tape_id} → verify deleted
+   - GET /api/inventory-items → only 1 item left
+   - CLEANUP: DELETE the remaining chocolate item too
+
+2. **AD SPEND TAX MULTIPLIER** (the 18% GST on Meta ads):
+   - Use pymongo (mongodb://localhost:27017, db: profitos) to check tenantConfig for adSpendTaxRate field
+   - Read dailyMarketingSpend collection: sum all spendAmounts
+   - GET /api/dashboard?range=alltime → get filtered.adSpend
+   - The dashboard adSpend should be approximately rawTotal * 1.18 (default 18% tax)
+   - ALSO: GET /api/orders?page=1&limit=1 → get first order
+   - GET /api/calculate-profit/{order._id} → marketingAllocation should be > 0 if Meta is active
+   - The marketingAllocation should include the 1.18 multiplier
+
+3. **SHOPIFY SYNC URL VERIFICATION**:
+   - Read the file /app/app/api/[[...path]]/route.js and verify the Shopify orders URL contains \"status=any\"
+   - Just verify by reading the source code"
+    - agent: "testing"
+      message: "🎉 PHASE 8.5 REALITY RECONCILIATION TESTING COMPLETE - ALL 3 AREAS PASSED!
+
+🎯 **INVENTORY ITEMS CRUD**: ✅ 8/8 TESTS PASSED
+- ✅ POST Belgian Chocolate: Created with UUID _id, proper structure
+- ✅ POST BOPP Tape: Created with yieldPerUnit=100, costPerUnit=50
+- ✅ Effective Cost Calculation: 50/100 = 0.50 verified
+- ✅ GET All Items: Array with created items returned correctly
+- ✅ PUT Update: Successfully updated chocolate costPerUnit to 220
+- ✅ GET Single Item: Verified updated costPerUnit persisted
+- ✅ DELETE Item: Successfully deleted tape item
+- ✅ Verify After Delete: Chocolate remains, tape removed, proper cleanup
+
+🎯 **AD SPEND TAX MULTIPLIER**: ✅ 4/4 TESTS PASSED  
+- ✅ TenantConfig Check: adSpendTaxRate = 18% (default value confirmed)
+- ✅ Daily Marketing Spend: Raw total ₹52,700.11 from 30 records
+- ✅ Dashboard Tax Calculation: ₹62,186.13 ≈ ₹52,700.11 × 1.18 (exact match)
+- ✅ Marketing Allocation Tax: ₹777.25 per order includes 1.18 multiplier (created test order on 2026-02-26 with marketing data)
+
+🎯 **SHOPIFY SYNC URL VERIFICATION**: ✅ 3/3 TESTS PASSED
+- ✅ Status Parameter Found: 'status=any' confirmed in route.js source code
+- ✅ Shopify Orders URL: Line 816 contains proper endpoint with status=any
+- ✅ API Endpoint Structure: /admin/api/2024-01/orders.json format verified
+
+**CRITICAL PHASE 8.5 FEATURES FULLY FUNCTIONAL:**
+✓ Inventory Items CRUD: Complete REST API with yieldPerUnit calculations
+✓ Ad Spend Tax Multiplier: 18% GST properly applied to Meta Ads spend
+✓ Shopify Sync: status=any parameter ensures all order statuses synced
+✓ Real Data Integration: Meta Ads (₹52,700+ spend) and Shopify (521 orders) active
+
+**PHASE 8.5 REALITY RECONCILIATION PATCHES VERIFIED AND OPERATIONAL!** All new unified inventory system, tax calculations, and Shopify sync enhancements working as designed."
