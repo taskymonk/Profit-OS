@@ -77,10 +77,11 @@ export default function ReportsView() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3 max-w-lg">
-          <TabsTrigger value="skus" className="gap-1.5"><Crown className="w-4 h-4" /> SKU Profitability</TabsTrigger>
-          <TabsTrigger value="rto" className="gap-1.5"><MapPin className="w-4 h-4" /> RTO Locations</TabsTrigger>
-          <TabsTrigger value="employees" className="gap-1.5"><Users className="w-4 h-4" /> Employee Output</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 max-w-xl">
+          <TabsTrigger value="skus" className="gap-1.5"><Crown className="w-4 h-4" /> SKU Profit</TabsTrigger>
+          <TabsTrigger value="rto" className="gap-1.5"><MapPin className="w-4 h-4" /> RTO Map</TabsTrigger>
+          <TabsTrigger value="employees" className="gap-1.5"><Users className="w-4 h-4" /> Team</TabsTrigger>
+          <TabsTrigger value="ledger" className="gap-1.5"><DollarSign className="w-4 h-4" /> Ad Ledger</TabsTrigger>
         </TabsList>
 
         {/* SKU Profitability */}
