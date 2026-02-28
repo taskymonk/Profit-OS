@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, BarChart, Bar, Legend
+  ResponsiveContainer, BarChart, Bar, Legend, LineChart, Line
 } from 'recharts';
 
 const fmt = (val, currency = 'INR') => {
