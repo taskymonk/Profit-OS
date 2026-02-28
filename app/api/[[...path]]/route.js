@@ -1424,9 +1424,10 @@ export async function POST(request) {
           _id: uuidv4(),
           name: body.name || '',
           category: body.category || 'Raw Material',
-          costPerUnit: Number(body.costPerUnit) || 0,
+          purchasePrice: Number(body.purchasePrice) || 0,
+          purchaseQuantity: Math.max(1, Number(body.purchaseQuantity) || 1),
           unitMeasurement: body.unitMeasurement || 'units',
-          yieldPerUnit: Number(body.yieldPerUnit) || 1,
+          yieldFromTotalPurchase: Math.max(1, Number(body.yieldFromTotalPurchase) || 1),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
