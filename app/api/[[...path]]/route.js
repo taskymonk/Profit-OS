@@ -1425,6 +1425,27 @@ export async function POST(request) {
         return json(await createDoc('orders', body), 201);
       case 'employees':
         return json(await createDoc('employees', body), 201);
+      case 'expense-categories': {
+        // POST /api/expense-categories with action: 'rename' or 'delete'
+        const db = await getDb();
+        if (subResource === 'rename') {
+          const { oldName, newName } = body;
+          if (!oldName || !newName) return json({ error: 'oldName and newName required' }, 400);
+          const result = await db.collection('overheadExpenses').updateMany(
+            { category: oldName },
+            { $set: { category: newName, updatedAt: new Date().toISOString() } }
+          );
+          return json({ message: `Renamed "${oldName}" to "${newName}". Updated ${result.modifiedCount} expenses.`, modified: result.modifiedCount });
+        }
+        if (subResource === 'delete') {
+          const { category } = body;
+          if (!category) return json({ error: 'category required' }, 400);
+          const result = await db.collection('overheadExpenses').deleteMany({ category });
+          return json({ message: `Deleted category "${category}" and ${result.deletedCount} expenses.`, deleted: result.deletedCount });
+        }
+        return json({ error: 'Unknown action. Use /rename or /delete' }, 400);
+      }
+
       case 'overhead-expenses':
         return json(await createDoc('overheadExpenses', body), 201);
       case 'inventory-items': {
