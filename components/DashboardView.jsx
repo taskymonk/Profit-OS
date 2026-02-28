@@ -15,7 +15,7 @@ import {
   TrendingUp, TrendingDown, ShoppingCart, AlertTriangle,
   Target, ChevronDown, ChevronUp, RefreshCw,
   Package, Truck, CreditCard, Megaphone, ArrowUpRight, ArrowDownRight,
-  CalendarDays, Zap, Building2, BarChart3, LineChart as LineChartIcon, ArrowDown, ArrowRight
+  CalendarDays, Zap, Building2, BarChart3, LineChart as LineChartIcon, ArrowDown, ArrowRight, RotateCcw
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
