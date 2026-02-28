@@ -584,36 +584,28 @@ agent_communication:
 
 BONUS FIX: Updated seed function to check for orders instead of tenantConfig to enable re-seeding after purge, and handle existing tenantConfig/integrations gracefully."
     - agent: "main"
-      message: "CORE ENGINE V3 TESTING. Changes: 1) Inclusive GST: revenue/1.18 instead of revenue*0.18 2) Ghost ad spend fix: global subtraction in dashboard 3) IST timezone: getISTDateKey() replaces .toISOString().split 4) Shopify cursor pagination 5) Meta Ads graceful error handling 6) SKU Recipe dynamic dropdowns 7) Marketing Ledger in Reports. Base URL: http://localhost:3000/api. Real Shopify data exists (521 orders).
+      message: "PHASE 8.5 TESTING. Changes: 1) Ad spend tax multiplier (adSpendTaxRate in tenantConfig, default 18%) 2) Unified inventoryItems collection with CRUD + yieldPerUnit 3) Dynamic SKU Recipe builder with category dropdowns 4) Shopify sync verified has status=any. Base URL: http://localhost:3000/api.
 
 Test these:
 
-1) INCLUSIVE GST MATH (GET /api/calculate-profit/{orderId}):
-   - Get an order: GET /api/orders?page=1&limit=1
-   - GET /api/calculate-profit/{_id}
-   - Verify: gstOnRevenue = grossRevenue - discount - (grossRevenue - discount) / 1.18
-   - Verify: netRevenue = (grossRevenue - discount) / 1.18
-   - Example: if grossRevenue=1000, discount=0, then gstOnRevenue should be ~152.54, netRevenue should be ~847.46
+1) INVENTORY ITEMS CRUD:
+   - POST /api/inventory-items with {name:'Belgian Chocolate 500g', category:'Raw Material', costPerUnit: 200, unitMeasurement:'grams', yieldPerUnit:1}
+   - POST /api/inventory-items with {name:'BOPP Tape Roll', category:'Packaging', costPerUnit: 50, unitMeasurement:'rolls', yieldPerUnit:100}
+   - Verify the tape's effective cost per use = 50/100 = 0.50
+   - GET /api/inventory-items → array with 2 items, sorted by category
+   - PUT /api/inventory-items/{id} → update costPerUnit
+   - DELETE /api/inventory-items/{id} → verify deleted
 
-2) GHOST AD SPEND FIX (GET /api/dashboard?range=7days):
-   - Response must have filtered.adSpend > 0 (Meta is active with real data)
-   - Verify filtered.grossOrderProfit > filtered.netProfit (because ad spend + overhead subtracted)
-   - Verify filtered.adSpend is subtracted globally from grossOrderProfit
-   - The math: netProfit ≈ grossOrderProfit - adSpend - overhead.proratedAmount
+2) AD SPEND TAX MULTIPLIER:
+   - GET /api/dashboard?range=7days → check filtered.adSpend
+   - The adSpend should be approximately rawAdSpend * 1.18 (18% GST)
+   - Use pymongo to read tenantConfig.adSpendTaxRate (should be 18 or undefined)
+   - Use pymongo to read dailyMarketingSpend totals for the 7 days
+   - Verify: dashboard adSpend ≈ sum(dailyMarketingSpend amounts for 7 days) * 1.18
+   - GET /api/calculate-profit/{orderId} → marketingAllocation should reflect the 1.18 multiplier
 
-3) IST DATE KEY:
-   - GET /api/daily-marketing-spend → dates should be in YYYY-MM-DD format
-   - GET /api/dashboard?range=7days → dailyData[].date should be YYYY-MM-DD format
-
-4) MARKETING LEDGER DATA (GET /api/daily-marketing-spend):
-   - Should return array of objects with: date, spendAmount, currency
-   - Should have data (Meta was already synced)
-   - All spendAmount values should be > 0
-
-5) RTO DOUBLE SHIPPING VERIFICATION:
-   - Using pymongo (mongodb://localhost:27017, db: profitos), set one order status to 'RTO'
-   - GET /api/calculate-profit/{_id} → verify isRTO=true, shippingCost is 2x the stored value
-   - Restore original status after test"
+3) SHOPIFY SYNC URL CHECK:
+   - Verify the code at the route level includes status=any (just grep the source file)"
     - agent: "testing"
       message: "✅ PHASE 4 BACKEND TESTING COMPLETE - ALL 4 FEATURES TESTED SUCCESSFULLY!
 
