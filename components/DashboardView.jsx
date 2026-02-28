@@ -198,6 +198,7 @@ export default function DashboardView() {
   const [dateRange, setDateRange] = useState('7days');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
+  const [chartType, setChartType] = useState('bar');
 
   const fetchData = async () => {
     setLoading(true);
