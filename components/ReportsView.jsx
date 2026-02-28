@@ -44,20 +44,23 @@ export default function ReportsView() {
   const [ledgerData, setLedgerData] = useState([]);
   const [ledgerPage, setLedgerPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [adSpendTaxRate, setAdSpendTaxRate] = useState(18);
   const LEDGER_PAGE_SIZE = 15;
 
   const fetchReports = async () => {
     setLoading(true);
     try {
       const qs = `?startDate=${startDate}&endDate=${endDate}`;
-      const [s, r, e, l] = await Promise.all([
+      const [s, r, e, l, tc] = await Promise.all([
         fetch(`/api/reports/profitable-skus${qs}`).then(r => r.json()),
         fetch(`/api/reports/rto-locations${qs}`).then(r => r.json()),
         fetch(`/api/reports/employee-output${qs}`).then(r => r.json()),
         fetch('/api/daily-marketing-spend').then(r => r.json()),
+        fetch('/api/tenant-config').then(r => r.json()),
       ]);
       setSkuData(s); setRtoData(r); setEmpData(e);
       setLedgerData(Array.isArray(l) ? l : []);
+      setAdSpendTaxRate(tc?.adSpendTaxRate ?? 18);
     } catch (err) { console.error(err); }
     setLoading(false);
   };
