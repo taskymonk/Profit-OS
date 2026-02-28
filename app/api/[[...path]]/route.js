@@ -520,6 +520,7 @@ async function getDashboardData(params = {}) {
 
     // Use adSpendMap for daily ad spend lookup (IST-keyed)
     const dayAdSpend = adSpendMap[dateKey] || 0;
+    const dayAdSpendTaxed = dayAdSpend * adSpendTaxMultiplier;
 
     let dayProfit = 0, dayRevenue = 0, dayCOGS = 0, dayShipping = 0;
     dayOrders.forEach(order => {
