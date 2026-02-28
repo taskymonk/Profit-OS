@@ -797,16 +797,11 @@ async function shopifySyncOrders() {
 
   try {
     let allShopifyOrders = [];
-    let pageInfo = null;
-    let url = `${baseUrl}/admin/api/2024-01/orders.json?limit=250&status=any`;
+    let nextUrl = `${baseUrl}/admin/api/2024-01/orders.json?limit=250&status=any`;
 
-    // Paginate through ALL Shopify orders
-    for (let page = 0; page < 50; page++) {
-      const fetchUrl = pageInfo
-        ? `${baseUrl}/admin/api/2024-01/orders.json?limit=250&page_info=${pageInfo}`
-        : url;
-
-      const res = await fetch(fetchUrl, {
+    // True cursor-based pagination — no arbitrary page limit
+    while (nextUrl) {
+      const res = await fetch(nextUrl, {
         headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' }
       });
 
@@ -818,14 +813,14 @@ async function shopifySyncOrders() {
       const data = await res.json();
       allShopifyOrders = allShopifyOrders.concat(data.orders || []);
 
-      // Check for next page via Link header
+      // Follow cursor pagination via Link header
+      nextUrl = null;
       const linkHeader = res.headers.get('link');
       if (linkHeader && linkHeader.includes('rel="next"')) {
-        const match = linkHeader.match(/page_info=([^>&]*)/);
-        pageInfo = match ? match[1] : null;
-        if (!pageInfo) break;
-      } else {
-        break;
+        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        if (nextMatch) {
+          nextUrl = nextMatch[1];
+        }
       }
     }
 
@@ -835,7 +830,7 @@ async function shopifySyncOrders() {
     for (const shopifyOrder of allShopifyOrders) {
       const shopifyOrderIdStr = String(shopifyOrder.id);
 
-      // Map Shopify fulfillment status to our status
+      // Map Shopify fulfillment status
       let status = 'Unfulfilled';
       if (shopifyOrder.fulfillment_status === 'fulfilled') {
         status = 'Delivered';
@@ -845,17 +840,37 @@ async function shopifySyncOrders() {
         status = 'Cancelled';
       }
 
-      // Use the REAL Shopify date — created_at is the order placement time
+      // Use the REAL Shopify date
       const shopifyDate = shopifyOrder.created_at || shopifyOrder.processed_at || shopifyOrder.updated_at;
+
+      // Shipping address object
+      const addr = shopifyOrder.shipping_address || {};
+      const shippingAddress = {
+        line1: addr.address1 || '',
+        line2: addr.address2 || '',
+        city: addr.city || '',
+        state: addr.province || '',
+        zip: addr.zip || '',
+        country: addr.country || '',
+      };
+
+      // Customer phone
+      const customerPhone = shopifyOrder.customer?.phone || addr.phone || shopifyOrder.phone || '';
+
+      // Total tax
+      const totalTax = parseFloat(shopifyOrder.total_tax || 0);
 
       // Check if order already exists
       const existingOrder = await db.collection('orders').findOne({ shopifyOrderId: shopifyOrderIdStr });
 
       if (existingOrder) {
-        // Update existing order with correct date and status if changed
         const updateFields = {};
         if (existingOrder.orderDate !== shopifyDate) updateFields.orderDate = shopifyDate;
         if (existingOrder.status !== status && !existingOrder.statusOverridden) updateFields.status = status;
+        // Patch new fields onto existing orders if missing
+        if (!existingOrder.shippingAddress) updateFields.shippingAddress = shippingAddress;
+        if (!existingOrder.customerPhone && customerPhone) updateFields.customerPhone = customerPhone;
+        if (!existingOrder.totalTax) updateFields.totalTax = totalTax;
         if (Object.keys(updateFields).length > 0) {
           updateFields.updatedAt = new Date().toISOString();
           await db.collection('orders').updateOne({ _id: existingOrder._id }, { $set: updateFields });
@@ -864,7 +879,7 @@ async function shopifySyncOrders() {
         continue;
       }
 
-      // Calculate per-line-item shipping split
+      // Calculate per-line-item splits
       const totalLineItems = (shopifyOrder.line_items || []).length || 1;
       const totalShipping = parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0);
       const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
@@ -878,19 +893,24 @@ async function shopifySyncOrders() {
           shopifyOrderId: shopifyOrderIdStr,
           sku: sku,
           productName: item.title || item.name,
+          variantName: item.variant_title || '',
           customerName: shopifyOrder.customer ? `${shopifyOrder.customer.first_name || ''} ${shopifyOrder.customer.last_name || ''}`.trim() : 'Unknown',
+          customerPhone: customerPhone,
           salePrice: parseFloat(item.price) * (item.quantity || 1),
           discount: totalDiscount / totalLineItems,
+          totalTax: totalTax / totalLineItems,
           status,
           shippingMethod: 'shopify',
           shippingCost: totalShipping / totalLineItems,
+          shippingAddress,
           isUrgent: false,
           manualCourierName: null,
           manualShippingCost: null,
           preparedBy: null,
           preparedByName: null,
-          destinationPincode: shopifyOrder.shipping_address?.zip || '',
-          destinationCity: shopifyOrder.shipping_address?.city || '',
+          trackingNumber: null,
+          destinationPincode: shippingAddress.zip,
+          destinationCity: shippingAddress.city,
           orderDate: shopifyDate,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
