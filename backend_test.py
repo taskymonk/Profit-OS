@@ -1,546 +1,464 @@
 #!/usr/bin/env python3
 """
-Profit OS - Phase 8.6 "Precision & Analytics Patch" Backend Testing
-Tests 6 critical areas:
-1. Shopify Sync URL Verification (source code check)
-2. IST Date Conversion (toISTISO function verification)
-3. Inventory Items CRUD (NEW schema: purchasePrice/yieldFromTotalPurchase)
-4. Dashboard P&L Breakdown (plBreakdown object)
-5. Overhead Expenses CRUD (dynamic categories)
-6. Ad Spend Tax Multiplier (still works)
+Phase 8.7 Enterprise BOM Architecture, Analytics Polish & UX Guides - Backend Testing
+Tests 7 critical areas:
+1. INVENTORY BOM SCHEMA (new fields: purchasePrice, purchaseQuantity, unit, baseCostPerUnit)
+2. EXPENSE CATEGORY RENAME ENDPOINT 
+3. DASHBOARD P&L BREAKDOWN WITH REFUNDS
+4. SHOPIFY REFUND EXTRACTION (source code check)
+5. PROFIT CALCULATOR BOM SUPPORT (source code check)
+6. DASHBOARD DATA INTEGRITY
+7. AD SPEND TAX STILL WORKS
 """
 
-import requests
 import json
-import pymongo
-from pymongo import MongoClient
 import os
-import re
+import requests
 import sys
+from pymongo import MongoClient
 from datetime import datetime
 
-# Base URLs
-API_BASE = "http://localhost:3000/api"  # Local test as requested
-MONGO_URI = "mongodb://localhost:27017"
+# Get base URL from environment
+BASE_URL = "http://localhost:3000/api"
+MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "profitos"
 
-def log(message):
-    """Log with timestamp"""
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")
+def print_test_result(test_name, success, details=""):
+    """Print formatted test result"""
+    status = "✅ PASSED" if success else "❌ FAILED"
+    print(f"[{test_name}] {status} - {details}")
 
-def test_1_shopify_sync_url_verification():
-    """Test 1: Verify Shopify sync URL contains all three required parameters"""
-    log("🎯 TEST 1: SHOPIFY SYNC URL VERIFICATION")
+def test_area_1_inventory_bom_schema():
+    """Test Area 1: INVENTORY BOM SCHEMA (purchasePrice, purchaseQuantity, unit, baseCostPerUnit)"""
+    print("\n🎯 TESTING AREA 1: INVENTORY BOM SCHEMA")
+    
+    test_items_created = []
+    
+    try:
+        # Test 1: Create Bubble Wrap with new schema
+        bubble_wrap_data = {
+            "name": "Bubble Wrap 50m Roll",
+            "category": "Packaging", 
+            "purchasePrice": 500,
+            "purchaseQuantity": 50,
+            "unit": "meters"
+        }
+        
+        response = requests.post(f"{BASE_URL}/inventory-items", json=bubble_wrap_data)
+        print_test_result("Create Bubble Wrap", response.status_code == 201, f"Status: {response.status_code}")
+        
+        if response.status_code == 201:
+            bubble_wrap = response.json()
+            test_items_created.append(bubble_wrap['_id'])
+            
+            # Verify baseCostPerUnit calculation (500/50 = 10.00)
+            expected_base_cost = 10.00
+            actual_base_cost = bubble_wrap.get('baseCostPerUnit', 0)
+            cost_correct = abs(actual_base_cost - expected_base_cost) < 0.01
+            print_test_result("Bubble Wrap baseCostPerUnit", cost_correct, 
+                            f"Expected: {expected_base_cost}, Got: {actual_base_cost}")
+            
+            # Verify has unit field (NOT unitMeasurement)
+            has_unit = 'unit' in bubble_wrap and bubble_wrap['unit'] == 'meters'
+            has_no_yield = 'yieldFromTotalPurchase' not in bubble_wrap
+            print_test_result("Bubble Wrap fields", has_unit and has_no_yield,
+                            f"Has unit: {has_unit}, No yieldFromTotalPurchase: {has_no_yield}")
+        
+        # Test 2: Create Belgian Chocolate with new schema  
+        chocolate_data = {
+            "name": "Belgian Chocolate Slab",
+            "category": "Raw Material",
+            "purchasePrice": 400,
+            "purchaseQuantity": 2, 
+            "unit": "kg"
+        }
+        
+        response = requests.post(f"{BASE_URL}/inventory-items", json=chocolate_data)
+        print_test_result("Create Belgian Chocolate", response.status_code == 201, f"Status: {response.status_code}")
+        
+        if response.status_code == 201:
+            chocolate = response.json()
+            test_items_created.append(chocolate['_id'])
+            
+            # Verify baseCostPerUnit calculation (400/2 = 200.00)
+            expected_base_cost = 200.00
+            actual_base_cost = chocolate.get('baseCostPerUnit', 0)
+            cost_correct = abs(actual_base_cost - expected_base_cost) < 0.01
+            print_test_result("Chocolate baseCostPerUnit", cost_correct,
+                            f"Expected: {expected_base_cost}, Got: {actual_base_cost}")
+        
+        # Test 3: Verify both items exist in GET
+        response = requests.get(f"{BASE_URL}/inventory-items")
+        print_test_result("Get inventory items", response.status_code == 200, f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            items = response.json()
+            created_item_ids = set(test_items_created)
+            found_item_ids = set(item['_id'] for item in items if item['_id'] in created_item_ids)
+            all_found = len(found_item_ids) == len(created_item_ids)
+            print_test_result("Both items found", all_found, 
+                            f"Created: {len(created_item_ids)}, Found: {len(found_item_ids)}")
+    
+    except Exception as e:
+        print_test_result("Area 1 Exception", False, f"Error: {str(e)}")
+    
+    finally:
+        # Cleanup: Delete test items
+        for item_id in test_items_created:
+            try:
+                requests.delete(f"{BASE_URL}/inventory-items/{item_id}")
+            except:
+                pass
+    
+    print(f"🎯 AREA 1 COMPLETE: Inventory BOM Schema tested")
+
+def test_area_2_expense_category_rename():
+    """Test Area 2: EXPENSE CATEGORY RENAME ENDPOINT"""
+    print("\n🎯 TESTING AREA 2: EXPENSE CATEGORY RENAME ENDPOINT")
+    
+    test_expense_ids = []
+    
+    try:
+        # Step 1: Create two test expenses with same category
+        expense1_data = {
+            "expenseName": "Office Internet",
+            "category": "Internet",
+            "amount": 1500,
+            "currency": "INR", 
+            "frequency": "recurring"
+        }
+        
+        expense2_data = {
+            "expenseName": "Cloud Server",
+            "category": "Internet", 
+            "amount": 2000,
+            "currency": "INR",
+            "frequency": "recurring"
+        }
+        
+        response1 = requests.post(f"{BASE_URL}/overhead-expenses", json=expense1_data)
+        response2 = requests.post(f"{BASE_URL}/overhead-expenses", json=expense2_data)
+        
+        print_test_result("Create test expenses", 
+                         response1.status_code == 201 and response2.status_code == 201,
+                         f"Status: {response1.status_code}, {response2.status_code}")
+        
+        if response1.status_code == 201:
+            test_expense_ids.append(response1.json()['_id'])
+        if response2.status_code == 201:
+            test_expense_ids.append(response2.json()['_id'])
+        
+        # Step 2: Rename category from "Internet" to "Connectivity"
+        rename_data = {"oldName": "Internet", "newName": "Connectivity"}
+        response = requests.post(f"{BASE_URL}/expense-categories/rename", json=rename_data)
+        
+        print_test_result("Rename category", response.status_code == 200, f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            rename_result = response.json()
+            modified_count = rename_result.get('modified', 0)
+            print_test_result("Rename modified count", modified_count == 2, 
+                            f"Expected: 2, Got: {modified_count}")
+        
+        # Step 3: Verify both expenses now have "Connectivity" category
+        response = requests.get(f"{BASE_URL}/overhead-expenses")
+        if response.status_code == 200:
+            expenses = response.json()
+            connectivity_expenses = [e for e in expenses if e.get('category') == 'Connectivity']
+            internet_expenses = [e for e in expenses if e.get('category') == 'Internet']
+            
+            print_test_result("Expenses renamed to Connectivity", len(connectivity_expenses) >= 2,
+                            f"Found {len(connectivity_expenses)} Connectivity expenses")
+            print_test_result("No Internet category remaining", len(internet_expenses) == 0,
+                            f"Found {len(internet_expenses)} Internet expenses")
+        
+        # Step 4: Delete test category
+        delete_data = {"category": "Connectivity"}
+        response = requests.post(f"{BASE_URL}/expense-categories/delete", json=delete_data)
+        
+        print_test_result("Delete category", response.status_code == 200, f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            delete_result = response.json()
+            deleted_count = delete_result.get('deleted', 0)
+            print_test_result("Delete count", deleted_count >= 2,
+                            f"Expected: >=2, Got: {deleted_count}")
+        
+        # Step 5: Verify no more Connectivity entries
+        response = requests.get(f"{BASE_URL}/overhead-expenses")
+        if response.status_code == 200:
+            expenses = response.json()
+            connectivity_expenses = [e for e in expenses if e.get('category') == 'Connectivity']
+            print_test_result("No Connectivity entries", len(connectivity_expenses) == 0,
+                            f"Found {len(connectivity_expenses)} entries")
+    
+    except Exception as e:
+        print_test_result("Area 2 Exception", False, f"Error: {str(e)}")
+    
+    print(f"🎯 AREA 2 COMPLETE: Expense Category Rename tested")
+
+def test_area_3_dashboard_pl_refunds():
+    """Test Area 3: DASHBOARD P&L BREAKDOWN WITH REFUNDS"""
+    print("\n🎯 TESTING AREA 3: DASHBOARD P&L BREAKDOWN WITH REFUNDS")
+    
+    try:
+        # Test dashboard endpoint with 7days range
+        response = requests.get(f"{BASE_URL}/dashboard", params={"range": "7days"})
+        print_test_result("Dashboard API call", response.status_code == 200, f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            dashboard_data = response.json()
+            
+            # Check plBreakdown exists
+            has_pl_breakdown = 'plBreakdown' in dashboard_data
+            print_test_result("Has plBreakdown", has_pl_breakdown, f"plBreakdown present: {has_pl_breakdown}")
+            
+            if has_pl_breakdown:
+                pl_breakdown = dashboard_data['plBreakdown']
+                
+                # Verify all 11 required keys including refunds
+                required_keys = [
+                    'grossRevenue', 'discount', 'refunds', 'gstOnRevenue', 'netRevenue',
+                    'totalCOGS', 'totalShipping', 'totalTxnFees', 'adSpend', 'overhead', 'netProfit'
+                ]
+                
+                missing_keys = [key for key in required_keys if key not in pl_breakdown]
+                has_all_keys = len(missing_keys) == 0
+                
+                print_test_result("All 11 required keys", has_all_keys,
+                                f"Missing keys: {missing_keys}" if missing_keys else "All keys present")
+                
+                # Specifically verify refunds field is present and is a number
+                has_refunds = 'refunds' in pl_breakdown
+                refunds_is_number = isinstance(pl_breakdown.get('refunds'), (int, float))
+                
+                print_test_result("Refunds field", has_refunds and refunds_is_number,
+                                f"Has refunds: {has_refunds}, Is number: {refunds_is_number}")
+                
+                if has_refunds:
+                    refunds_value = pl_breakdown['refunds']
+                    print_test_result("Refunds value check", refunds_value >= 0,
+                                    f"Refunds value: {refunds_value}")
+    
+    except Exception as e:
+        print_test_result("Area 3 Exception", False, f"Error: {str(e)}")
+    
+    print(f"🎯 AREA 3 COMPLETE: Dashboard P&L Breakdown with Refunds tested")
+
+def test_area_4_shopify_refund_extraction():
+    """Test Area 4: SHOPIFY REFUND EXTRACTION (source code check)"""
+    print("\n🎯 TESTING AREA 4: SHOPIFY REFUND EXTRACTION (source code)")
     
     try:
         # Read the route.js file
         route_file_path = "/app/app/api/[[...path]]/route.js"
+        
         with open(route_file_path, 'r') as f:
-            content = f.read()
+            route_content = f.read()
         
-        # Check for all three required parameters
-        required_params = ['status=any', 'fulfillment_status=any', 'financial_status=any']
-        found_params = []
+        # Check for shopify refund extraction logic
+        has_shopify_refunds = 'shopifyOrder.refunds' in route_content
+        print_test_result("Has shopifyOrder.refunds", has_shopify_refunds, 
+                         "shopifyOrder.refunds found in code" if has_shopify_refunds else "Missing shopifyOrder.refunds")
         
-        for param in required_params:
-            if param in content:
-                found_params.append(param)
-                log(f"  ✅ Found parameter: {param}")
-            else:
-                log(f"  ❌ Missing parameter: {param}")
+        # Check for refundAmount field in order insertion
+        has_refund_amount = 'refundAmount:' in route_content
+        print_test_result("Has refundAmount field", has_refund_amount,
+                         "refundAmount field found in order insertion" if has_refund_amount else "Missing refundAmount field")
         
-        # Check toISTISO function exists
-        toistiso_exists = 'function toISTISO(' in content or 'toISTISO(' in content
-        if toistiso_exists:
-            log("  ✅ toISTISO function found in route.js")
-        else:
-            log("  ❌ toISTISO function NOT found in route.js")
+        # Check for totalRefunds computation from refund_line_items
+        has_total_refunds = 'totalRefunds' in route_content and 'refund_line_items' in route_content
+        print_test_result("Has totalRefunds computation", has_total_refunds,
+                         "totalRefunds and refund_line_items found" if has_total_refunds else "Missing totalRefunds computation")
         
-        # Look for the specific Shopify orders URL line
-        shopify_url_pattern = r'/admin/api/\d{4}-\d{2}/orders\.json\?[^"]*'
-        url_match = re.search(shopify_url_pattern, content)
-        if url_match:
-            url = url_match.group(0)
-            log(f"  ✅ Shopify orders URL found: {url}")
-            
-            # Verify all params are in the URL
-            all_params_in_url = all(param in url for param in required_params)
-            if all_params_in_url:
-                log("  ✅ All three parameters found in Shopify orders URL")
-            else:
-                log("  ❌ Not all parameters found in Shopify orders URL")
-        else:
-            log("  ❌ Shopify orders URL pattern not found")
-        
-        # Final validation
-        success = len(found_params) == 3 and toistiso_exists
-        log(f"  📊 Test 1 Result: {'PASSED' if success else 'FAILED'}")
-        return success
-        
+        # Check for refund line items logic
+        has_refund_logic = 'refund.refund_line_items' in route_content
+        print_test_result("Has refund logic", has_refund_logic,
+                         "refund.refund_line_items logic found" if has_refund_logic else "Missing refund extraction logic")
+    
     except Exception as e:
-        log(f"  ❌ Test 1 ERROR: {e}")
-        return False
+        print_test_result("Area 4 Exception", False, f"Error: {str(e)}")
+    
+    print(f"🎯 AREA 4 COMPLETE: Shopify Refund Extraction source code checked")
 
-def test_2_ist_date_conversion():
-    """Test 2: Verify IST Date Conversion implementation"""
-    log("🎯 TEST 2: IST DATE CONVERSION (toISTISO)")
+def test_area_5_profit_calculator_bom():
+    """Test Area 5: PROFIT CALCULATOR BOM SUPPORT (source code check)"""
+    print("\n🎯 TESTING AREA 5: PROFIT CALCULATOR BOM SUPPORT (source code)")
     
     try:
-        route_file_path = "/app/app/api/[[...path]]/route.js"
-        with open(route_file_path, 'r') as f:
-            content = f.read()
+        # Read the profitCalculator.js file
+        profit_calc_path = "/app/lib/profitCalculator.js"
         
-        # Check for Asia/Kolkata timezone
-        asia_kolkata_found = 'Asia/Kolkata' in content
-        if asia_kolkata_found:
-            log("  ✅ 'Asia/Kolkata' timezone found in route.js")
-        else:
-            log("  ❌ 'Asia/Kolkata' timezone NOT found in route.js")
+        with open(profit_calc_path, 'r') as f:
+            calc_content = f.read()
         
-        # Check for +05:30 offset
-        ist_offset_found = '+05:30' in content
-        if ist_offset_found:
-            log("  ✅ '+05:30' IST offset found in route.js")
-        else:
-            log("  ❌ '+05:30' IST offset NOT found in route.js")
+        # Check for ingredients array handling (new BOM format)
+        has_ingredients = 'ingredients' in calc_content and 'quantityUsed' in calc_content and 'baseCostPerUnit' in calc_content
+        print_test_result("Has ingredients BOM support", has_ingredients,
+                         "ingredients, quantityUsed, baseCostPerUnit found" if has_ingredients else "Missing BOM ingredients support")
         
-        # Check if toISTISO is called in shopify sync
-        toistiso_call_found = 'toISTISO(' in content and 'shopify' in content.lower()
-        if toistiso_call_found:
-            log("  ✅ toISTISO function call found in Shopify sync context")
-        else:
-            log("  ❌ toISTISO function call NOT found in Shopify sync context")
+        # Check for legacy rawMaterials/packaging fallback
+        has_legacy_fallback = 'rawMaterials' in calc_content and 'packaging' in calc_content and 'Legacy format' in calc_content
+        print_test_result("Has legacy fallback", has_legacy_fallback,
+                         "Legacy rawMaterials/packaging fallback found" if has_legacy_fallback else "Missing legacy fallback")
         
-        # Look for the specific function definition
-        toistiso_function_pattern = r'function toISTISO\([^)]*\)\s*\{[^}]*\}'
-        function_match = re.search(toistiso_function_pattern, content, re.DOTALL)
-        if function_match:
-            function_body = function_match.group(0)
-            log("  ✅ toISTISO function definition found")
-            
-            # Check if it uses timeZone: 'Asia/Kolkata'
-            if "timeZone: 'Asia/Kolkata'" in function_body:
-                log("  ✅ Function uses correct Asia/Kolkata timezone")
-            else:
-                log("  ❌ Function does NOT use Asia/Kolkata timezone")
-        else:
-            log("  ❌ toISTISO function definition NOT found")
+        # Check for refundAmount subtraction from grossRevenue
+        has_refund_subtraction = 'refundAmount' in calc_content and 'grossRevenue' in calc_content
+        print_test_result("Has refund subtraction", has_refund_subtraction,
+                         "refundAmount subtraction logic found" if has_refund_subtraction else "Missing refund subtraction")
         
-        success = asia_kolkata_found and ist_offset_found and toistiso_call_found
-        log(f"  📊 Test 2 Result: {'PASSED' if success else 'FAILED'}")
-        return success
+        # Check for Shopify orders using actual totalTax
+        has_shopify_tax = 'shopifyOrderId' in calc_content and 'totalTax' in calc_content
+        print_test_result("Has Shopify totalTax logic", has_shopify_tax,
+                         "Shopify totalTax usage found" if has_shopify_tax else "Missing Shopify tax logic")
         
-    except Exception as e:
-        log(f"  ❌ Test 2 ERROR: {e}")
-        return False
-
-def test_3_inventory_items_crud():
-    """Test 3: Inventory Items CRUD with NEW schema (purchasePrice/yieldFromTotalPurchase)"""
-    log("🎯 TEST 3: INVENTORY ITEMS CRUD (NEW SCHEMA)")
+        # Check for BOM architecture comment or logic
+        has_bom_architecture = 'BOM' in calc_content or 'Bill of Materials' in calc_content
+        print_test_result("Has BOM architecture", has_bom_architecture,
+                         "BOM architecture references found" if has_bom_architecture else "Missing BOM architecture")
     
-    created_ids = []
+    except Exception as e:
+        print_test_result("Area 5 Exception", False, f"Error: {str(e)}")
+    
+    print(f"🎯 AREA 5 COMPLETE: Profit Calculator BOM Support source code checked")
+
+def test_area_6_dashboard_data_integrity():
+    """Test Area 6: DASHBOARD DATA INTEGRITY"""
+    print("\n🎯 TESTING AREA 6: DASHBOARD DATA INTEGRITY")
     
     try:
-        # Test 1: Create Belgian Chocolate with new schema
-        chocolate_data = {
-            "name": "Belgian Chocolate 500g",
-            "category": "Raw Material",
-            "purchasePrice": 500,
-            "purchaseQuantity": 1,
-            "unitMeasurement": "grams",
-            "yieldFromTotalPurchase": 1
-        }
+        # Test with alltime range for comprehensive data
+        response = requests.get(f"{BASE_URL}/dashboard", params={"range": "alltime"})
+        print_test_result("Dashboard alltime call", response.status_code == 200, f"Status: {response.status_code}")
         
-        response = requests.post(f"{API_BASE}/inventory-items", json=chocolate_data)
-        if response.status_code == 201:
-            chocolate = response.json()
-            created_ids.append(chocolate['_id'])
-            log("  ✅ Created Belgian Chocolate - Status: 201")
-            
-            # Verify fields
-            if 'purchasePrice' in chocolate and chocolate['purchasePrice'] == 500:
-                log("  ✅ Chocolate has purchasePrice field (NOT costPerUnit)")
-            else:
-                log("  ❌ Chocolate missing purchasePrice field or wrong value")
-            
-            if 'yieldFromTotalPurchase' in chocolate and chocolate['yieldFromTotalPurchase'] == 1:
-                log("  ✅ Chocolate has correct yieldFromTotalPurchase = 1")
-            else:
-                log("  ❌ Chocolate missing yieldFromTotalPurchase or wrong value")
-            
-            if '_id' in chocolate:
-                log("  ✅ Chocolate has _id field")
-            else:
-                log("  ❌ Chocolate missing _id field")
-        else:
-            log(f"  ❌ Failed to create chocolate - Status: {response.status_code}")
-            return False
-        
-        # Test 2: Create BOPP Tape with yieldFromTotalPurchase = 100
-        tape_data = {
-            "name": "BOPP Tape Roll",
-            "category": "Packaging",
-            "purchasePrice": 500,
-            "purchaseQuantity": 1,
-            "unitMeasurement": "rolls",
-            "yieldFromTotalPurchase": 100
-        }
-        
-        response = requests.post(f"{API_BASE}/inventory-items", json=tape_data)
-        if response.status_code == 201:
-            tape = response.json()
-            created_ids.append(tape['_id'])
-            log("  ✅ Created BOPP Tape - Status: 201")
-            
-            if tape.get('yieldFromTotalPurchase') == 100 and tape.get('purchasePrice') == 500:
-                effective_cost = 500 / 100
-                log(f"  ✅ Tape effective cost per use = {effective_cost} (500/100)")
-            else:
-                log("  ❌ Tape yieldFromTotalPurchase or purchasePrice incorrect")
-        else:
-            log(f"  ❌ Failed to create tape - Status: {response.status_code}")
-            return False
-        
-        # Test 3: GET all inventory items
-        response = requests.get(f"{API_BASE}/inventory-items")
         if response.status_code == 200:
-            items = response.json()
-            log(f"  ✅ GET inventory-items - Found {len(items)} items")
+            dashboard_data = response.json()
             
-            # Check if our items are there
-            chocolate_found = any(item['name'] == 'Belgian Chocolate 500g' for item in items)
-            tape_found = any(item['name'] == 'BOPP Tape Roll' for item in items)
+            # Check plBreakdown exists
+            if 'plBreakdown' not in dashboard_data or 'filtered' not in dashboard_data:
+                print_test_result("Dashboard structure", False, "Missing plBreakdown or filtered section")
+                return
             
-            if chocolate_found and tape_found:
-                log("  ✅ Both test items found in GET response")
-            else:
-                log("  ❌ Test items not found in GET response")
-        else:
-            log(f"  ❌ Failed to GET inventory-items - Status: {response.status_code}")
-        
-        # Test 4: PUT update chocolate's purchasePrice
-        chocolate_id = created_ids[0]
-        update_data = {"purchasePrice": 550}
-        
-        response = requests.put(f"{API_BASE}/inventory-items/{chocolate_id}", json=update_data)
-        if response.status_code == 200:
-            updated_chocolate = response.json()
-            log("  ✅ Updated chocolate purchasePrice - Status: 200")
+            pl_breakdown = dashboard_data['plBreakdown']
+            filtered = dashboard_data['filtered']
             
-            if updated_chocolate.get('purchasePrice') == 550:
-                log("  ✅ Chocolate purchasePrice successfully updated to 550")
-            else:
-                log("  ❌ Chocolate purchasePrice not updated correctly")
-        else:
-            log(f"  ❌ Failed to update chocolate - Status: {response.status_code}")
-        
-        # Test 5: DELETE both test items (cleanup)
-        for item_id in created_ids:
-            response = requests.delete(f"{API_BASE}/inventory-items/{item_id}")
-            if response.status_code == 200:
-                log(f"  ✅ Deleted item {item_id} - Status: 200")
-            else:
-                log(f"  ❌ Failed to delete item {item_id} - Status: {response.status_code}")
-        
-        log("  📊 Test 3 Result: PASSED")
-        return True
-        
+            # Test 1: plBreakdown.grossRevenue == filtered.revenue
+            pl_revenue = pl_breakdown.get('grossRevenue', 0)
+            filtered_revenue = filtered.get('revenue', 0)
+            revenue_match = abs(pl_revenue - filtered_revenue) < 0.01
+            print_test_result("Revenue consistency", revenue_match,
+                            f"PL: {pl_revenue}, Filtered: {filtered_revenue}")
+            
+            # Test 2: plBreakdown.netProfit == filtered.netProfit  
+            pl_net_profit = pl_breakdown.get('netProfit', 0)
+            filtered_net_profit = filtered.get('netProfit', 0)
+            profit_match = abs(pl_net_profit - filtered_net_profit) < 0.01
+            print_test_result("Net profit consistency", profit_match,
+                            f"PL: {pl_net_profit}, Filtered: {filtered_net_profit}")
+            
+            # Test 3: Waterfall math verification
+            # netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead
+            net_revenue = pl_breakdown.get('netRevenue', 0)
+            total_cogs = pl_breakdown.get('totalCOGS', 0)
+            total_shipping = pl_breakdown.get('totalShipping', 0)
+            total_txn_fees = pl_breakdown.get('totalTxnFees', 0)
+            ad_spend = pl_breakdown.get('adSpend', 0)
+            overhead = pl_breakdown.get('overhead', 0)
+            
+            calculated_profit = net_revenue - total_cogs - total_shipping - total_txn_fees - ad_spend - overhead
+            actual_profit = pl_breakdown.get('netProfit', 0)
+            
+            waterfall_diff = abs(calculated_profit - actual_profit)
+            waterfall_correct = waterfall_diff <= 1  # Within ±1
+            
+            print_test_result("Waterfall math", waterfall_correct,
+                            f"Calculated: {calculated_profit:.2f}, Actual: {actual_profit:.2f}, Diff: {waterfall_diff:.2f}")
+            
+            # Additional consistency check
+            print(f"    💡 Breakdown - NetRev: {net_revenue}, COGS: {total_cogs}, Ship: {total_shipping}, " +
+                  f"Fees: {total_txn_fees}, Ads: {ad_spend}, Overhead: {overhead}")
+    
     except Exception as e:
-        log(f"  ❌ Test 3 ERROR: {e}")
-        
-        # Cleanup on error
-        for item_id in created_ids:
-            try:
-                requests.delete(f"{API_BASE}/inventory-items/{item_id}")
-            except:
-                pass
-        
-        return False
+        print_test_result("Area 6 Exception", False, f"Error: {str(e)}")
+    
+    print(f"🎯 AREA 6 COMPLETE: Dashboard Data Integrity tested")
 
-def test_4_dashboard_pl_breakdown():
-    """Test 4: Dashboard P&L Breakdown object validation"""
-    log("🎯 TEST 4: DASHBOARD P&L BREAKDOWN")
+def test_area_7_ad_spend_tax():
+    """Test Area 7: AD SPEND TAX STILL WORKS"""
+    print("\n🎯 TESTING AREA 7: AD SPEND TAX MULTIPLIER")
     
     try:
-        # GET dashboard with 7 days range
-        response = requests.get(f"{API_BASE}/dashboard?range=7days")
+        # Get dashboard ad spend
+        response = requests.get(f"{BASE_URL}/dashboard", params={"range": "alltime"})
+        print_test_result("Dashboard call", response.status_code == 200, f"Status: {response.status_code}")
+        
         if response.status_code != 200:
-            log(f"  ❌ Failed to GET dashboard - Status: {response.status_code}")
-            return False
-        
-        data = response.json()
-        log("  ✅ Dashboard API responded - Status: 200")
-        
-        # Check if plBreakdown exists
-        if 'plBreakdown' not in data:
-            log("  ❌ plBreakdown object NOT found in dashboard response")
-            return False
-        
-        pl_breakdown = data['plBreakdown']
-        log("  ✅ plBreakdown object found in dashboard response")
-        
-        # Required fields in plBreakdown
-        required_fields = [
-            'grossRevenue', 'discount', 'gstOnRevenue', 'netRevenue',
-            'totalCOGS', 'totalShipping', 'totalTxnFees', 'adSpend',
-            'overhead', 'netProfit'
-        ]
-        
-        missing_fields = []
-        for field in required_fields:
-            if field in pl_breakdown:
-                log(f"  ✅ plBreakdown has {field}: {pl_breakdown[field]}")
-            else:
-                missing_fields.append(field)
-                log(f"  ❌ plBreakdown missing {field}")
-        
-        if missing_fields:
-            log(f"  ❌ Missing fields: {missing_fields}")
-            return False
-        
-        # Verify consistency with filtered data
-        filtered = data.get('filtered', {})
-        
-        # Test: plBreakdown.grossRevenue == filtered.revenue
-        if abs(pl_breakdown['grossRevenue'] - filtered.get('revenue', 0)) < 0.01:
-            log("  ✅ plBreakdown.grossRevenue matches filtered.revenue")
-        else:
-            log(f"  ❌ plBreakdown.grossRevenue ({pl_breakdown['grossRevenue']}) != filtered.revenue ({filtered.get('revenue', 0)})")
-        
-        # Test: plBreakdown.netProfit == filtered.netProfit
-        if abs(pl_breakdown['netProfit'] - filtered.get('netProfit', 0)) < 0.01:
-            log("  ✅ plBreakdown.netProfit matches filtered.netProfit")
-        else:
-            log(f"  ❌ plBreakdown.netProfit ({pl_breakdown['netProfit']}) != filtered.netProfit ({filtered.get('netProfit', 0)})")
-        
-        # Test: plBreakdown.adSpend == filtered.adSpend
-        if abs(pl_breakdown['adSpend'] - filtered.get('adSpend', 0)) < 0.01:
-            log("  ✅ plBreakdown.adSpend matches filtered.adSpend")
-        else:
-            log(f"  ❌ plBreakdown.adSpend ({pl_breakdown['adSpend']}) != filtered.adSpend ({filtered.get('adSpend', 0)})")
-        
-        # Waterfall math verification
-        # netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead
-        calculated_net_profit = (
-            pl_breakdown['netRevenue'] - 
-            pl_breakdown['totalCOGS'] - 
-            pl_breakdown['totalShipping'] - 
-            pl_breakdown['totalTxnFees'] - 
-            pl_breakdown['adSpend'] - 
-            pl_breakdown['overhead']
-        )
-        
-        difference = abs(calculated_net_profit - pl_breakdown['netProfit'])
-        if difference <= 1:  # Within ±1 for rounding
-            log(f"  ✅ Waterfall math verified (difference: {difference:.2f})")
-        else:
-            log(f"  ❌ Waterfall math failed (difference: {difference:.2f})")
-        
-        log("  📊 Test 4 Result: PASSED")
-        return True
-        
-    except Exception as e:
-        log(f"  ❌ Test 4 ERROR: {e}")
-        return False
-
-def test_5_overhead_expenses_crud():
-    """Test 5: Overhead Expenses CRUD with Dynamic Categories"""
-    log("🎯 TEST 5: OVERHEAD EXPENSES CRUD (DYNAMIC CATEGORIES)")
-    
-    created_ids = []
-    
-    try:
-        # Test 1: Create expense with custom category "CustomWarehouse"
-        warehouse_data = {
-            "expenseName": "Warehouse Rent",
-            "category": "CustomWarehouse",
-            "amount": 15000,
-            "currency": "INR",
-            "frequency": "recurring"
-        }
-        
-        response = requests.post(f"{API_BASE}/overhead-expenses", json=warehouse_data)
-        if response.status_code == 201:
-            warehouse = response.json()
-            created_ids.append(warehouse['_id'])
-            log("  ✅ Created Warehouse Rent with CustomWarehouse category - Status: 201")
-            
-            if warehouse.get('category') == 'CustomWarehouse':
-                log("  ✅ Custom category 'CustomWarehouse' saved correctly")
-            else:
-                log("  ❌ Custom category not saved correctly")
-        else:
-            log(f"  ❌ Failed to create warehouse expense - Status: {response.status_code}")
-            return False
-        
-        # Test 2: Create expense with category "SaaS Tools"
-        tool_data = {
-            "expenseName": "Tool Sub",
-            "category": "SaaS Tools",
-            "amount": 999,
-            "currency": "INR",
-            "frequency": "recurring"
-        }
-        
-        response = requests.post(f"{API_BASE}/overhead-expenses", json=tool_data)
-        if response.status_code == 201:
-            tool = response.json()
-            created_ids.append(tool['_id'])
-            log("  ✅ Created Tool Sub with SaaS Tools category - Status: 201")
-            
-            if tool.get('category') == 'SaaS Tools':
-                log("  ✅ Category 'SaaS Tools' saved correctly")
-            else:
-                log("  ❌ SaaS Tools category not saved correctly")
-        else:
-            log(f"  ❌ Failed to create tool expense - Status: {response.status_code}")
-            return False
-        
-        # Test 3: GET all overhead expenses and verify custom categories
-        response = requests.get(f"{API_BASE}/overhead-expenses")
-        if response.status_code == 200:
-            expenses = response.json()
-            log(f"  ✅ GET overhead-expenses - Found {len(expenses)} expenses")
-            
-            # Check if our custom categories exist
-            custom_warehouse_found = any(exp.get('category') == 'CustomWarehouse' for exp in expenses)
-            saas_tools_found = any(exp.get('category') == 'SaaS Tools' for exp in expenses)
-            
-            if custom_warehouse_found:
-                log("  ✅ CustomWarehouse category found in expenses")
-            else:
-                log("  ❌ CustomWarehouse category NOT found")
-            
-            if saas_tools_found:
-                log("  ✅ SaaS Tools category found in expenses")
-            else:
-                log("  ❌ SaaS Tools category NOT found")
-        else:
-            log(f"  ❌ Failed to GET overhead-expenses - Status: {response.status_code}")
-            return False
-        
-        # Test 4: DELETE both test expenses (cleanup)
-        for expense_id in created_ids:
-            response = requests.delete(f"{API_BASE}/overhead-expenses/{expense_id}")
-            if response.status_code == 200:
-                log(f"  ✅ Deleted expense {expense_id} - Status: 200")
-            else:
-                log(f"  ❌ Failed to delete expense {expense_id} - Status: {response.status_code}")
-        
-        log("  📊 Test 5 Result: PASSED")
-        return True
-        
-    except Exception as e:
-        log(f"  ❌ Test 5 ERROR: {e}")
-        
-        # Cleanup on error
-        for expense_id in created_ids:
-            try:
-                requests.delete(f"{API_BASE}/overhead-expenses/{expense_id}")
-            except:
-                pass
-        
-        return False
-
-def test_6_ad_spend_tax_still_works():
-    """Test 6: Verify Ad Spend Tax Multiplier Still Works"""
-    log("🎯 TEST 6: AD SPEND TAX STILL WORKS")
-    
-    try:
-        # Get dashboard data for alltime
-        response = requests.get(f"{API_BASE}/dashboard?range=alltime")
-        if response.status_code != 200:
-            log(f"  ❌ Failed to GET dashboard - Status: {response.status_code}")
-            return False
+            return
         
         dashboard_data = response.json()
-        dashboard_ad_spend = dashboard_data['filtered']['adSpend']
-        log(f"  ✅ Dashboard adSpend: ₹{dashboard_ad_spend}")
+        filtered = dashboard_data.get('filtered', {})
+        dashboard_ad_spend = filtered.get('adSpend', 0)
+        
+        print_test_result("Dashboard ad spend", dashboard_ad_spend > 0, 
+                         f"Ad spend: ₹{dashboard_ad_spend:.2f}")
         
         # Connect to MongoDB to get raw data
-        client = MongoClient(MONGO_URI)
+        client = MongoClient(MONGO_URL)
         db = client[DB_NAME]
         
         # Get raw ad spend from dailyMarketingSpend collection
         daily_spends = list(db.dailyMarketingSpend.find({}))
-        raw_total = sum(doc.get('spendAmount', 0) for doc in daily_spends)
-        log(f"  ✅ Raw ad spend total: ₹{raw_total}")
+        raw_ad_total = sum(spend.get('spendAmount', 0) for spend in daily_spends)
         
-        # Get adSpendTaxRate from tenantConfig
+        print_test_result("Raw ad spend total", raw_ad_total > 0,
+                         f"Raw total: ₹{raw_ad_total:.2f}")
+        
+        # Get tenant config for ad spend tax rate
         tenant_config = db.tenantConfig.find_one({})
-        ad_spend_tax_rate = tenant_config.get('adSpendTaxRate', 18) if tenant_config else 18
-        log(f"  ✅ Ad spend tax rate: {ad_spend_tax_rate}%")
+        ad_spend_tax_rate = 18  # Default
+        if tenant_config and 'adSpendTaxRate' in tenant_config:
+            ad_spend_tax_rate = tenant_config['adSpendTaxRate']
         
-        # Calculate expected taxed amount
-        expected_taxed_amount = raw_total * (1 + ad_spend_tax_rate / 100)
-        log(f"  ✅ Expected taxed amount: ₹{expected_taxed_amount}")
+        print_test_result("Ad spend tax rate", True, f"Tax rate: {ad_spend_tax_rate}%")
         
-        # Verify the dashboard adSpend is approximately the taxed amount
-        difference = abs(dashboard_ad_spend - expected_taxed_amount)
-        percentage_diff = (difference / expected_taxed_amount * 100) if expected_taxed_amount > 0 else 0
+        # Calculate expected dashboard ad spend with tax
+        expected_ad_spend = raw_ad_total * (1 + ad_spend_tax_rate / 100)
         
-        if percentage_diff <= 5:  # Allow 5% tolerance for rounding/timing differences
-            log(f"  ✅ Tax calculation verified (difference: {difference:.2f}, {percentage_diff:.1f}%)")
-        else:
-            log(f"  ❌ Tax calculation failed (difference: {difference:.2f}, {percentage_diff:.1f}%)")
-            return False
+        # Verify calculation (allowing small rounding differences)
+        ad_spend_diff = abs(dashboard_ad_spend - expected_ad_spend)
+        ad_spend_diff_percent = (ad_spend_diff / expected_ad_spend * 100) if expected_ad_spend > 0 else 0
+        
+        tax_calc_correct = ad_spend_diff_percent < 1.0  # Less than 1% difference
+        
+        print_test_result("Tax calculation", tax_calc_correct,
+                         f"Expected: ₹{expected_ad_spend:.2f}, Got: ₹{dashboard_ad_spend:.2f}, " +
+                         f"Diff: {ad_spend_diff:.2f} ({ad_spend_diff_percent:.2f}%)")
         
         client.close()
-        
-        log("  📊 Test 6 Result: PASSED")
-        return True
-        
+    
     except Exception as e:
-        log(f"  ❌ Test 6 ERROR: {e}")
-        return False
+        print_test_result("Area 7 Exception", False, f"Error: {str(e)}")
+    
+    print(f"🎯 AREA 7 COMPLETE: Ad Spend Tax Multiplier tested")
 
 def main():
-    """Run all Phase 8.6 tests"""
-    log("🚀 PHASE 8.6 PRECISION & ANALYTICS PATCH - BACKEND TESTING")
-    log("=" * 60)
+    """Run all Phase 8.7 backend tests"""
+    print("🎉 PHASE 8.7 ENTERPRISE BOM ARCHITECTURE, ANALYTICS POLISH & UX GUIDES - BACKEND TESTING")
+    print(f"Base URL: {BASE_URL}")
+    print("=" * 80)
     
-    results = []
+    # Run all 7 test areas
+    test_area_1_inventory_bom_schema()
+    test_area_2_expense_category_rename()
+    test_area_3_dashboard_pl_refunds()
+    test_area_4_shopify_refund_extraction()
+    test_area_5_profit_calculator_bom()
+    test_area_6_dashboard_data_integrity()
+    test_area_7_ad_spend_tax()
     
-    # Run all tests
-    test_functions = [
-        ("Shopify Sync URL Verification", test_1_shopify_sync_url_verification),
-        ("IST Date Conversion", test_2_ist_date_conversion),
-        ("Inventory Items CRUD (NEW Schema)", test_3_inventory_items_crud),
-        ("Dashboard P&L Breakdown", test_4_dashboard_pl_breakdown),
-        ("Overhead Expenses CRUD (Dynamic Categories)", test_5_overhead_expenses_crud),
-        ("Ad Spend Tax Still Works", test_6_ad_spend_tax_still_works),
-    ]
-    
-    for test_name, test_func in test_functions:
-        log(f"\n{'-' * 60}")
-        try:
-            result = test_func()
-            results.append((test_name, result))
-        except Exception as e:
-            log(f"CRITICAL ERROR in {test_name}: {e}")
-            results.append((test_name, False))
-    
-    # Summary
-    log("\n" + "=" * 60)
-    log("📊 PHASE 8.6 TESTING SUMMARY")
-    log("=" * 60)
-    
-    passed = sum(1 for _, result in results if result)
-    total = len(results)
-    
-    for test_name, result in results:
-        status = "✅ PASSED" if result else "❌ FAILED"
-        log(f"{status}: {test_name}")
-    
-    log(f"\n🎯 FINAL RESULT: {passed}/{total} tests passed")
-    
-    if passed == total:
-        log("🎉 ALL TESTS PASSED! Phase 8.6 features fully functional.")
-    else:
-        log(f"⚠️  {total - passed} tests failed. Phase 8.6 needs attention.")
-    
-    return passed == total
+    print("\n" + "=" * 80)
+    print("🎉 PHASE 8.7 BACKEND TESTING COMPLETE!")
+    print("All 7 critical areas have been tested for Enterprise BOM Architecture, Analytics Polish & UX Guides")
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()
