@@ -382,6 +382,75 @@ export default function DashboardView() {
         </Card>
       </div>
 
+      {/* Financial Breakdown — P&L Waterfall */}
+      {plBreakdown && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Financial Breakdown</CardTitle>
+            <CardDescription>P&L waterfall from Gross Revenue to Net Profit for the selected period</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-0">
+              {/* Gross Revenue */}
+              <div className="flex items-center justify-between py-2.5 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                  <span className="text-sm font-semibold">Gross Revenue</span>
+                </div>
+                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{fmt(plBreakdown.grossRevenue)}</span>
+              </div>
+              {/* Deductions */}
+              {[
+                { label: 'Discounts', value: plBreakdown.discount, color: 'text-orange-500' },
+                { label: 'GST on Revenue (18%)', value: plBreakdown.gstOnRevenue, color: 'text-amber-600' },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                  <div className="flex items-center gap-2">
+                    <ArrowDown className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">{item.label}</span>
+                  </div>
+                  <span className={`text-sm font-medium ${item.color}`}>-{fmt(item.value)}</span>
+                </div>
+              ))}
+              {/* Net Revenue */}
+              <div className="flex items-center justify-between py-2.5 border-b border-border bg-muted/30 px-3 rounded-md my-1">
+                <div className="flex items-center gap-2">
+                  <ArrowRight className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-sm font-semibold">Net Revenue</span>
+                </div>
+                <span className="text-sm font-bold">{fmt(plBreakdown.netRevenue)}</span>
+              </div>
+              {/* Operating Costs */}
+              {[
+                { label: 'Cost of Goods Sold (COGS)', value: plBreakdown.totalCOGS, color: 'text-amber-600', icon: Package },
+                { label: 'Shipping & Logistics', value: plBreakdown.totalShipping, color: 'text-violet-500', icon: Truck },
+                { label: 'Transaction Fees', value: plBreakdown.totalTxnFees, color: 'text-slate-500', icon: CreditCard },
+                { label: 'Ad Spend (incl. Tax)', value: plBreakdown.adSpend, color: 'text-pink-500', icon: Megaphone },
+                { label: 'Pro-Rata Overhead', value: plBreakdown.overhead, color: 'text-amber-700', icon: Building2 },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                  <div className="flex items-center gap-2">
+                    <item.icon className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">{item.label}</span>
+                  </div>
+                  <span className={`text-sm font-medium ${item.color}`}>-{fmt(item.value)}</span>
+                </div>
+              ))}
+              {/* Net Profit */}
+              <div className={`flex items-center justify-between py-3 px-3 rounded-lg mt-2 ${plBreakdown.netProfit >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50'}`}>
+                <div className="flex items-center gap-2">
+                  {plBreakdown.netProfit >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
+                  <span className="text-sm font-bold">True Net Profit</span>
+                </div>
+                <span className={`text-lg font-bold ${plBreakdown.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {fmt(plBreakdown.netProfit)}
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Pro-Rata Overhead Deduction */}
       {overhead && overhead.proratedAmount > 0 && (
         <Card className="border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20">
