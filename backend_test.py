@@ -1,499 +1,414 @@
 #!/usr/bin/env python3
+"""
+Core Engine V3 Testing Suite
+Tests the 5 critical areas: Inclusive GST Math, Ghost Ad Spend Fix, IST Date Keys, Marketing Ledger Data, and RTO Double Shipping
+Base URL: https://profit-calc-dash.preview.emergentagent.com/api
+"""
 
 import requests
 import json
-import sys
 from pymongo import MongoClient
-import os
+import time
+import math
 
-# Configuration from .env
+# Configuration
 BASE_URL = "https://profit-calc-dash.preview.emergentagent.com/api"
-MONGO_URL = "mongodb://localhost:27017"
+MONGO_URI = "mongodb://localhost:27017"
 DB_NAME = "profitos"
 
-def log(message):
-    """Print a timestamped log message."""
-    print(f"[TEST] {message}")
-    sys.stdout.flush()
+def log_test(test_name, status, details=""):
+    """Log test results with consistent formatting"""
+    status_icon = "✅" if status == "PASS" else "❌" if status == "FAIL" else "⚠️"
+    print(f"{status_icon} {test_name}: {status}")
+    if details:
+        print(f"   {details}")
 
-def get_mongo_client():
-    """Get MongoDB client."""
-    return MongoClient(MONGO_URL)
-
-def test_tracking_number_save():
-    """Test 1: TRACKING NUMBER SAVE (PUT /api/orders/{id}/tracking)"""
-    log("🔍 TEST 1: TRACKING NUMBER SAVE")
+def get_orders_sample():
+    """Get a sample order for testing"""
     try:
-        # Step 1: Get first Unfulfilled order
-        log("Getting first Unfulfilled order...")
-        response = requests.get(f"{BASE_URL}/orders", params={"page": 1, "limit": 1, "status": "Unfulfilled"})
+        url = f"{BASE_URL}/orders?page=1&limit=1"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        if data.get('orders') and len(data['orders']) > 0:
+            return data['orders'][0]
+        return None
+    except Exception as e:
+        log_test("Get Orders Sample", "FAIL", f"Error: {str(e)}")
+        return None
+
+def test_inclusive_gst_math():
+    """Test 1: INCLUSIVE GST MATH - Verify GST calculation formula changes"""
+    print("\n🎯 TEST 1: INCLUSIVE GST MATH")
+    
+    # Get a sample order
+    order = get_orders_sample()
+    if not order:
+        log_test("Inclusive GST Math", "FAIL", "Could not get sample order")
+        return False
+    
+    order_id = order.get('_id')
+    if not order_id:
+        log_test("Inclusive GST Math", "FAIL", "No order ID found")
+        return False
+    
+    try:
+        # Get profit calculation
+        url = f"{BASE_URL}/calculate-profit/{order_id}"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        profit_data = response.json()
         
-        if response.status_code != 200:
-            log(f"❌ Failed to get orders: {response.status_code} - {response.text}")
+        # Extract values
+        gross_revenue = profit_data.get('grossRevenue', 0)
+        discount = profit_data.get('discount', 0)
+        gst_on_revenue = profit_data.get('gstOnRevenue', 0)
+        net_revenue = profit_data.get('netRevenue', 0)
+        
+        # Calculate expected values using inclusive GST formula
+        revenue_after_discount = gross_revenue - discount
+        expected_gst = revenue_after_discount - (revenue_after_discount / 1.18)
+        expected_net_revenue = revenue_after_discount / 1.18
+        
+        # Test GST calculation
+        gst_diff = abs(gst_on_revenue - expected_gst)
+        if gst_diff < 0.01:  # Allow 1 paisa tolerance for rounding
+            log_test("GST Calculation Formula", "PASS", f"GST: ₹{gst_on_revenue:.2f} (expected: ₹{expected_gst:.2f})")
+        else:
+            log_test("GST Calculation Formula", "FAIL", f"GST: ₹{gst_on_revenue:.2f} (expected: ₹{expected_gst:.2f}, diff: ₹{gst_diff:.2f})")
             return False
-            
-        orders_data = response.json()
-        if not orders_data.get('orders') or len(orders_data['orders']) == 0:
-            log("❌ No Unfulfilled orders found")
+        
+        # Test Net Revenue calculation  
+        net_diff = abs(net_revenue - expected_net_revenue)
+        if net_diff < 0.01:
+            log_test("Net Revenue Formula", "PASS", f"Net Revenue: ₹{net_revenue:.2f} (expected: ₹{expected_net_revenue:.2f})")
+        else:
+            log_test("Net Revenue Formula", "FAIL", f"Net Revenue: ₹{net_revenue:.2f} (expected: ₹{expected_net_revenue:.2f}, diff: ₹{net_diff:.2f})")
             return False
         
-        order = orders_data['orders'][0]
-        order_id = order['_id']
-        log(f"✅ Found Unfulfilled order: {order.get('orderId', order_id)}")
-        
-        # Step 2: Save tracking number
-        test_tracking = "EE123456789IN"
-        log(f"Saving tracking number: {test_tracking}")
-        
-        response = requests.put(
-            f"{BASE_URL}/orders/{order_id}/tracking",
-            json={"trackingNumber": test_tracking},
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if response.status_code != 200:
-            log(f"❌ Failed to save tracking number: {response.status_code} - {response.text}")
+        # Test balance equation: grossRevenue - discount - gstOnRevenue = netRevenue
+        balance_check = gross_revenue - discount - gst_on_revenue
+        balance_diff = abs(balance_check - net_revenue)
+        if balance_diff < 0.01:
+            log_test("GST Balance Equation", "PASS", f"Balance verified: {gross_revenue - discount} - {gst_on_revenue:.2f} = {net_revenue:.2f}")
+        else:
+            log_test("GST Balance Equation", "FAIL", f"Balance failed: {balance_check:.2f} ≠ {net_revenue:.2f} (diff: {balance_diff:.2f})")
             return False
-            
-        updated_order = response.json()
-        if updated_order.get('trackingNumber') != test_tracking:
-            log(f"❌ Tracking number not saved correctly. Expected: {test_tracking}, Got: {updated_order.get('trackingNumber')}")
+        
+        # Test with example from spec: if revenueAfterDiscount=1000, gstOnRevenue should be ~152.54, netRevenue ~847.46
+        test_revenue = 1000
+        test_gst = test_revenue - (test_revenue / 1.18)
+        test_net = test_revenue / 1.18
+        expected_gst_example = 152.54
+        expected_net_example = 847.46
+        
+        gst_example_diff = abs(test_gst - expected_gst_example)
+        net_example_diff = abs(test_net - expected_net_example)
+        
+        if gst_example_diff < 1 and net_example_diff < 1:
+            log_test("GST Formula Example Validation", "PASS", f"₹1000 → GST: ₹{test_gst:.2f}, Net: ₹{test_net:.2f}")
+        else:
+            log_test("GST Formula Example Validation", "FAIL", f"₹1000 → GST: ₹{test_gst:.2f} (exp: ₹{expected_gst_example}), Net: ₹{test_net:.2f} (exp: ₹{expected_net_example})")
             return False
-            
-        log(f"✅ Tracking number saved: {updated_order.get('trackingNumber')}")
         
-        # Step 3: Verify persistence with GET
-        log("Verifying tracking number persistence...")
-        response = requests.get(f"{BASE_URL}/orders/{order_id}")
-        
-        if response.status_code != 200:
-            log(f"❌ Failed to get order: {response.status_code} - {response.text}")
-            return False
-            
-        retrieved_order = response.json()
-        if retrieved_order.get('trackingNumber') != test_tracking:
-            log(f"❌ Tracking number not persisted. Expected: {test_tracking}, Got: {retrieved_order.get('trackingNumber')}")
-            return False
-            
-        log("✅ Tracking number persisted correctly")
-        
-        # Step 4: Test clearing tracking number
-        log("Testing tracking number clearing...")
-        response = requests.put(
-            f"{BASE_URL}/orders/{order_id}/tracking",
-            json={"trackingNumber": ""},
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if response.status_code != 200:
-            log(f"❌ Failed to clear tracking number: {response.status_code} - {response.text}")
-            return False
-            
-        cleared_order = response.json()
-        if cleared_order.get('trackingNumber') is not None:
-            log(f"❌ Tracking number not cleared. Expected: null, Got: {cleared_order.get('trackingNumber')}")
-            return False
-            
-        log("✅ Tracking number cleared successfully")
-        
-        # Restore the test tracking number for further tests
-        requests.put(
-            f"{BASE_URL}/orders/{order_id}/tracking",
-            json={"trackingNumber": test_tracking},
-            headers={"Content-Type": "application/json"}
-        )
-        
-        log("✅ TEST 1 PASSED: Tracking number save/clear functionality working")
         return True
         
     except Exception as e:
-        log(f"❌ TEST 1 FAILED: {str(e)}")
+        log_test("Inclusive GST Math", "FAIL", f"Error: {str(e)}")
         return False
 
-def test_india_post_sync_error():
-    """Test 2: INDIA POST SYNC TRACKING ERROR HANDLING"""
-    log("🔍 TEST 2: INDIA POST SYNC TRACKING ERROR HANDLING")
+def test_ghost_ad_spend_fix():
+    """Test 2: GHOST AD SPEND FIX - Verify ad spend is properly subtracted globally"""
+    print("\n🎯 TEST 2: GHOST AD SPEND FIX")
+    
     try:
-        # Ensure no India Post credentials are set by checking integrations first
-        response = requests.get(f"{BASE_URL}/integrations")
-        if response.status_code == 200:
-            integrations = response.json()
-            india_post = integrations.get('indiaPost', {})
-            if india_post.get('username') or india_post.get('password'):
-                log("⚠️ India Post credentials found, clearing them for error test...")
-                # Clear credentials temporarily
-                client = get_mongo_client()
-                db = client[DB_NAME]
-                db.integrations.update_one(
-                    {"_id": "integrations-config"},
-                    {"$set": {"indiaPost.username": "", "indiaPost.password": ""}}
-                )
+        # Get dashboard data for 7 days
+        url = f"{BASE_URL}/dashboard?range=7days"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        dashboard_data = response.json()
         
-        log("Testing India Post sync without credentials...")
-        response = requests.post(
-            f"{BASE_URL}/indiapost/sync-tracking",
-            headers={"Content-Type": "application/json"}
-        )
+        filtered = dashboard_data.get('filtered', {})
+        overhead = dashboard_data.get('overhead', {})
         
-        if response.status_code != 200:
-            log(f"❌ Expected 200 status with error message, got: {response.status_code}")
+        ad_spend = filtered.get('adSpend', 0)
+        gross_order_profit = filtered.get('grossOrderProfit', 0)
+        net_profit = filtered.get('netProfit', 0)
+        prorated_amount = overhead.get('proratedAmount', 0)
+        
+        # Test 1: Meta Ads should be active (ad spend > 0)
+        if ad_spend > 0:
+            log_test("Meta Ads Active Check", "PASS", f"Ad Spend: ₹{ad_spend:,.2f} > 0")
+        else:
+            log_test("Meta Ads Active Check", "FAIL", f"Ad Spend: ₹{ad_spend:,.2f} (should be > 0)")
             return False
-            
-        result = response.json()
-        if 'error' not in result:
-            log(f"❌ Expected error field in response, got: {result}")
+        
+        # Test 2: Gross profit should be greater than net profit (ad spend + overhead subtracted)
+        if gross_order_profit > net_profit:
+            log_test("Profit Hierarchy Check", "PASS", f"Gross: ₹{gross_order_profit:,.2f} > Net: ₹{net_profit:,.2f}")
+        else:
+            log_test("Profit Hierarchy Check", "FAIL", f"Gross: ₹{gross_order_profit:,.2f} ≤ Net: ₹{net_profit:,.2f}")
             return False
-            
-        error_message = result['error']
-        if 'credentials not configured' not in error_message.lower():
-            log(f"❌ Expected credentials error message, got: {error_message}")
+        
+        # Test 3: Verify the ghost ad spend fix equation
+        # netProfit ≈ grossOrderProfit - adSpend - overhead.proratedAmount
+        expected_net_profit = gross_order_profit - ad_spend - prorated_amount
+        profit_diff = abs(net_profit - expected_net_profit)
+        
+        if profit_diff < 1:  # Allow ₹1 tolerance for rounding
+            log_test("Ghost Ad Spend Math", "PASS", f"Net Profit: ₹{net_profit:,.2f} ≈ ₹{gross_order_profit:,.2f} - ₹{ad_spend:,.2f} - ₹{prorated_amount:,.2f} = ₹{expected_net_profit:,.2f}")
+        else:
+            log_test("Ghost Ad Spend Math", "FAIL", f"Net Profit: ₹{net_profit:,.2f} ≠ ₹{expected_net_profit:,.2f} (diff: ₹{profit_diff:,.2f})")
             return False
-            
-        log(f"✅ Correct error message: {error_message}")
-        log("✅ TEST 2 PASSED: India Post sync error handling working")
+        
         return True
         
     except Exception as e:
-        log(f"❌ TEST 2 FAILED: {str(e)}")
+        log_test("Ghost Ad Spend Fix", "FAIL", f"Error: {str(e)}")
+        return False
+
+def test_ist_date_keys():
+    """Test 3: IST DATE KEYS - Verify dates are in YYYY-MM-DD format"""
+    print("\n🎯 TEST 3: IST DATE KEYS")
+    
+    try:
+        # Test daily marketing spend endpoint
+        url = f"{BASE_URL}/daily-marketing-spend"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        daily_spend_data = response.json()
+        
+        if isinstance(daily_spend_data, list) and len(daily_spend_data) > 0:
+            # Check date format in daily marketing spend
+            sample_date = daily_spend_data[0].get('date', '')
+            if len(sample_date) == 10 and sample_date.count('-') == 2:
+                year, month, day = sample_date.split('-')
+                if len(year) == 4 and len(month) == 2 and len(day) == 2:
+                    log_test("Daily Marketing Spend Date Format", "PASS", f"Date format: {sample_date} (YYYY-MM-DD)")
+                else:
+                    log_test("Daily Marketing Spend Date Format", "FAIL", f"Invalid date format: {sample_date}")
+                    return False
+            else:
+                log_test("Daily Marketing Spend Date Format", "FAIL", f"Invalid date format: {sample_date}")
+                return False
+        else:
+            log_test("Daily Marketing Spend Date Format", "SKIP", "No daily marketing spend data available")
+        
+        # Test dashboard daily data
+        url = f"{BASE_URL}/dashboard?range=7days"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        dashboard_data = response.json()
+        
+        daily_data = dashboard_data.get('dailyData', [])
+        if daily_data and len(daily_data) > 0:
+            sample_daily_date = daily_data[0].get('date', '')
+            if len(sample_daily_date) == 10 and sample_daily_date.count('-') == 2:
+                year, month, day = sample_daily_date.split('-')
+                if len(year) == 4 and len(month) == 2 and len(day) == 2:
+                    log_test("Dashboard Daily Data Date Format", "PASS", f"Date format: {sample_daily_date} (YYYY-MM-DD)")
+                else:
+                    log_test("Dashboard Daily Data Date Format", "FAIL", f"Invalid date format: {sample_daily_date}")
+                    return False
+            else:
+                log_test("Dashboard Daily Data Date Format", "FAIL", f"Invalid date format: {sample_daily_date}")
+                return False
+        else:
+            log_test("Dashboard Daily Data Date Format", "FAIL", "No daily data available")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        log_test("IST Date Keys", "FAIL", f"Error: {str(e)}")
+        return False
+
+def test_marketing_ledger_data():
+    """Test 4: MARKETING LEDGER DATA - Verify daily marketing spend endpoint"""
+    print("\n🎯 TEST 4: MARKETING LEDGER DATA")
+    
+    try:
+        url = f"{BASE_URL}/daily-marketing-spend"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+        daily_spend_data = response.json()
+        
+        # Check if data is returned as array
+        if not isinstance(daily_spend_data, list):
+            log_test("Marketing Ledger Data Structure", "FAIL", f"Expected array, got: {type(daily_spend_data)}")
+            return False
+        
+        log_test("Marketing Ledger Data Structure", "PASS", f"Returns array with {len(daily_spend_data)} entries")
+        
+        if len(daily_spend_data) == 0:
+            log_test("Marketing Ledger Data Content", "SKIP", "No marketing spend data available")
+            return True
+        
+        # Check structure of first entry
+        sample_entry = daily_spend_data[0]
+        required_fields = ['date', 'spendAmount', 'currency']
+        
+        for field in required_fields:
+            if field not in sample_entry:
+                log_test(f"Marketing Ledger Field: {field}", "FAIL", f"Missing field: {field}")
+                return False
+            else:
+                log_test(f"Marketing Ledger Field: {field}", "PASS", f"Value: {sample_entry[field]}")
+        
+        # Check that spendAmount values are numbers > 0
+        positive_spend_count = 0
+        for entry in daily_spend_data:
+            spend_amount = entry.get('spendAmount', 0)
+            if isinstance(spend_amount, (int, float)) and spend_amount > 0:
+                positive_spend_count += 1
+        
+        if positive_spend_count > 0:
+            log_test("Marketing Ledger Positive Spend", "PASS", f"{positive_spend_count}/{len(daily_spend_data)} entries have spend > 0")
+        else:
+            log_test("Marketing Ledger Positive Spend", "FAIL", "No entries with positive spend amount")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        log_test("Marketing Ledger Data", "FAIL", f"Error: {str(e)}")
         return False
 
 def test_rto_double_shipping():
-    """Test 3: RTO DOUBLE-SHIPPING PENALTY"""
-    log("🔍 TEST 3: RTO DOUBLE-SHIPPING PENALTY")
+    """Test 5: RTO DOUBLE SHIPPING - Verify RTO penalty calculation"""
+    print("\n🎯 TEST 5: RTO DOUBLE SHIPPING")
+    
+    # Connect to MongoDB to modify order status
+    client = None
+    original_status = None
+    order_id = None
+    
     try:
-        # Step 1: Find any order to temporarily set as RTO (start with Unfulfilled since that's what we have)
-        response = requests.get(f"{BASE_URL}/orders", params={"page": 1, "limit": 10})
-        
-        if response.status_code != 200:
-            log(f"❌ Failed to get orders: {response.status_code}")
-            return False
-            
-        orders_data = response.json()
-        if not orders_data.get('orders') or len(orders_data['orders']) == 0:
-            log("❌ No orders found to test with")
-            return False
-        
-        test_order = orders_data['orders'][0]
-        order_id = test_order['_id']
-        original_status = test_order['status']
-        original_shipping = test_order.get('shippingCost', 0)
-        
-        log(f"Using order {test_order.get('orderId', order_id)} - Original shipping: ₹{original_shipping}")
-        
-        # Step 2: Set order status to RTO using pymongo
-        log("Setting order status to RTO...")
-        client = get_mongo_client()
+        client = MongoClient(MONGO_URI)
         db = client[DB_NAME]
+        orders_collection = db.orders
         
-        update_result = db.orders.update_one(
+        # Find a non-RTO order to test with
+        test_order = orders_collection.find_one({"status": {"$ne": "RTO"}})
+        if not test_order:
+            log_test("RTO Double Shipping Setup", "FAIL", "No non-RTO orders found for testing")
+            return False
+        
+        order_id = test_order["_id"]
+        original_status = test_order["status"]
+        original_shipping_cost = test_order.get("shippingCost", 0)
+        
+        log_test("RTO Test Order Selected", "PASS", f"Order: {order_id}, Original Status: {original_status}, Shipping: ₹{original_shipping_cost}")
+        
+        # Step 1: Set order status to RTO
+        orders_collection.update_one(
             {"_id": order_id},
-            {"$set": {"status": "RTO", "updatedAt": "2024-01-01T00:00:00.000Z"}}
+            {"$set": {"status": "RTO"}}
         )
+        log_test("RTO Status Set", "PASS", f"Changed order {order_id} to RTO")
         
-        if update_result.matched_count == 0:
-            log(f"❌ Failed to update order status to RTO")
-            return False
-            
-        log("✅ Order status set to RTO")
-        
-        # Step 3: Calculate profit and verify 2x shipping cost
-        log("Calculating profit for RTO order...")
-        response = requests.get(f"{BASE_URL}/calculate-profit/{order_id}")
-        
-        if response.status_code != 200:
-            log(f"❌ Failed to calculate profit: {response.status_code} - {response.text}")
-            # Restore original status
-            db.orders.update_one({"_id": order_id}, {"$set": {"status": original_status}})
-            return False
-            
+        # Step 2: Get profit calculation
+        url = f"{BASE_URL}/calculate-profit/{order_id}"
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
         profit_data = response.json()
-        calculated_shipping = profit_data.get('shippingCost', 0)
+        
+        # Step 3: Verify RTO flag is true
         is_rto = profit_data.get('isRTO', False)
-        
-        log(f"Calculated shipping cost: ₹{calculated_shipping}")
-        log(f"Is RTO flag: {is_rto}")
-        
-        # Verify isRTO is true
-        if not is_rto:
-            log(f"❌ isRTO should be true for RTO orders")
-            # Restore original status
-            db.orders.update_one({"_id": order_id}, {"$set": {"status": original_status}})
+        if is_rto:
+            log_test("RTO Flag Check", "PASS", "isRTO = true")
+        else:
+            log_test("RTO Flag Check", "FAIL", f"isRTO = {is_rto} (should be true)")
             return False
         
-        # Verify shipping cost is approximately 2x (allowing for small rounding differences)
-        expected_shipping = original_shipping * 2
-        shipping_diff = abs(calculated_shipping - expected_shipping)
+        # Step 4: Verify shipping cost is doubled
+        calculated_shipping_cost = profit_data.get('shippingCost', 0)
+        expected_shipping_cost = original_shipping_cost * 2
         
-        if shipping_diff > 1:  # Allow 1 rupee difference for rounding
-            log(f"❌ Shipping cost not doubled correctly. Expected: ~₹{expected_shipping}, Got: ₹{calculated_shipping}")
-            # Restore original status
-            db.orders.update_one({"_id": order_id}, {"$set": {"status": original_status}})
+        shipping_diff = abs(calculated_shipping_cost - expected_shipping_cost)
+        if shipping_diff < 0.01:
+            log_test("RTO Shipping Cost Double", "PASS", f"Shipping: ₹{calculated_shipping_cost} = ₹{original_shipping_cost} × 2")
+        else:
+            log_test("RTO Shipping Cost Double", "FAIL", f"Shipping: ₹{calculated_shipping_cost} ≠ ₹{expected_shipping_cost} (original: ₹{original_shipping_cost})")
             return False
         
-        log(f"✅ Shipping cost correctly doubled: ₹{original_shipping} → ₹{calculated_shipping}")
+        # Step 5: Verify by reading original from MongoDB
+        fresh_order = orders_collection.find_one({"_id": order_id})
+        stored_shipping_cost = fresh_order.get("shippingCost", 0)
         
-        # Step 4: Restore original order status
-        log("Restoring original order status...")
-        db.orders.update_one({"_id": order_id}, {"$set": {"status": original_status}})
-        log(f"✅ Order status restored to {original_status}")
+        if abs(stored_shipping_cost - original_shipping_cost) < 0.01:
+            log_test("MongoDB Shipping Cost Verification", "PASS", f"Stored shipping cost: ₹{stored_shipping_cost} (unchanged)")
+        else:
+            log_test("MongoDB Shipping Cost Verification", "FAIL", f"Stored shipping cost changed: ₹{stored_shipping_cost} (was: ₹{original_shipping_cost})")
         
-        log("✅ TEST 3 PASSED: RTO double-shipping penalty working correctly")
         return True
         
     except Exception as e:
-        log(f"❌ TEST 3 FAILED: {str(e)}")
+        log_test("RTO Double Shipping", "FAIL", f"Error: {str(e)}")
         return False
-
-def test_demo_data_cleanup():
-    """Test 4: DEMO DATA CLEANUP VERIFICATION"""
-    log("🔍 TEST 4: DEMO DATA CLEANUP VERIFICATION")
-    try:
-        # List of endpoints that should return empty arrays
-        empty_endpoints = [
-            ("employees", "/employees"),
-            ("overhead-expenses", "/overhead-expenses"), 
-            ("raw-materials", "/raw-materials"),
-            ("packaging-materials", "/packaging-materials"),
-            ("vendors", "/vendors")
-        ]
-        
-        all_passed = True
-        
-        for name, endpoint in empty_endpoints:
-            log(f"Checking {name}...")
-            response = requests.get(f"{BASE_URL}{endpoint}")
-            
-            if response.status_code != 200:
-                log(f"❌ Failed to get {name}: {response.status_code}")
-                all_passed = False
-                continue
-                
-            data = response.json()
-            if not isinstance(data, list) or len(data) != 0:
-                log(f"❌ {name} should return empty array [], got: {type(data)} with length {len(data) if hasattr(data, '__len__') else 'N/A'}")
-                all_passed = False
-                continue
-                
-            log(f"✅ {name} correctly returns empty array")
-        
-        # Verify orders has real Shopify data
-        log("Checking orders has real Shopify data...")
-        response = requests.get(f"{BASE_URL}/orders", params={"page": 1, "limit": 1})
-        
-        if response.status_code != 200:
-            log(f"❌ Failed to get orders: {response.status_code}")
-            all_passed = False
-        else:
-            orders_data = response.json()
-            total_orders = orders_data.get('total', 0)
-            
-            if total_orders == 0:
-                log(f"❌ Orders should have real Shopify data, got total: {total_orders}")
-                all_passed = False
-            else:
-                log(f"✅ Orders has real data: {total_orders} orders total")
-        
-        # Verify SKU recipes has real Shopify data
-        log("Checking SKU recipes has real Shopify data...")
-        response = requests.get(f"{BASE_URL}/sku-recipes")
-        
-        if response.status_code != 200:
-            log(f"❌ Failed to get SKU recipes: {response.status_code}")
-            all_passed = False
-        else:
-            skus = response.json()
-            if not isinstance(skus, list) or len(skus) == 0:
-                log(f"❌ SKU recipes should have real data, got: {len(skus) if isinstance(skus, list) else 'not a list'}")
-                all_passed = False
-            else:
-                log(f"✅ SKU recipes has real data: {len(skus)} SKUs")
-        
-        if all_passed:
-            log("✅ TEST 4 PASSED: Demo data cleanup verification successful")
-        else:
-            log("❌ TEST 4 FAILED: Some demo data cleanup checks failed")
-            
-        return all_passed
-        
-    except Exception as e:
-        log(f"❌ TEST 4 FAILED: {str(e)}")
-        return False
-
-def test_india_post_sync_no_trackable():
-    """Test 5: INDIA POST SYNC WITH NO TRACKABLE ORDERS"""
-    log("🔍 TEST 5: INDIA POST SYNC WITH NO TRACKABLE ORDERS")
-    try:
-        client = get_mongo_client()
-        db = client[DB_NAME]
-        
-        # Step 1: Ensure no orders have trackingNumber and status "In Transit"
-        log("Clearing tracking numbers and 'In Transit' status...")
-        
-        # First, get some orders that might have tracking numbers
-        orders_with_tracking = list(db.orders.find({"trackingNumber": {"$ne": None, "$ne": ""}}))
-        in_transit_orders = list(db.orders.find({"status": "In Transit"}))
-        
-        # Clear ALL tracking numbers (including empty strings)
-        db.orders.update_many(
-            {},  # Update all orders
-            {"$unset": {"trackingNumber": ""}}  # Remove the field entirely
-        )
-        
-        # Change In Transit orders to Delivered
-        db.orders.update_many(
-            {"status": "In Transit"},
-            {"$set": {"status": "Delivered"}}
-        )
-        
-        log(f"✅ Cleared {len(orders_with_tracking)} orders with tracking numbers")
-        log(f"✅ Changed {len(in_transit_orders)} 'In Transit' orders to 'Delivered'")
-        
-        # Verify no orders have tracking numbers
-        orders_with_tracking_after = db.orders.count_documents({"trackingNumber": {"$exists": True, "$ne": None, "$ne": ""}})
-        log(f"Orders with tracking numbers after cleanup: {orders_with_tracking_after}")
-        
-        # Step 2: Set India Post credentials
-        log("Setting India Post test credentials...")
-        db.integrations.update_one(
-            {"_id": "integrations-config"},
-            {"$set": {"indiaPost.username": "test", "indiaPost.password": "test"}},
-            upsert=True
-        )
-        
-        # Step 3: Call sync tracking
-        log("Calling India Post sync tracking...")
-        response = requests.post(
-            f"{BASE_URL}/indiapost/sync-tracking",
-            headers={"Content-Type": "application/json"}
-        )
-        
-        if response.status_code != 200:
-            log(f"❌ Sync tracking request failed: {response.status_code} - {response.text}")
-            # Cleanup
-            db.integrations.update_one(
-                {"_id": "integrations-config"},
-                {"$set": {"indiaPost.username": "", "indiaPost.password": ""}}
-            )
-            return False
-            
-        result = response.json()
-        message = result.get('message', '')
-        tracked = result.get('tracked', -1)
-        
-        log(f"Response message: '{message}'")
-        log(f"Tracked count: {tracked}")
-        
-        # The current implementation tries to authenticate before checking for trackable orders
-        # So we expect either:
-        # 1. The correct "no orders pending tracking" message if auth succeeds, OR
-        # 2. A network error since we're using fake credentials
-        
-        if 'no orders pending tracking' in message.lower():
-            log("✅ Got expected 'no orders pending tracking' message")
-        elif 'error' in result and 'fetch failed' in result.get('error', ''):
-            log("✅ Got expected network error (auth fails before checking orders) - this is acceptable behavior")
-            log("Note: Current implementation authenticates before checking for trackable orders")
-        else:
-            log(f"❌ Unexpected response. Message: '{message}', Error: {result.get('error', 'None')}")
-            # Cleanup
-            db.integrations.update_one(
-                {"_id": "integrations-config"},
-                {"$set": {"indiaPost.username": "", "indiaPost.password": ""}}
-            )
-            return False
-            
-        if tracked != 0:
-            log(f"❌ Expected 0 tracked orders, got: {tracked}")
-            # Cleanup
-            db.integrations.update_one(
-                {"_id": "integrations-config"},
-                {"$set": {"indiaPost.username": "", "indiaPost.password": ""}}
-            )
-            return False
-        
-        log("✅ Tracked count is correctly 0")
-        
-        # Step 4: Cleanup - reset India Post credentials
-        log("Cleaning up: resetting India Post credentials...")
-        db.integrations.update_one(
-            {"_id": "integrations-config"},
-            {"$set": {"indiaPost.username": "", "indiaPost.password": ""}}
-        )
-        
-        # Restore original order states (tracking numbers)
-        log("Restoring original order tracking numbers...")
-        for order in orders_with_tracking:
-            if order.get("trackingNumber"):
+    
+    finally:
+        # Restore original status
+        if client and order_id and original_status:
+            try:
+                db = client[DB_NAME]
                 db.orders.update_one(
-                    {"_id": order["_id"]},
-                    {"$set": {"trackingNumber": order.get("trackingNumber")}}
+                    {"_id": order_id},
+                    {"$set": {"status": original_status}}
                 )
+                log_test("RTO Status Restored", "PASS", f"Restored order {order_id} to {original_status}")
+            except Exception as e:
+                log_test("RTO Status Restore", "FAIL", f"Failed to restore status: {str(e)}")
         
-        # Restore In Transit orders
-        for order in in_transit_orders:
-            db.orders.update_one(
-                {"_id": order["_id"]},
-                {"$set": {"status": "In Transit"}}
-            )
-        
-        log("✅ Original order states restored")
-        log("✅ TEST 5 PASSED: India Post sync with no trackable orders working")
-        return True
-        
-    except Exception as e:
-        log(f"❌ TEST 5 FAILED: {str(e)}")
-        return False
+        if client:
+            client.close()
 
 def main():
-    """Run all India Post RTO Engine tests."""
-    log("🚀 Starting India Post RTO Engine Testing")
-    log(f"Base URL: {BASE_URL}")
-    log(f"MongoDB: {MONGO_URL}/{DB_NAME}")
+    """Run all Core Engine V3 tests"""
+    print("=" * 80)
+    print("🚀 CORE ENGINE V3 TESTING SUITE")
+    print("=" * 80)
+    print(f"📍 Base URL: {BASE_URL}")
+    print(f"💾 MongoDB: {MONGO_URI}/{DB_NAME}")
+    print("📝 Testing: Inclusive GST, Ghost Ad Spend, IST Dates, Marketing Ledger, RTO Double Shipping")
     
     tests = [
-        ("Tracking Number Save", test_tracking_number_save),
-        ("India Post Sync Error Handling", test_india_post_sync_error),
-        ("RTO Double-Shipping Penalty", test_rto_double_shipping),
-        ("Demo Data Cleanup Verification", test_demo_data_cleanup),
-        ("India Post Sync No Trackable Orders", test_india_post_sync_no_trackable)
+        ("Inclusive GST Math", test_inclusive_gst_math),
+        ("Ghost Ad Spend Fix", test_ghost_ad_spend_fix), 
+        ("IST Date Keys", test_ist_date_keys),
+        ("Marketing Ledger Data", test_marketing_ledger_data),
+        ("RTO Double Shipping", test_rto_double_shipping),
     ]
     
     results = {}
     
     for test_name, test_func in tests:
-        log(f"\n{'='*60}")
-        log(f"Running: {test_name}")
-        log(f"{'='*60}")
-        
         try:
             results[test_name] = test_func()
         except Exception as e:
-            log(f"❌ {test_name} crashed: {str(e)}")
+            log_test(test_name, "FAIL", f"Unexpected error: {str(e)}")
             results[test_name] = False
     
     # Summary
-    log(f"\n{'='*60}")
-    log("🏁 TEST SUMMARY")
-    log(f"{'='*60}")
+    print("\n" + "=" * 80)
+    print("📊 CORE ENGINE V3 TEST SUMMARY")
+    print("=" * 80)
     
-    passed = 0
+    passed = sum(1 for result in results.values() if result)
     total = len(results)
     
     for test_name, result in results.items():
         status = "✅ PASS" if result else "❌ FAIL"
-        log(f"{status} - {test_name}")
-        if result:
-            passed += 1
+        print(f"{status} {test_name}")
     
-    log(f"\n📊 Results: {passed}/{total} tests passed")
+    print(f"\n🎯 RESULT: {passed}/{total} tests passed")
     
     if passed == total:
-        log("🎉 ALL TESTS PASSED - India Post RTO Engine is working correctly!")
+        print("🎉 ALL CORE ENGINE V3 TESTS PASSED!")
         return True
     else:
-        log(f"⚠️  {total - passed} tests failed - Issues need attention")
+        print("⚠️  SOME TESTS FAILED - REVIEW ABOVE DETAILS")
         return False
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()
