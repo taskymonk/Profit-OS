@@ -890,3 +890,48 @@ INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking numb
 ✓ Tax Multiplier: Ad spend tax calculation (18% GST) working correctly
 
 **PHASE 8.6 PRECISION & ANALYTICS PATCH FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working as designed with comprehensive validation. New schema changes, enhanced reporting, and precision improvements verified."
+    - agent: "main"
+      message: "PHASE 8.7 ENTERPRISE BOM ARCHITECTURE, ANALYTICS POLISH & UX GUIDES - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data (521+ orders) and Meta Ads data exist. Test these 7 areas:
+
+1. **INVENTORY BOM SCHEMA (new fields: purchasePrice, purchaseQuantity, unit, baseCostPerUnit)**:
+   - POST /api/inventory-items with body: {\"name\":\"Bubble Wrap 50m Roll\",\"category\":\"Packaging\",\"purchasePrice\":500,\"purchaseQuantity\":50,\"unit\":\"meters\"} -> verify 201, has baseCostPerUnit field = 10.00 (500/50), has unit field (NOT unitMeasurement), does NOT have yieldFromTotalPurchase
+   - POST /api/inventory-items with body: {\"name\":\"Belgian Chocolate Slab\",\"category\":\"Raw Material\",\"purchasePrice\":400,\"purchaseQuantity\":2,\"unit\":\"kg\"} -> verify 201, baseCostPerUnit = 200.00
+   - GET /api/inventory-items -> verify both items exist
+   - DELETE both after test
+
+2. **EXPENSE CATEGORY RENAME ENDPOINT**:
+   - First create two test expenses:
+     - POST /api/overhead-expenses with body: {\"expenseName\":\"Office Internet\",\"category\":\"Internet\",\"amount\":1500,\"currency\":\"INR\",\"frequency\":\"recurring\"}
+     - POST /api/overhead-expenses with body: {\"expenseName\":\"Cloud Server\",\"category\":\"Internet\",\"amount\":2000,\"currency\":\"INR\",\"frequency\":\"recurring\"}
+   - Then rename: POST /api/expense-categories/rename with body: {\"oldName\":\"Internet\",\"newName\":\"Connectivity\"} -> verify success, modified = 2
+   - Verify: GET /api/overhead-expenses -> both should now have category 'Connectivity' (not 'Internet')
+   - Delete test category: POST /api/expense-categories/delete with body: {\"category\":\"Connectivity\"} -> deleted = 2
+   - Verify: GET /api/overhead-expenses -> no more 'Connectivity' entries
+
+3. **DASHBOARD P&L BREAKDOWN WITH REFUNDS**:
+   - GET /api/dashboard?range=7days -> plBreakdown must now include 'refunds' field (number)
+   - Verify all 11 keys: grossRevenue, discount, refunds, gstOnRevenue, netRevenue, totalCOGS, totalShipping, totalTxnFees, adSpend, overhead, netProfit
+
+4. **SHOPIFY REFUND EXTRACTION (source code check)**:
+   - Read /app/app/api/[[...path]]/route.js
+   - Verify it contains 'shopifyOrder.refunds' extraction logic 
+   - Verify 'refundAmount' field is included in order insertion
+   - Verify 'totalRefunds' is computed from refund_line_items
+
+5. **PROFIT CALCULATOR BOM SUPPORT (source code check)**:
+   - Read /app/lib/profitCalculator.js
+   - Verify it handles 'ingredients' array (new BOM format) with quantityUsed * baseCostPerUnit
+   - Verify it falls back to legacy rawMaterials/packaging format
+   - Verify refundAmount is subtracted from grossRevenue
+   - Verify Shopify orders use actual totalTax when shopifyOrderId exists
+
+6. **DASHBOARD DATA INTEGRITY**:
+   - GET /api/dashboard?range=alltime -> verify plBreakdown.grossRevenue == filtered.revenue
+   - Verify plBreakdown.netProfit == filtered.netProfit
+   - Verify waterfall math: netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead (within ±1)
+
+7. **AD SPEND TAX STILL WORKS**:
+   - GET /api/dashboard?range=alltime -> get filtered.adSpend
+   - Use pymongo to verify adSpend matches rawTotal * (1 + adSpendTaxRate/100)
+
+DO NOT test Shopify sync by calling the actual Shopify API. Clean up all test data."
