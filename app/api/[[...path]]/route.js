@@ -584,6 +584,7 @@ async function getReportProfitableSkus(params) {
   const orders = await db.collection('orders').find({}).toArray();
   const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
   const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+  const tenantConfig = await db.collection('tenantConfig').findOne({});
   const isMetaActive = integrations?.metaAds?.active === true;
 
   // Build adSpendMap from dailyMarketingSpend collection
@@ -592,6 +593,10 @@ async function getReportProfitableSkus(params) {
     : [];
   const adSpendMap = {};
   dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
+
+  // Ad spend tax multiplier
+  const taxRate = tenantConfig?.adSpendTaxRate ?? 18;
+  const taxMul = 1 + (taxRate / 100);
 
   const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
   const endDate = params.endDate ? new Date(params.endDate) : new Date();
