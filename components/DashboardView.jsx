@@ -425,6 +425,7 @@ export default function DashboardView() {
               {/* Deductions */}
               {[
                 { label: 'Discounts', value: plBreakdown.discount, color: 'text-orange-500' },
+                { label: 'Refunds', value: plBreakdown.refunds || 0, color: 'text-red-500' },
                 { label: 'GST on Revenue (18%)', value: plBreakdown.gstOnRevenue, color: 'text-amber-600' },
               ].map((item) => (
                 <div key={item.label} className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
