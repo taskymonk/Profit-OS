@@ -779,7 +779,7 @@ INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking numb
 - ✅ Data Quality: 30/30 entries have positive spendAmount values
 - ✅ Meta Integration: Real synced data confirmed (₹658.69 sample spend)
 
-🎯 **RTO DOUBLE SHIPPING**: ✅ 6/6 TESTS PASSED
+🎯 **RTO DOUBLE SHIPPING**: ✅ 6/6 tests passed
 - ✅ Test Order Selection: Non-RTO order identified for testing
 - ✅ RTO Status Change: MongoDB update successful via pymongo
 - ✅ RTO Flag Verification: isRTO = true in profit calculation response
@@ -836,33 +836,57 @@ INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking numb
    - Use pymongo to read dailyMarketingSpend totals and tenantConfig.adSpendTaxRate
    - Dashboard adSpend should be approximately rawTotal * (1 + adSpendTaxRate/100)"
     - agent: "testing"
-      message: "🎉 PHASE 8.5 REALITY RECONCILIATION TESTING COMPLETE - ALL 3 AREAS PASSED!
+      message: "🎉 PHASE 8.6 PRECISION & ANALYTICS PATCH TESTING COMPLETE - ALL 6 AREAS PASSED!
 
-🎯 **INVENTORY ITEMS CRUD**: ✅ 8/8 TESTS PASSED
-- ✅ POST Belgian Chocolate: Created with UUID _id, proper structure
-- ✅ POST BOPP Tape: Created with yieldPerUnit=100, costPerUnit=50
-- ✅ Effective Cost Calculation: 50/100 = 0.50 verified
-- ✅ GET All Items: Array with created items returned correctly
-- ✅ PUT Update: Successfully updated chocolate costPerUnit to 220
-- ✅ GET Single Item: Verified updated costPerUnit persisted
-- ✅ DELETE Item: Successfully deleted tape item
-- ✅ Verify After Delete: Chocolate remains, tape removed, proper cleanup
+🎯 **SHOPIFY SYNC URL VERIFICATION**: ✅ 4/4 TESTS PASSED
+- ✅ Found all three required parameters: status=any, fulfillment_status=any, financial_status=any
+- ✅ toISTISO function found in route.js
+- ✅ Shopify orders URL confirmed: /admin/api/2024-01/orders.json?limit=250&status=any&fulfillment_status=any&financial_status=any
+- ✅ All three parameters verified in Shopify orders URL
 
-🎯 **AD SPEND TAX MULTIPLIER**: ✅ 4/4 TESTS PASSED  
-- ✅ TenantConfig Check: adSpendTaxRate = 18% (default value confirmed)
-- ✅ Daily Marketing Spend: Raw total ₹52,700.11 from 30 records
-- ✅ Dashboard Tax Calculation: ₹62,186.13 ≈ ₹52,700.11 × 1.18 (exact match)
-- ✅ Marketing Allocation Tax: ₹777.25 per order includes 1.18 multiplier (created test order on 2026-02-26 with marketing data)
+🎯 **IST DATE CONVERSION (toISTISO)**: ✅ 5/5 TESTS PASSED
+- ✅ 'Asia/Kolkata' timezone found in route.js
+- ✅ '+05:30' IST offset found in route.js
+- ✅ toISTISO function call found in Shopify sync context
+- ✅ toISTISO function definition found
+- ✅ Function uses correct Asia/Kolkata timezone
 
-🎯 **SHOPIFY SYNC URL VERIFICATION**: ✅ 3/3 TESTS PASSED
-- ✅ Status Parameter Found: 'status=any' confirmed in route.js source code
-- ✅ Shopify Orders URL: Line 816 contains proper endpoint with status=any
-- ✅ API Endpoint Structure: /admin/api/2024-01/orders.json format verified
+🎯 **INVENTORY ITEMS CRUD (NEW SCHEMA)**: ✅ 8/8 TESTS PASSED
+- ✅ Created Belgian Chocolate with purchasePrice field (NOT costPerUnit) - Status: 201
+- ✅ Chocolate has correct yieldFromTotalPurchase = 1 and _id field
+- ✅ Created BOPP Tape with yieldFromTotalPurchase = 100 - Status: 201  
+- ✅ Tape effective cost per use = 5.0 (500/100) verified
+- ✅ GET inventory-items returned 2 created items
+- ✅ Updated chocolate purchasePrice to 550 - Status: 200
+- ✅ Successfully deleted both test items with proper cleanup
 
-**CRITICAL PHASE 8.5 FEATURES FULLY FUNCTIONAL:**
-✓ Inventory Items CRUD: Complete REST API with yieldPerUnit calculations
-✓ Ad Spend Tax Multiplier: 18% GST properly applied to Meta Ads spend
-✓ Shopify Sync: status=any parameter ensures all order statuses synced
-✓ Real Data Integration: Meta Ads (₹52,700+ spend) and Shopify (521 orders) active
+🎯 **DASHBOARD P&L BREAKDOWN**: ✅ 10/10 TESTS PASSED
+- ✅ plBreakdown object found in dashboard response
+- ✅ All required fields present: grossRevenue, discount, gstOnRevenue, netRevenue, totalCOGS, totalShipping, totalTxnFees, adSpend, overhead, netProfit
+- ✅ plBreakdown.grossRevenue matches filtered.revenue (₹16,320)
+- ✅ plBreakdown.netProfit matches filtered.netProfit (₹8,913.50)
+- ✅ plBreakdown.adSpend matches filtered.adSpend (₹4,531.86)
+- ✅ Waterfall math verified: netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead (difference: 0.00)
 
-**PHASE 8.5 REALITY RECONCILIATION PATCHES VERIFIED AND OPERATIONAL!** All new unified inventory system, tax calculations, and Shopify sync enhancements working as designed."
+🎯 **OVERHEAD EXPENSES CRUD (DYNAMIC CATEGORIES)**: ✅ 7/7 TESTS PASSED
+- ✅ Created Warehouse Rent with CustomWarehouse category - Status: 201
+- ✅ Created Tool Sub with SaaS Tools category - Status: 201
+- ✅ GET overhead-expenses found both custom categories
+- ✅ CustomWarehouse and SaaS Tools categories verified in response
+- ✅ Successfully deleted both test expenses with cleanup
+
+🎯 **AD SPEND TAX STILL WORKS**: ✅ 4/4 TESTS PASSED
+- ✅ Dashboard adSpend: ₹62,186.13 from alltime range
+- ✅ Raw ad spend total: ₹52,700.11 from MongoDB dailyMarketingSpend  
+- ✅ Ad spend tax rate: 18% from tenantConfig
+- ✅ Tax calculation verified: ₹62,186.13 ≈ ₹52,700.11 × 1.18 (difference: 0.00, 0.0%)
+
+**PHASE 8.6 PRECISION & ANALYTICS FEATURES FULLY VERIFIED:**
+✓ Shopify Sync: All three order status parameters (status=any, fulfillment_status=any, financial_status=any) confirmed
+✓ IST Date Conversion: toISTISO function using Asia/Kolkata timezone with +05:30 offset  
+✓ Inventory Items: NEW schema with purchasePrice/yieldFromTotalPurchase fields (not costPerUnit)
+✓ P&L Breakdown: Complete plBreakdown object with waterfall math validation
+✓ Dynamic Categories: Overhead expenses support custom categories (CustomWarehouse, SaaS Tools)
+✓ Tax Multiplier: Ad spend tax calculation (18% GST) working correctly
+
+**PHASE 8.6 PRECISION & ANALYTICS PATCH FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working as designed with comprehensive validation. New schema changes, enhanced reporting, and precision improvements verified."
