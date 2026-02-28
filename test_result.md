@@ -796,31 +796,45 @@ INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking numb
 
 **CORE ENGINE V3 PATCHES FULLY VERIFIED AND FUNCTIONAL!** All mathematical formulas, date handling, ad spend allocation, and RTO penalties working as designed. Real Shopify data (521 orders) and Meta Ads integration confirmed operational."
     - agent: "main"
-      message: "PHASE 8.5 REALITY RECONCILIATION PATCHES TESTING NEEDED. Base URL: https://profit-dashboard-v2.preview.emergentagent.com/api. Real Shopify data (521 orders) and Meta Ads data exist. Test these 3 areas:
+      message: "PHASE 8.6 PRECISION & ANALYTICS PATCH - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data (521+ orders) and Meta Ads data exist. Test these 6 areas:
 
-1. **INVENTORY ITEMS CRUD** (all endpoints):
-   - POST /api/inventory-items with body: {\"name\":\"Belgian Chocolate 500g\",\"category\":\"Raw Material\",\"costPerUnit\":200,\"unitMeasurement\":\"grams\",\"yieldPerUnit\":1} → verify 201, has _id
-   - POST /api/inventory-items with body: {\"name\":\"BOPP Tape Roll\",\"category\":\"Packaging\",\"costPerUnit\":50,\"unitMeasurement\":\"rolls\",\"yieldPerUnit\":100} → verify 201
-   - Verify tape's yieldPerUnit is 100 and costPerUnit is 50 (effective cost = 50/100 = 0.50)
-   - GET /api/inventory-items → array with 2 items
-   - PUT /api/inventory-items/{chocolate_id} with body: {\"costPerUnit\":220} → verify updated
-   - GET /api/inventory-items/{chocolate_id} → verify costPerUnit is 220
-   - DELETE /api/inventory-items/{tape_id} → verify deleted
-   - GET /api/inventory-items → only 1 item left
-   - CLEANUP: DELETE the remaining chocolate item too
+1. **SHOPIFY SYNC URL VERIFICATION**:
+   - Read the file /app/app/api/[[...path]]/route.js and verify the Shopify orders URL contains 'status=any', 'fulfillment_status=any', AND 'financial_status=any' (all three params required)
+   - Also verify the toISTISO helper function exists in the same file
 
-2. **AD SPEND TAX MULTIPLIER** (the 18% GST on Meta ads):
-   - Use pymongo (mongodb://localhost:27017, db: profitos) to check tenantConfig for adSpendTaxRate field
-   - Read dailyMarketingSpend collection: sum all spendAmounts
-   - GET /api/dashboard?range=alltime → get filtered.adSpend
-   - The dashboard adSpend should be approximately rawTotal * 1.18 (default 18% tax)
-   - ALSO: GET /api/orders?page=1&limit=1 → get first order
-   - GET /api/calculate-profit/{order._id} → marketingAllocation should be > 0 if Meta is active
-   - The marketingAllocation should include the 1.18 multiplier
+2. **IST DATE CONVERSION (toISTISO)**:
+   - The route.js file should contain a function called 'toISTISO' that converts dates to Asia/Kolkata timezone with +05:30 offset
+   - Verify by grepping the source code
+   - Verify the shopifySyncOrders function calls toISTISO on the shopify date before storing
 
-3. **SHOPIFY SYNC URL VERIFICATION**:
-   - Read the file /app/app/api/[[...path]]/route.js and verify the Shopify orders URL contains \"status=any\"
-   - Just verify by reading the source code"
+3. **INVENTORY ITEMS CRUD (NEW SCHEMA)**:
+   - POST /api/inventory-items with body: {\"name\":\"Belgian Chocolate 500g\",\"category\":\"Raw Material\",\"purchasePrice\":500,\"purchaseQuantity\":1,\"unitMeasurement\":\"grams\",\"yieldFromTotalPurchase\":1} -> verify 201, has _id, has purchasePrice field (NOT costPerUnit)
+   - POST /api/inventory-items with body: {\"name\":\"BOPP Tape Roll\",\"category\":\"Packaging\",\"purchasePrice\":500,\"purchaseQuantity\":1,\"unitMeasurement\":\"rolls\",\"yieldFromTotalPurchase\":100} -> verify 201
+   - Verify tape's yieldFromTotalPurchase is 100 and purchasePrice is 500 (effective cost per use = 500/100 = 5.00)
+   - GET /api/inventory-items -> array with 2 items
+   - PUT /api/inventory-items/{chocolate_id} with body: {\"purchasePrice\":550} -> verify updated
+   - DELETE both items after test
+
+4. **DASHBOARD P&L BREAKDOWN**:
+   - GET /api/dashboard?range=7days -> response must contain 'plBreakdown' object
+   - plBreakdown must have: grossRevenue, discount, gstOnRevenue, netRevenue, totalCOGS, totalShipping, totalTxnFees, adSpend, overhead, netProfit
+   - Verify: plBreakdown.grossRevenue == filtered.revenue
+   - Verify: plBreakdown.netProfit == filtered.netProfit
+   - Verify: plBreakdown.adSpend == filtered.adSpend
+   - Verify: plBreakdown.netRevenue > 0
+   - Verify: plBreakdown.gstOnRevenue = grossRevenue - netRevenue (approximately)
+   - The math should hold: netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead
+
+5. **OVERHEAD EXPENSES CRUD (DYNAMIC CATEGORIES)**:
+   - POST /api/overhead-expenses with body: {\"expenseName\":\"Warehouse Rent\",\"category\":\"CustomWarehouse\",\"amount\":15000,\"currency\":\"INR\",\"frequency\":\"recurring\"} -> verify 201, has custom category
+   - POST /api/overhead-expenses with body: {\"expenseName\":\"Tool Subscription\",\"category\":\"SaaS Tools\",\"amount\":999,\"currency\":\"INR\",\"frequency\":\"recurring\"} -> verify 201
+   - GET /api/overhead-expenses -> should contain expenses with the custom categories 'CustomWarehouse' and 'SaaS Tools'
+   - DELETE both test expenses after
+
+6. **AD SPEND TAX MULTIPLIER STILL WORKS**:
+   - GET /api/dashboard?range=alltime -> get filtered.adSpend
+   - Use pymongo to read dailyMarketingSpend totals and tenantConfig.adSpendTaxRate
+   - Dashboard adSpend should be approximately rawTotal * (1 + adSpendTaxRate/100)"
     - agent: "testing"
       message: "🎉 PHASE 8.5 REALITY RECONCILIATION TESTING COMPLETE - ALL 3 AREAS PASSED!
 
