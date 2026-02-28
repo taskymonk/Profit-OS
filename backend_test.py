@@ -2,7 +2,7 @@
 """
 Core Engine V3 Testing Suite
 Tests the 5 critical areas: Inclusive GST Math, Ghost Ad Spend Fix, IST Date Keys, Marketing Ledger Data, and RTO Double Shipping
-Base URL: https://profit-calc-dash.preview.emergentagent.com/api
+Base URL: https://profit-dashboard-v2.preview.emergentagent.com/api
 """
 
 import requests
@@ -12,7 +12,7 @@ import time
 import math
 
 # Configuration
-BASE_URL = "https://profit-calc-dash.preview.emergentagent.com/api"
+BASE_URL = "https://profit-dashboard-v2.preview.emergentagent.com/api"
 MONGO_URI = "mongodb://localhost:27017"
 DB_NAME = "profitos"
 

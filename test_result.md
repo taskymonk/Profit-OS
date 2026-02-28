@@ -637,7 +637,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://profit-calc-dash.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://profit-dashboard-v2.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -685,7 +685,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://profit-calc-dash.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://profit-dashboard-v2.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -724,7 +724,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://profit-calc-dash.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://profit-dashboard-v2.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -796,7 +796,7 @@ INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking numb
 
 **CORE ENGINE V3 PATCHES FULLY VERIFIED AND FUNCTIONAL!** All mathematical formulas, date handling, ad spend allocation, and RTO penalties working as designed. Real Shopify data (521 orders) and Meta Ads integration confirmed operational."
     - agent: "main"
-      message: "PHASE 8.5 REALITY RECONCILIATION PATCHES TESTING NEEDED. Base URL: https://profit-calc-dash.preview.emergentagent.com/api. Real Shopify data (521 orders) and Meta Ads data exist. Test these 3 areas:
+      message: "PHASE 8.5 REALITY RECONCILIATION PATCHES TESTING NEEDED. Base URL: https://profit-dashboard-v2.preview.emergentagent.com/api. Real Shopify data (521 orders) and Meta Ads data exist. Test these 3 areas:
 
 1. **INVENTORY ITEMS CRUD** (all endpoints):
    - POST /api/inventory-items with body: {\"name\":\"Belgian Chocolate 500g\",\"category\":\"Raw Material\",\"costPerUnit\":200,\"unitMeasurement\":\"grams\",\"yieldPerUnit\":1} → verify 201, has _id
