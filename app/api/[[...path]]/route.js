@@ -499,14 +499,14 @@ async function getDashboardData(params = {}) {
   for (let d = new Date(chartStart); d <= chartEnd; d = new Date(d.getTime() + dayMs)) {
     const dayStart = new Date(d); dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(d); dayEnd.setHours(23, 59, 59, 999);
-    const dateKey = dayStart.toISOString().split('T')[0];
+    const dateKey = getISTDateKey(dayStart);
 
     const dayOrders = orders.filter(o => {
       const od = new Date(o.orderDate);
       return od >= dayStart && od <= dayEnd;
     });
 
-    // Use adSpendMap for daily ad spend lookup
+    // Use adSpendMap for daily ad spend lookup (IST-keyed)
     const dayAdSpend = adSpendMap[dateKey] || 0;
 
     let dayProfit = 0, dayRevenue = 0, dayCOGS = 0, dayShipping = 0;
