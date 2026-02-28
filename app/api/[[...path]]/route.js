@@ -524,7 +524,7 @@ async function getDashboardData(params = {}) {
 
     let dayProfit = 0, dayRevenue = 0, dayCOGS = 0, dayShipping = 0;
     dayOrders.forEach(order => {
-      const profit = calculateOrderProfit(order, skuMap[order.sku], dayAdSpend, dayOrders.length, 1);
+      const profit = calculateOrderProfit(order, skuMap[order.sku], dayAdSpend, dayOrders.length, 1, adSpendTaxMultiplier);
       dayProfit += profit.netProfit;
       dayRevenue += profit.netRevenue;
       dayCOGS += profit.totalCOGS;
@@ -538,7 +538,7 @@ async function getDashboardData(params = {}) {
       revenue: Math.round(dayRevenue),
       cogs: Math.round(dayCOGS),
       shipping: Math.round(dayShipping),
-      adSpend: Math.round(dayAdSpend),
+      adSpend: Math.round(dayAdSpendTaxed),
       netProfit: Math.round(dayProfit),
       rtoCount: dayOrders.filter(o => o.status === 'RTO').length,
     });
