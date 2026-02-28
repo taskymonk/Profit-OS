@@ -1244,7 +1244,12 @@ export async function GET(request) {
         if (!order) return json({ error: 'Order not found' }, 404);
         const recipe = await db.collection('skuRecipes').findOne({ sku: order.sku });
         const integ = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+        const tc = await db.collection('tenantConfig').findOne({});
         const metaActive = integ?.metaAds?.active === true;
+
+        // Ad spend tax multiplier
+        const taxRate = tc?.adSpendTaxRate ?? 18;
+        const taxMul = 1 + (taxRate / 100);
 
         // Look up the order's date in dailyMarketingSpend using IST key
         const dateKey = getISTDateKey(order.orderDate);
@@ -1259,7 +1264,7 @@ export async function GET(request) {
         const allOrders = await db.collection('orders').find({}).toArray();
         const dayOrders = allOrders.filter(o => getISTDateKey(o.orderDate) === dateKey);
 
-        const profit = calculateOrderProfit(order, recipe, dayAdSpend, dayOrders.length || 1, 1);
+        const profit = calculateOrderProfit(order, recipe, dayAdSpend, dayOrders.length || 1, 1, taxMul);
         return json(profit);
       }
 
