@@ -115,6 +115,13 @@ export default function SettingsView() {
             <div><Label>GST Rate (%)</Label><Input type="number" value={config.gstRate} onChange={e => setConfig({...config, gstRate: Number(e.target.value)})} /></div>
             <div><Label>Max Orders/Month</Label><Input type="number" value={config.maxOrdersPerMonth} onChange={e => setConfig({...config, maxOrdersPerMonth: Number(e.target.value)})} /></div>
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Ad Spend Tax Rate (%)</Label>
+              <Input type="number" value={config.adSpendTaxRate ?? 18} onChange={e => setConfig({...config, adSpendTaxRate: Number(e.target.value)})} />
+              <p className="text-xs text-muted-foreground mt-1">Meta charges auction price + GST. Set to 18 for India. This multiplier is applied to all ad spend before profit deduction.</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
