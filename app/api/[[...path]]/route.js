@@ -915,6 +915,13 @@ async function shopifySyncOrders() {
       const totalShipping = parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0);
       const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
 
+      // Shopify Revenue Parity: extract refund amounts
+      const totalRefunds = (shopifyOrder.refunds || []).reduce((sum, refund) => {
+        return sum + (refund.refund_line_items || []).reduce((s, rli) => {
+          return s + (parseFloat(rli.subtotal) || 0);
+        }, 0);
+      }, 0);
+
       for (const item of (shopifyOrder.line_items || [])) {
         const sku = item.sku || `SHOP-${item.variant_id || item.product_id}`;
 
