@@ -633,7 +633,7 @@ async function getReportProfitableSkus(params) {
     const dayOrderCount = ordersPerDay[dateKey] || 1;
     const dayAd = adSpendMap[dateKey] || 0;
 
-    const profit = calculateOrderProfit(order, skuMap[order.sku], dayAd, dayOrderCount, 1);
+    const profit = calculateOrderProfit(order, skuMap[order.sku], dayAd, dayOrderCount, 1, taxMul);
     s.totalProfit += profit.netProfit;
     s.totalCOGS += profit.totalCOGS;
   });
