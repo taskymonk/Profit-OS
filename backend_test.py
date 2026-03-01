@@ -267,12 +267,12 @@ def test_source_code_checks():
             with open('/app/app/api/[[...path]]/route.js', 'r') as f:
                 route_content = f.read()
             
-            # Look for salePrice assignment and verify it doesn't use Math.round
-            if 'salePrice = finalOrderPrice * priceRatio' in route_content and 'Math.round(' not in route_content.split('salePrice = finalOrderPrice * priceRatio')[1].split(';')[0]:
-                log_test_result("No Math.round in salePrice calculation", True, "salePrice uses direct multiplication without rounding")
+            # Look for salePrice assignment pattern
+            if 'salePrice: finalOrderPrice * priceRatio,' in route_content:
+                log_test_result("No Math.round in salePrice calculation", True, "salePrice uses direct multiplication (finalOrderPrice * priceRatio)")
                 tests_passed += 1
             else:
-                log_test_result("No Math.round in salePrice calculation", False, "salePrice calculation may still use Math.round")
+                log_test_result("No Math.round in salePrice calculation", False, "Expected pattern 'salePrice: finalOrderPrice * priceRatio,' not found")
         except Exception as e:
             log_test_result("No Math.round in salePrice calculation", False, f"File read error: {e}")
         
