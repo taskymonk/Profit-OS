@@ -143,33 +143,33 @@ function OrderRow({ order, expanded, onToggle }) {
                 <div className="flex items-center gap-1.5 text-muted-foreground">Revenue</div>
                 <p className="font-semibold">{fmt(profit.grossRevenue)}</p>
                 <p className="text-muted-foreground">Discount: {fmt(profit.discount)}</p>
-                <p className="text-muted-foreground">GST: {fmt(Math.round(profit.gstOnRevenue))}</p>
-                <p className="font-medium text-foreground">Net: {fmt(Math.round(profit.netRevenue))}</p>
+                <p className="text-muted-foreground">GST: {fmt(profit.gstOnRevenue)}</p>
+                <p className="font-medium text-foreground">Net: {fmt(profit.netRevenue)}</p>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Package className="w-3 h-3" /> COGS</div>
-                <p className="text-muted-foreground">Materials: {fmt(Math.round(profit.rawMaterialCost))}</p>
-                <p className="text-muted-foreground">Packaging: {fmt(Math.round(profit.packagingCost))}</p>
+                <p className="text-muted-foreground">Materials: {fmt(profit.rawMaterialCost)}</p>
+                <p className="text-muted-foreground">Packaging: {fmt(profit.packagingCost)}</p>
                 <p className="text-muted-foreground">Consumable: {fmt(profit.consumableCost)}</p>
-                <p className="text-muted-foreground">Wastage: {fmt(Math.round(profit.wastageCost))}</p>
-                <p className="font-medium text-foreground">Total: {fmt(Math.round(profit.totalCOGS))}</p>
+                <p className="text-muted-foreground">Wastage: {fmt(profit.wastageCost)}</p>
+                <p className="font-medium text-foreground">Total: {fmt(profit.totalCOGS)}</p>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Truck className="w-3 h-3" /> Shipping</div>
                 <p className="text-muted-foreground">Method: {order.isUrgent ? order.manualCourierName || 'Urgent' : order.shippingMethod || 'N/A'}</p>
                 {profit.isRTO && <p className="text-red-500 font-medium">RTO (2x cost)</p>}
                 {order.isUrgent && <Badge variant="outline" className="text-[10px]"><Zap className="w-2.5 h-2.5 mr-0.5 inline" />Urgent Override</Badge>}
-                <p className="font-medium text-foreground">{fmt(Math.round(profit.shippingCost))}</p>
+                <p className="font-medium text-foreground">{fmt(profit.shippingCost)}</p>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><CreditCard className="w-3 h-3" /> Txn Fees</div>
-                <p className="text-muted-foreground">Gateway (2%): {fmt(Math.round(profit.gatewayFee))}</p>
-                <p className="text-muted-foreground">GST: {fmt(Math.round(profit.gstOnGateway))}</p>
-                <p className="font-medium text-foreground">{fmt(Math.round(profit.totalTransactionFee))}</p>
+                <p className="text-muted-foreground">Gateway (2%): {fmt(profit.gatewayFee)}</p>
+                <p className="text-muted-foreground">GST: {fmt(profit.gstOnGateway)}</p>
+                <p className="font-medium text-foreground">{fmt(profit.totalTransactionFee)}</p>
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Megaphone className="w-3 h-3" /> Marketing</div>
-                <p className="font-medium text-foreground">{fmt(Math.round(profit.marketingAllocation))}</p>
+                <p className="font-medium text-foreground">{fmt(profit.marketingAllocation)}</p>
               </div>
               <div className="space-y-1">
                 <div className="text-muted-foreground">Prepared By</div>
