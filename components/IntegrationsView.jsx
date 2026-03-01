@@ -44,6 +44,16 @@ export default function IntegrationsView() {
       setLoading(false);
     }
     load();
+
+    // Also load Shopify Bills status
+    async function loadBills() {
+      try {
+        const res = await fetch('/api/shopify-bills');
+        const data = await res.json();
+        if (data && data.imported) setShopifyBills(data);
+      } catch (err) { /* ignore */ }
+    }
+    loadBills();
   }, []);
 
   const handleSave = async () => {
