@@ -1411,6 +1411,81 @@ async function getRazorpaySettlements() {
   }
 }
 
+async function razorpayDebugPayments() {
+  const db = await getDb();
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+
+  if (!integrations?.razorpay?.keyId || !integrations?.razorpay?.keySecret) {
+    return { error: 'Razorpay credentials not configured.' };
+  }
+
+  const { keyId, keySecret } = integrations.razorpay;
+  const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+
+  try {
+    // Fetch 5 sample payments
+    const payRes = await fetch('https://api.razorpay.com/v1/payments?count=5&skip=0', {
+      headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
+    });
+    const payData = await payRes.json();
+    const payments = (payData.items || []).map(p => ({
+      id: p.id,
+      amount: p.amount,
+      status: p.status,
+      method: p.method,
+      order_id: p.order_id,
+      receipt: p.receipt,
+      notes: p.notes,
+      description: p.description,
+      fee: p.fee,
+      tax: p.tax,
+      email: p.email,
+      contact: p.contact,
+    }));
+
+    // For each payment that has an order_id, fetch the Razorpay order to check its receipt/notes
+    const ordersChecked = [];
+    for (const p of payments) {
+      if (p.order_id) {
+        try {
+          const orderRes = await fetch(`https://api.razorpay.com/v1/orders/${p.order_id}`, {
+            headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
+          });
+          const orderData = await orderRes.json();
+          ordersChecked.push({
+            paymentId: p.id,
+            razorpayOrderId: p.order_id,
+            orderReceipt: orderData.receipt,
+            orderNotes: orderData.notes,
+            orderAmount: orderData.amount,
+            orderStatus: orderData.status,
+          });
+        } catch (err) {
+          ordersChecked.push({ paymentId: p.id, error: err.message });
+        }
+      }
+    }
+
+    // Also show a sample Shopify order for comparison
+    const sampleOrder = await db.collection('orders').findOne({ shopifyOrderId: { $exists: true } });
+
+    return {
+      samplePayments: payments,
+      razorpayOrders: ordersChecked,
+      sampleShopifyOrder: sampleOrder ? {
+        _id: sampleOrder._id,
+        orderId: sampleOrder.orderId,
+        shopifyOrderId: sampleOrder.shopifyOrderId,
+        salePrice: sampleOrder.salePrice,
+      } : null,
+      hint: 'Compare razorpayOrders[].orderReceipt or orderNotes with sampleShopifyOrder.orderId / shopifyOrderId to find the matching field',
+    };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+
 
 // ==================== ROUTE HANDLERS ====================
 
