@@ -928,7 +928,7 @@ async function shopifySyncOrders() {
           {
             // $set: always overwrite financial data, status, and dates on every sync
             $set: {
-              salePrice: Math.round(finalOrderPrice * priceRatio * 100) / 100,
+              salePrice: finalOrderPrice * priceRatio,
               discount: totalDiscount * priceRatio,
               refundAmount: totalRefunds * priceRatio,
               totalTax: totalTax * priceRatio,
