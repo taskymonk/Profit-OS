@@ -374,6 +374,158 @@ export default function DashboardView() {
         />
       </div>
 
+      {/* COD vs Prepaid Split + Cashflow Forecast */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* COD vs Prepaid Revenue Split */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-base">Revenue Split — Prepaid vs COD</CardTitle>
+                <CardDescription>Cash locked in logistics vs. digitally settled</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {revenueSplit && revenueSplit.totalRevenue > 0 ? (
+              <div className="space-y-4">
+                {/* Split Progress Bar */}
+                <div className="relative h-6 rounded-full overflow-hidden bg-muted">
+                  <div
+                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-l-full transition-all duration-500"
+                    style={{ width: `${revenueSplit.prepaid.percent}%` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 right-0 bg-gradient-to-r from-amber-400 to-amber-500 rounded-r-full transition-all duration-500"
+                    style={{ width: `${revenueSplit.cod.percent}%` }}
+                  />
+                  {revenueSplit.prepaid.percent > 15 && (
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.prepaid.percent}%</span>
+                  )}
+                  {revenueSplit.cod.percent > 15 && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.cod.percent}%</span>
+                  )}
+                </div>
+                {/* Labels */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50">
+                    <div className="p-1.5 rounded-md bg-indigo-100 dark:bg-indigo-900/50">
+                      <CreditCard className="w-4 h-4 text-indigo-600" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">Prepaid ({revenueSplit.prepaid.count} orders)</p>
+                      <p className="text-sm font-bold text-indigo-700 dark:text-indigo-300">{fmt(revenueSplit.prepaid.revenue)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50">
+                    <div className="p-1.5 rounded-md bg-amber-100 dark:bg-amber-900/50">
+                      <Banknote className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">COD ({revenueSplit.cod.count} orders)</p>
+                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{fmt(revenueSplit.cod.revenue)}</p>
+                    </div>
+                  </div>
+                </div>
+                {revenueSplit.unknown.count > 0 && (
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    {revenueSplit.unknown.count} orders ({fmt(revenueSplit.unknown.revenue)}) not yet classified — sync Razorpay to classify
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Wallet className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No revenue data for selected period</p>
+                <p className="text-xs mt-1">Sync Razorpay in Integrations to see the Prepaid / COD split</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Cashflow Forecast — Bank Settlements */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-base">Cashflow Forecast</CardTitle>
+                <CardDescription>Upcoming Razorpay bank settlements</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {settlements?.active && settlements.settlements?.length > 0 ? (
+              <div className="space-y-3">
+                {/* Next Settlement (first one) */}
+                {(() => {
+                  const next = settlements.settlements[0];
+                  return (
+                    <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 uppercase tracking-wide">
+                            {next.status === 'processed' ? 'Latest Settlement' : 'Next Settlement'}
+                          </p>
+                          <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">{fmt(next.amount)}</p>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant={next.status === 'processed' ? 'default' : 'outline'} className="text-[10px]">
+                            {next.status === 'processed' ? 'Settled' : next.status === 'created' ? 'Pending' : next.status}
+                          </Badge>
+                          {next.createdAt && (
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              {new Date(next.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {next.utr && <p className="text-[10px] text-muted-foreground mt-2">UTR: {next.utr}</p>}
+                    </div>
+                  );
+                })()}
+                {/* Upcoming settlements list */}
+                {settlements.settlements.length > 1 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Recent Settlements</p>
+                    {settlements.settlements.slice(1, 4).map((s) => (
+                      <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 border border-border/50">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-sm">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'N/A'}
+                          </span>
+                          <Badge variant={s.status === 'processed' ? 'default' : 'secondary'} className="text-[9px] h-4">
+                            {s.status}
+                          </Badge>
+                        </div>
+                        <span className="text-sm font-semibold">{fmt(s.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {settlements.settlements.length > 4 && (
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    +{settlements.settlements.length - 4} more settlements
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Landmark className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No pending bank settlements</p>
+                <p className="text-xs mt-1">
+                  {settlements?.active
+                    ? 'All settlements have been processed.'
+                    : 'Connect Razorpay in Integrations to track bank settlements'}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
