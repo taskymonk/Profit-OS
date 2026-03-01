@@ -239,7 +239,20 @@ export default function DashboardView() {
     );
   }
 
-  const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown, dateRange: activeDateRange } = data;
+  const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown, dateRange: activeDateRange, revenueSplit } = data;
+
+  // Settlements state (fetched separately)
+  const [settlements, setSettlements] = useState(null);
+  useEffect(() => {
+    async function fetchSettlements() {
+      try {
+        const res = await fetch('/api/razorpay/settlements');
+        const sData = await res.json();
+        if (sData && !sData.error) setSettlements(sData);
+      } catch (err) { /* silently ignore if Razorpay not configured */ }
+    }
+    fetchSettlements();
+  }, []);
 
   // Trend calc
   const mid = Math.floor(dailyData.length / 2);
