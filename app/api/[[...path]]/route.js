@@ -898,26 +898,7 @@ async function shopifySyncOrders() {
       // Total tax
       const totalTax = parseFloat(shopifyOrder.total_tax || 0);
 
-      // Check if order already exists
-      const existingOrder = await db.collection('orders').findOne({ shopifyOrderId: shopifyOrderIdStr });
-
-      if (existingOrder) {
-        const updateFields = {};
-        if (existingOrder.orderDate !== shopifyDate) updateFields.orderDate = shopifyDate;
-        if (existingOrder.status !== status && !existingOrder.statusOverridden) updateFields.status = status;
-        // Patch new fields onto existing orders if missing
-        if (!existingOrder.shippingAddress) updateFields.shippingAddress = shippingAddress;
-        if (!existingOrder.customerPhone && customerPhone) updateFields.customerPhone = customerPhone;
-        if (!existingOrder.totalTax) updateFields.totalTax = totalTax;
-        if (Object.keys(updateFields).length > 0) {
-          updateFields.updatedAt = new Date().toISOString();
-          await db.collection('orders').updateOne({ _id: existingOrder._id }, { $set: updateFields });
-          updated++;
-        }
-        continue;
-      }
-
-      // Proportional Revenue Allocation — use exact share of Shopify's final checkout total
+      // Proportional Revenue Allocation — computed for EVERY order (new and existing)
       const totalLineItems = (shopifyOrder.line_items || []).length || 1;
       const totalShipping = parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0);
       const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
@@ -941,37 +922,50 @@ async function shopifySyncOrders() {
         const lineItemRaw = parseFloat(item.price) * (item.quantity || 1);
         const priceRatio = rawSubtotal > 0 ? lineItemRaw / rawSubtotal : (1 / totalLineItems);
 
-        await db.collection('orders').insertOne({
-          _id: uuidv4(),
-          orderId: `SH-${shopifyOrder.order_number || shopifyOrder.id}`,
-          shopifyOrderId: shopifyOrderIdStr,
-          sku: sku,
-          productName: item.title || item.name,
-          variantName: item.variant_title || '',
-          customerName: shopifyOrder.customer ? `${shopifyOrder.customer.first_name || ''} ${shopifyOrder.customer.last_name || ''}`.trim() : 'Unknown',
-          customerPhone: customerPhone,
-          salePrice: Math.round(finalOrderPrice * priceRatio * 100) / 100,
-          discount: totalDiscount * priceRatio,
-          refundAmount: totalRefunds * priceRatio,
-          totalTax: totalTax * priceRatio,
-          financialStatus,
-          status,
-          shippingMethod: 'shopify',
-          shippingCost: totalShipping * priceRatio,
-          shippingAddress,
-          isUrgent: false,
-          manualCourierName: null,
-          manualShippingCost: null,
-          preparedBy: null,
-          preparedByName: null,
-          trackingNumber: null,
-          destinationPincode: shippingAddress.zip,
-          destinationCity: shippingAddress.city,
-          orderDate: shopifyDate,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-        synced++;
+        const result = await db.collection('orders').updateOne(
+          // QUERY: match on Shopify order ID + SKU (unique per line item)
+          { shopifyOrderId: shopifyOrderIdStr, sku: sku },
+          {
+            // $set: always overwrite financial data, status, and dates on every sync
+            $set: {
+              salePrice: Math.round(finalOrderPrice * priceRatio * 100) / 100,
+              discount: totalDiscount * priceRatio,
+              refundAmount: totalRefunds * priceRatio,
+              totalTax: totalTax * priceRatio,
+              financialStatus,
+              status,
+              shippingCost: totalShipping * priceRatio,
+              shippingAddress,
+              customerPhone,
+              orderDate: shopifyDate,
+              productName: item.title || item.name,
+              variantName: item.variant_title || '',
+              destinationPincode: shippingAddress.zip,
+              destinationCity: shippingAddress.city,
+              updatedAt: new Date().toISOString(),
+            },
+            // $setOnInsert: only written when this is a brand-new document
+            $setOnInsert: {
+              _id: uuidv4(),
+              orderId: `SH-${shopifyOrder.order_number || shopifyOrder.id}`,
+              shopifyOrderId: shopifyOrderIdStr,
+              sku: sku,
+              customerName: shopifyOrder.customer ? `${shopifyOrder.customer.first_name || ''} ${shopifyOrder.customer.last_name || ''}`.trim() : 'Unknown',
+              shippingMethod: 'shopify',
+              isUrgent: false,
+              manualCourierName: null,
+              manualShippingCost: null,
+              preparedBy: null,
+              preparedByName: null,
+              trackingNumber: null,
+              createdAt: new Date().toISOString(),
+            },
+          },
+          { upsert: true }
+        );
+
+        if (result.upsertedCount > 0) synced++;
+        else if (result.modifiedCount > 0) updated++;
       }
     }
 
