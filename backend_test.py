@@ -96,11 +96,14 @@ def test_source_code_upsert_logic():
             print("❌ Shopify sync $set section not found")
             return False
         
-        # Check 6: $setOnInsert contains required fields
+        # Check 6: $setOnInsert contains required fields - look for the specific Shopify sync $setOnInsert  
         required_setoninsert_fields = [
             '_id', 'orderId', 'customerName', 'createdAt', 'trackingNumber'
         ]
-        setoninsert_section = re.search(r'\$setOnInsert:\s*{([^}]+)}', source_code, re.DOTALL)
+        
+        # Find the specific Shopify orders $setOnInsert section
+        shopify_setoninsert_pattern = r'// \$setOnInsert: only written.*?\$setOnInsert:\s*{([^}]+)}'
+        setoninsert_section = re.search(shopify_setoninsert_pattern, source_code, re.DOTALL)
         if setoninsert_section:
             setoninsert_content = setoninsert_section.group(1)
             missing_fields = []
@@ -114,7 +117,7 @@ def test_source_code_upsert_logic():
             else:
                 print("✅ All required fields found in $setOnInsert")
         else:
-            print("❌ $setOnInsert section not found")
+            print("❌ Shopify sync $setOnInsert section not found")
             return False
         
         # Check 7: Uses upsertedCount and modifiedCount for tracking
