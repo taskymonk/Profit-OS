@@ -24,6 +24,8 @@ export default function IntegrationsView() {
   const [exchangeRate, setExchangeRate] = useState({ apiKey: '', active: false });
   const [syncing, setSyncing] = useState({});
   const [syncResults, setSyncResults] = useState({});
+  const [shopifyBills, setShopifyBills] = useState(null);
+  const [importingBills, setImportingBills] = useState(false);
 
   useEffect(() => {
     async function load() {
