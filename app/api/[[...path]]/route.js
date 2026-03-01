@@ -565,12 +565,12 @@ async function getDashboardData(params = {}) {
   }
 
   // All-time stats
-  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, new Date(2020, 0, 1), new Date(now.getFullYear() + 1, 0, 1), 1, adSpendMap, adSpendTaxMultiplier);
+  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, '2020-01-01', '2030-12-31', 1, adSpendMap, adSpendTaxMultiplier);
 
   return {
     tenant: tenantConfig,
     exchangeRate,
-    dateRange: { start: startDate.toISOString(), end: endDate.toISOString(), range: params.range || '7days' },
+    dateRange: { start: startDate, end: endDate, range: params.range || '7days' },
     filtered: {
       netProfit: metrics.netProfit,
       grossOrderProfit: metrics.grossOrderProfit,
