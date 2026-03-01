@@ -202,6 +202,7 @@ export default function DashboardView() {
   const [customEnd, setCustomEnd] = useState('');
   const [chartType, setChartType] = useState('bar');
   const [pendingRange, setPendingRange] = useState({ from: undefined, to: undefined });
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
