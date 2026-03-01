@@ -179,7 +179,7 @@ function OrderRow({ order, expanded, onToggle }) {
               <div className="space-y-1">
                 <div className="font-semibold">Net Profit</div>
                 <p className={`text-xl font-bold ${isProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {fmt(Math.round(profit.netProfit))}
+                  {fmt(profit.netProfit)}
                 </p>
                 <p className={`text-sm ${profit.profitMargin >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {profit.profitMargin.toFixed(1)}% margin
