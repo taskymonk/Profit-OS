@@ -127,9 +127,9 @@ function OrderRow({ order, expanded, onToggle }) {
         <td className="py-3 px-4 text-sm text-right">{fmt(profit.grossRevenue)}</td>
         <td className="py-3 px-4 text-sm text-right text-muted-foreground">{fmt(profit.totalCOGS)}</td>
         <td className="py-3 px-4 text-sm text-right text-muted-foreground">{fmt(profit.shippingCost)}</td>
-        <td className="py-3 px-4 text-sm text-right text-muted-foreground">{fmt(Math.round(profit.marketingAllocation))}</td>
+        <td className="py-3 px-4 text-sm text-right text-muted-foreground">{fmt(profit.marketingAllocation)}</td>
         <td className={`py-3 px-4 text-sm text-right font-bold ${isProfit ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-          {fmt(Math.round(profit.netProfit))}
+          {fmt(profit.netProfit)}
         </td>
         <td className="py-3 px-4 text-center">
           {expanded ? <ChevronUp className="w-4 h-4 inline" /> : <ChevronDown className="w-4 h-4 inline" />}
