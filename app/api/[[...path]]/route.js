@@ -477,34 +477,41 @@ async function getDashboardData(params = {}) {
   const adSpendTaxRate = tenantConfig?.adSpendTaxRate ?? 18;
   const adSpendTaxMultiplier = 1 + (adSpendTaxRate / 100);
 
-  // Date range handling
+  // Date range handling — ALL ranges use IST (Asia/Kolkata) date strings
   const now = new Date();
+  const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   let startDate, endDate;
 
   switch (params.range) {
     case 'today':
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      startDate = todayIST;
+      endDate = todayIST;
       break;
-    case '7days':
-      startDate = new Date(now); startDate.setDate(startDate.getDate() - 6); startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    case '7days': {
+      const d7 = new Date(now.getTime() - 6 * 86400000);
+      startDate = d7.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      endDate = todayIST;
       break;
-    case 'month':
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    }
+    case 'month': {
+      const [y, m] = todayIST.split('-');
+      startDate = `${y}-${m}-01`;
+      endDate = todayIST;
       break;
+    }
     case 'alltime':
-      startDate = new Date(2020, 0, 1);
-      endDate = new Date(now.getFullYear() + 1, 0, 1);
+      startDate = '2020-01-01';
+      endDate = '2030-12-31';
       break;
     case 'custom':
-      startDate = params.startDate ? new Date(params.startDate) : new Date(now); startDate.setHours(0, 0, 0, 0);
-      endDate = params.endDate ? new Date(params.endDate) : new Date(now); endDate.setHours(23, 59, 59, 999);
+      startDate = params.startDate || todayIST;
+      endDate = params.endDate || todayIST;
       break;
-    default: // default to 7 days
-      startDate = new Date(now); startDate.setDate(startDate.getDate() - 6); startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    default: {
+      const d7d = new Date(now.getTime() - 6 * 86400000);
+      startDate = d7d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      endDate = todayIST;
+    }
   }
 
   // Get exchange rate for currency conversion
