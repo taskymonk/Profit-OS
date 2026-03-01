@@ -219,7 +219,11 @@ export default function DashboardView() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [dateRange, customStart, customEnd]);
+  useEffect(() => {
+    // For custom range, only fetch when BOTH from and to dates are fully selected
+    if (dateRange === 'custom' && (!customStart || !customEnd)) return;
+    fetchData();
+  }, [dateRange, customStart, customEnd]);
 
   if (loading || !data) {
     return (
