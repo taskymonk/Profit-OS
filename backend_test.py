@@ -1,339 +1,382 @@
 #!/usr/bin/env python3
 """
-Phase 8.8 "The Absolute Parity Patch" - Backend Testing
-Tests 5 critical areas:
-1. BULLETPROOF PAGINATION (source code check)
-2. STRICT ACCOUNTING PARITY (Cancelled/Voided/Pending filter)
-3. TIMEZONE DOUBLE-SHIFT FIX (source code check) 
-4. DASHBOARD DATA INTEGRITY POST-FILTER
-5. AD SPEND TAX STILL WORKS
+Phase 8.9 "Absolute Financial Parity & Date Picker UX Polish" Backend Testing
+Testing 5 critical areas:
+1. PROPORTIONAL REVENUE ALLOCATION (source code check)
+2. STRICT FINANCIAL STATUS FILTERING (source code check)  
+3. DASHBOARD DATA INTEGRITY
+4. DATE PICKER UX (source code check)
+5. AD SPEND TAX
 """
 
-import json
-import os
-import requests
+import asyncio
+import aiohttp
 import sys
-from pymongo import MongoClient
-from datetime import datetime
+import os
+import re
+import json
+import pymongo
+from datetime import datetime, timedelta
 
-# Get base URL from environment  
+# Base URL from environment
 BASE_URL = "http://localhost:3000/api"
-MONGO_URL = "mongodb://localhost:27017"
-DB_NAME = "profitos"
 
-def print_test_result(test_name, success, details=""):
-    """Print formatted test result"""
-    status = "✅ PASSED" if success else "❌ FAILED"
-    print(f"[{test_name}] {status} - {details}")
+class Phase89Tester:
+    def __init__(self):
+        self.base_url = BASE_URL
+        self.session = None
+        self.mongo_client = None
+        self.db = None
+        self.results = {
+            'proportional_revenue_allocation': {'passed': 0, 'total': 5, 'details': []},
+            'strict_financial_status_filtering': {'passed': 0, 'total': 8, 'details': []},
+            'dashboard_data_integrity': {'passed': 0, 'total': 5, 'details': []},
+            'date_picker_ux': {'passed': 0, 'total': 4, 'details': []},
+            'ad_spend_tax': {'passed': 0, 'total': 3, 'details': []}
+        }
 
-def test_area_1_bulletproof_pagination():
-    """Test Area 1: BULLETPROOF PAGINATION (source code check)"""
-    print("\n🎯 TESTING AREA 1: BULLETPROOF PAGINATION (source code check)")
-    
-    try:
-        # Read the route.js file to check Shopify pagination
-        route_file_path = "/app/app/api/[[...path]]/route.js"
-        
-        with open(route_file_path, 'r') as f:
-            route_content = f.read()
-        
-        # Find the Shopify pagination section
-        print_test_result("Route file access", True, "Successfully read route.js")
-        
-        # Check 1: Link header is SPLIT by comma before regex matching
-        has_link_split = 'linkHeader.split(\',\')' in route_content or 'links = linkHeader.split(\',\')' in route_content
-        print_test_result("Link header split by comma", has_link_split,
-                         "linkHeader.split(',') found" if has_link_split else "Missing comma split logic")
-        
-        # Check 2: Each individual link entry matched with regex for rel="next"
-        has_individual_match = '/<([^>]+)>;\s*rel="next"/' in route_content
-        print_test_result("Individual link regex match", has_individual_match,
-                         "/<([^>]+)>;\\s*rel=\"next\"/ pattern found" if has_individual_match else "Missing individual link match")
-        
-        # Check 3: Loop through splits and breaks after finding rel="next"
-        has_loop_break = ('for (const link of links)' in route_content or 'for (const link of linkHeader.split' in route_content) and 'break' in route_content
-        print_test_result("Loop with break logic", has_loop_break,
-                         "Loop through splits with break found" if has_loop_break else "Missing loop/break logic")
-        
-        # Check 4: Does NOT just match against full concatenated header
-        # This is implicit - if it splits and loops, it's not matching the full string
-        avoids_full_match = has_link_split and has_loop_break
-        print_test_result("Avoids full header match", avoids_full_match,
-                         "Properly splits before matching" if avoids_full_match else "May be matching full header")
-        
-    except Exception as e:
-        print_test_result("Area 1 Exception", False, f"Error: {str(e)}")
-    
-    print(f"🎯 AREA 1 COMPLETE: Bulletproof Pagination source code checked")
-
-def test_area_2_strict_accounting_parity():
-    """Test Area 2: STRICT ACCOUNTING PARITY (Cancelled/Voided/Pending filter)"""
-    print("\n🎯 TESTING AREA 2: STRICT ACCOUNTING PARITY")
-    
-    try:
-        # Check profitCalculator.js for EXCLUDED_STATUSES
-        profit_calc_path = "/app/lib/profitCalculator.js"
-        
-        with open(profit_calc_path, 'r') as f:
-            calc_content = f.read()
-        
-        # Check 1: EXCLUDED_STATUSES array exists
-        has_excluded_statuses = 'EXCLUDED_STATUSES' in calc_content
-        print_test_result("Has EXCLUDED_STATUSES", has_excluded_statuses,
-                         "EXCLUDED_STATUSES array found" if has_excluded_statuses else "Missing EXCLUDED_STATUSES")
-        
-        # Check 2: Contains required statuses
-        has_cancelled = "'Cancelled'" in calc_content or '"Cancelled"' in calc_content
-        has_voided = "'Voided'" in calc_content or '"Voided"' in calc_content  
-        has_pending = "'Pending'" in calc_content or '"Pending"' in calc_content
-        
-        print_test_result("Has required statuses", has_cancelled and has_voided and has_pending,
-                         f"Cancelled: {has_cancelled}, Voided: {has_voided}, Pending: {has_pending}")
-        
-        # Check 3: accountingOrders created by filtering
-        has_accounting_orders = 'accountingOrders' in calc_content and 'filter' in calc_content
-        print_test_result("Has accountingOrders filter", has_accounting_orders,
-                         "accountingOrders filtering found" if has_accounting_orders else "Missing accountingOrders")
-        
-        # Check 4: totalOrders uses accountingOrders.length
-        has_accounting_total = 'totalOrders' in calc_content and 'accountingOrders.length' in calc_content
-        print_test_result("totalOrders from accountingOrders", has_accounting_total,
-                         "totalOrders = accountingOrders.length found" if has_accounting_total else "Wrong totalOrders source")
-        
-        # Check 5: Revenue sums accountingOrders
-        has_accounting_revenue = 'accountingOrders' in calc_content and ('reduce' in calc_content or 'forEach' in calc_content)
-        print_test_result("Revenue from accountingOrders", has_accounting_revenue,
-                         "Revenue calculation from accountingOrders" if has_accounting_revenue else "Wrong revenue source")
-        
-        # Check 6: grossOrderProfits maps over accountingOrders
-        has_accounting_profits = 'grossOrderProfits' in calc_content and 'accountingOrders.map' in calc_content
-        print_test_result("Profits from accountingOrders", has_accounting_profits,
-                         "grossOrderProfits from accountingOrders" if has_accounting_profits else "Wrong profits source")
-        
-        # Check 7: orderProfits still maps ALL filteredOrders (for table)
-        has_filtered_table = 'orderProfits' in calc_content and 'filteredOrders.map' in calc_content
-        print_test_result("Table from all filteredOrders", has_filtered_table,
-                         "orderProfits from filteredOrders for table" if has_filtered_table else "Wrong table source")
-        
-        # Test API: Check dashboard has cancelledCount
-        response = requests.get(f"{BASE_URL}/dashboard", params={"range": "alltime"})
-        print_test_result("Dashboard API call", response.status_code == 200, f"Status: {response.status_code}")
-        
-        if response.status_code == 200:
-            dashboard_data = response.json()
-            has_cancelled_count = 'cancelledCount' in dashboard_data.get('filtered', {})
-            cancelled_count = dashboard_data.get('filtered', {}).get('cancelledCount', 0)
-            print_test_result("Dashboard has cancelledCount", has_cancelled_count,
-                             f"cancelledCount: {cancelled_count}")
-        
-        # Test MongoDB: Count cancelled orders
+    async def setup(self):
+        """Initialize HTTP session and MongoDB connection"""
         try:
-            client = MongoClient(MONGO_URL)
-            db = client[DB_NAME]
-            
-            cancelled_orders_db = db.orders.count_documents({'status': 'Cancelled'})
-            total_orders_db = db.orders.count_documents({})
-            
-            print_test_result("MongoDB cancelled count", True, 
-                             f"Cancelled: {cancelled_orders_db}, Total: {total_orders_db}")
-            
-            # If cancelled orders exist, dashboard totalOrders should be less than total in DB
-            if cancelled_orders_db > 0 and response.status_code == 200:
-                dashboard_total = dashboard_data.get('filtered', {}).get('totalOrders', 0)
-                total_less_than_db = dashboard_total < total_orders_db
-                print_test_result("Dashboard excludes cancelled", total_less_than_db,
-                                 f"Dashboard: {dashboard_total} < DB: {total_orders_db}")
-            
-            client.close()
-            
-        except Exception as mongo_e:
-            print_test_result("MongoDB check", False, f"MongoDB error: {str(mongo_e)}")
-    
-    except Exception as e:
-        print_test_result("Area 2 Exception", False, f"Error: {str(e)}")
-    
-    print(f"🎯 AREA 2 COMPLETE: Strict Accounting Parity checked")
+            self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30))
+            # MongoDB connection
+            self.mongo_client = pymongo.MongoClient("mongodb://localhost:27017")
+            self.db = self.mongo_client["profitos"]
+            print("✅ Setup complete: HTTP session and MongoDB connection established")
+            return True
+        except Exception as e:
+            print(f"❌ Setup failed: {e}")
+            return False
 
-def test_area_3_timezone_double_shift_fix():
-    """Test Area 3: TIMEZONE DOUBLE-SHIFT FIX (source code check)"""
-    print("\n🎯 TESTING AREA 3: TIMEZONE DOUBLE-SHIFT FIX")
-    
-    try:
-        # Read the route.js file to check Shopify date mapping
-        route_file_path = "/app/app/api/[[...path]]/route.js"
-        
-        with open(route_file_path, 'r') as f:
-            route_content = f.read()
-        
-        # Check 1: Find Shopify date mapping section
-        has_shopify_date = 'shopifyDateRaw' in route_content or 'shopifyDate' in route_content
-        print_test_result("Has Shopify date handling", has_shopify_date,
-                         "Shopify date variables found" if has_shopify_date else "No Shopify date handling")
-        
-        # Check 2: Does NOT call toISTISO on Shopify date
-        has_no_toistiso_call = 'toISTISO(shopify' not in route_content
-        print_test_result("No toISTISO on Shopify date", has_no_toistiso_call,
-                         "No toISTISO call on Shopify date" if has_no_toistiso_call else "Found toISTISO on Shopify date")
-        
-        # Check 3: Uses new Date().toISOString() directly
-        has_direct_iso = 'new Date(shopifyDateRaw).toISOString()' in route_content or 'new Date(' in route_content and '.toISOString()' in route_content
-        print_test_result("Direct ISO conversion", has_direct_iso,
-                         "Direct new Date().toISOString() found" if has_direct_iso else "Missing direct ISO conversion")
-        
-        # Check 4: Comment mentions no artificial IST shift or double-shift
-        has_comment = ('no artificial IST shift' in route_content or 
-                      'double-shift' in route_content or 
-                      'Direct parsing' in route_content)
-        print_test_result("Has explanatory comment", has_comment,
-                         "Comment about IST/double-shift found" if has_comment else "Missing explanatory comment")
-        
-    except Exception as e:
-        print_test_result("Area 3 Exception", False, f"Error: {str(e)}")
-    
-    print(f"🎯 AREA 3 COMPLETE: Timezone Double-Shift Fix checked")
+    async def cleanup(self):
+        """Close connections"""
+        if self.session:
+            await self.session.close()
+        if self.mongo_client:
+            self.mongo_client.close()
+        print("✅ Cleanup complete")
 
-def test_area_4_dashboard_data_integrity():
-    """Test Area 4: DASHBOARD DATA INTEGRITY POST-FILTER"""
-    print("\n🎯 TESTING AREA 4: DASHBOARD DATA INTEGRITY POST-FILTER")
-    
-    try:
-        # Test with alltime range for comprehensive data
-        response = requests.get(f"{BASE_URL}/dashboard", params={"range": "alltime"})
-        print_test_result("Dashboard alltime call", response.status_code == 200, f"Status: {response.status_code}")
+    def log_test(self, category, test_name, passed, details=""):
+        """Log test result"""
+        status = "✅ PASSED" if passed else "❌ FAILED"
+        print(f"  {status}: {test_name}" + (f" - {details}" if details else ""))
         
-        if response.status_code == 200:
-            dashboard_data = response.json()
-            
-            # Check required sections exist
-            if 'plBreakdown' not in dashboard_data or 'filtered' not in dashboard_data:
-                print_test_result("Dashboard structure", False, "Missing plBreakdown or filtered section")
-                return
-            
-            pl_breakdown = dashboard_data['plBreakdown']
-            filtered = dashboard_data['filtered']
-            
-            # Test a: plBreakdown.grossRevenue == filtered.revenue (exact match)
-            pl_revenue = pl_breakdown.get('grossRevenue', 0)
-            filtered_revenue = filtered.get('revenue', 0)
-            revenue_exact = pl_revenue == filtered_revenue
-            print_test_result("Revenue exact match", revenue_exact,
-                            f"plBreakdown: {pl_revenue}, filtered: {filtered_revenue}")
-            
-            # Test b: plBreakdown.netProfit == filtered.netProfit (exact match)  
-            pl_net_profit = pl_breakdown.get('netProfit', 0)
-            filtered_net_profit = filtered.get('netProfit', 0)
-            profit_exact = pl_net_profit == filtered_net_profit
-            print_test_result("Net profit exact match", profit_exact,
-                            f"plBreakdown: {pl_net_profit}, filtered: {filtered_net_profit}")
-            
-            # Test c: Waterfall math within ±1
-            # netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead
-            net_revenue = pl_breakdown.get('netRevenue', 0)
-            total_cogs = pl_breakdown.get('totalCOGS', 0)
-            total_shipping = pl_breakdown.get('totalShipping', 0)
-            total_txn_fees = pl_breakdown.get('totalTxnFees', 0)
-            ad_spend = pl_breakdown.get('adSpend', 0)
-            overhead = pl_breakdown.get('overhead', 0)
-            
-            calculated_profit = net_revenue - total_cogs - total_shipping - total_txn_fees - ad_spend - overhead
-            actual_profit = pl_breakdown.get('netProfit', 0)
-            
-            waterfall_diff = abs(calculated_profit - actual_profit)
-            waterfall_correct = waterfall_diff <= 1  # Within ±1
-            
-            print_test_result("Waterfall math (±1)", waterfall_correct,
-                            f"Calc: {calculated_profit:.2f}, Actual: {actual_profit:.2f}, Diff: {waterfall_diff:.2f}")
-            
-            # Test d: totalOrders > 0
-            total_orders = filtered.get('totalOrders', 0)
-            orders_positive = total_orders > 0
-            print_test_result("Total orders > 0", orders_positive,
-                            f"totalOrders: {total_orders}")
-            
-    except Exception as e:
-        print_test_result("Area 4 Exception", False, f"Error: {str(e)}")
-    
-    print(f"🎯 AREA 4 COMPLETE: Dashboard Data Integrity checked")
+        self.results[category]['details'].append({
+            'test': test_name,
+            'passed': passed,
+            'details': details
+        })
+        if passed:
+            self.results[category]['passed'] += 1
 
-def test_area_5_ad_spend_tax_works():
-    """Test Area 5: AD SPEND TAX STILL WORKS"""
-    print("\n🎯 TESTING AREA 5: AD SPEND TAX STILL WORKS")
-    
-    try:
-        # Get dashboard ad spend
-        response = requests.get(f"{BASE_URL}/dashboard", params={"range": "alltime"})
-        print_test_result("Dashboard call", response.status_code == 200, f"Status: {response.status_code}")
+    async def test_proportional_revenue_allocation(self):
+        """Test 1: PROPORTIONAL REVENUE ALLOCATION (source code check)"""
+        print("\n🎯 TEST 1: PROPORTIONAL REVENUE ALLOCATION (SOURCE CODE)")
         
-        if response.status_code != 200:
-            return
+        try:
+            # Read the route.js file
+            with open('/app/app/api/[[...path]]/route.js', 'r') as f:
+                route_content = f.read()
+
+            # Test 1: Check for finalOrderPrice calculation
+            if 'finalOrderPrice = parseFloat(shopifyOrder.total_price)' in route_content:
+                self.log_test('proportional_revenue_allocation', 'finalOrderPrice calculation found', True)
+            else:
+                self.log_test('proportional_revenue_allocation', 'finalOrderPrice calculation missing', False)
+
+            # Test 2: Check for rawSubtotal computation via reduce
+            rawsubtotal_pattern = r'rawSubtotal.*=.*\.reduce\('
+            if re.search(rawsubtotal_pattern, route_content, re.DOTALL):
+                self.log_test('proportional_revenue_allocation', 'rawSubtotal reduce calculation found', True)
+            else:
+                self.log_test('proportional_revenue_allocation', 'rawSubtotal reduce calculation missing', False)
+
+            # Test 3: Check for priceRatio calculation
+            priceratio_pattern = r'priceRatio.*=.*lineItemRaw.*\/.*rawSubtotal'
+            if re.search(priceratio_pattern, route_content, re.DOTALL):
+                self.log_test('proportional_revenue_allocation', 'priceRatio calculation found', True)
+            else:
+                self.log_test('proportional_revenue_allocation', 'priceRatio calculation missing', False)
+
+            # Test 4: Check for salePrice using finalOrderPrice * priceRatio
+            saleprice_pattern = r'salePrice.*=.*finalOrderPrice.*\*.*priceRatio'
+            if re.search(saleprice_pattern, route_content, re.DOTALL):
+                self.log_test('proportional_revenue_allocation', 'salePrice proportional allocation found', True)
+            else:
+                self.log_test('proportional_revenue_allocation', 'salePrice proportional allocation missing', False)
+
+            # Test 5: Check for financialStatus field mapping
+            if 'financialStatus' in route_content and 'shopifyOrder.financial_status' in route_content:
+                self.log_test('proportional_revenue_allocation', 'financialStatus field mapping found', True)
+            else:
+                self.log_test('proportional_revenue_allocation', 'financialStatus field mapping missing', False)
+
+        except Exception as e:
+            self.log_test('proportional_revenue_allocation', 'Source code check failed', False, str(e))
+
+    async def test_strict_financial_status_filtering(self):
+        """Test 2: STRICT FINANCIAL STATUS FILTERING (source code check)"""
+        print("\n🎯 TEST 2: STRICT FINANCIAL STATUS FILTERING (SOURCE CODE)")
         
-        dashboard_data = response.json()
-        filtered = dashboard_data.get('filtered', {})
-        dashboard_ad_spend = filtered.get('adSpend', 0)
+        try:
+            # Read the profitCalculator.js file
+            with open('/app/lib/profitCalculator.js', 'r') as f:
+                calc_content = f.read()
+
+            # Test 1: Check for EXCLUDED_FINANCIAL array
+            if "EXCLUDED_FINANCIAL = ['pending', 'voided', 'refunded']" in calc_content:
+                self.log_test('strict_financial_status_filtering', 'EXCLUDED_FINANCIAL array found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'EXCLUDED_FINANCIAL array missing', False)
+
+            # Test 2: Check for EXCLUDED_STATUSES array
+            if "EXCLUDED_STATUSES = ['Cancelled', 'Voided', 'Pending']" in calc_content:
+                self.log_test('strict_financial_status_filtering', 'EXCLUDED_STATUSES array found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'EXCLUDED_STATUSES array missing', False)
+
+            # Test 3: Check for accountingOrders filtering by both status and financialStatus
+            accounting_pattern = r'accountingOrders.*=.*filteredOrders\.filter.*EXCLUDED_STATUSES.*EXCLUDED_FINANCIAL'
+            if re.search(accounting_pattern, calc_content, re.DOTALL):
+                self.log_test('strict_financial_status_filtering', 'accountingOrders dual filtering found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'accountingOrders dual filtering missing', False)
+
+            # Test 4: Check totalOrders uses accountingOrders.length
+            if 'totalOrders = accountingOrders.length' in calc_content:
+                self.log_test('strict_financial_status_filtering', 'totalOrders from accountingOrders found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'totalOrders from accountingOrders missing', False)
+
+            # Test 5: Check totalRevenue sums accountingOrders
+            revenue_pattern = r'totalRevenue.*=.*accountingOrders\.reduce'
+            if re.search(revenue_pattern, calc_content, re.DOTALL):
+                self.log_test('strict_financial_status_filtering', 'totalRevenue from accountingOrders found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'totalRevenue from accountingOrders missing', False)
+
+            # Test 6: Check grossOrderProfits maps over accountingOrders
+            gross_pattern = r'grossOrderProfits.*=.*accountingOrders\.map'
+            if re.search(gross_pattern, calc_content, re.DOTALL):
+                self.log_test('strict_financial_status_filtering', 'grossOrderProfits from accountingOrders found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'grossOrderProfits from accountingOrders missing', False)
+
+            # Test 7: Check orderProfits maps over filteredOrders (for table display)
+            order_pattern = r'orderProfits.*=.*filteredOrders\.map'
+            if re.search(order_pattern, calc_content, re.DOTALL):
+                self.log_test('strict_financial_status_filtering', 'orderProfits from filteredOrders found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'orderProfits from filteredOrders missing', False)
+
+            # Test 8: Check for cancelledCount calculation
+            if 'cancelledCount' in calc_content:
+                self.log_test('strict_financial_status_filtering', 'cancelledCount calculation found', True)
+            else:
+                self.log_test('strict_financial_status_filtering', 'cancelledCount calculation missing', False)
+
+        except Exception as e:
+            self.log_test('strict_financial_status_filtering', 'Source code check failed', False, str(e))
+
+    async def test_dashboard_data_integrity(self):
+        """Test 3: DASHBOARD DATA INTEGRITY"""
+        print("\n🎯 TEST 3: DASHBOARD DATA INTEGRITY")
         
-        print_test_result("Dashboard ad spend", dashboard_ad_spend >= 0, 
-                         f"Ad spend: ₹{dashboard_ad_spend:.2f}")
+        try:
+            # Get dashboard data for alltime range
+            async with self.session.get(f"{self.base_url}/dashboard?range=alltime") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    # Test 1: plBreakdown.grossRevenue == filtered.revenue
+                    pl_revenue = data.get('plBreakdown', {}).get('grossRevenue', 0)
+                    filtered_revenue = data.get('filtered', {}).get('revenue', 0)
+                    if pl_revenue == filtered_revenue:
+                        self.log_test('dashboard_data_integrity', 'plBreakdown.grossRevenue == filtered.revenue', True, f"Both: ₹{pl_revenue:,.2f}")
+                    else:
+                        self.log_test('dashboard_data_integrity', 'plBreakdown.grossRevenue != filtered.revenue', False, f"PL: ₹{pl_revenue:,.2f}, Filtered: ₹{filtered_revenue:,.2f}")
+
+                    # Test 2: plBreakdown.netProfit == filtered.netProfit
+                    pl_profit = data.get('plBreakdown', {}).get('netProfit', 0)
+                    filtered_profit = data.get('filtered', {}).get('netProfit', 0)
+                    if pl_profit == filtered_profit:
+                        self.log_test('dashboard_data_integrity', 'plBreakdown.netProfit == filtered.netProfit', True, f"Both: ₹{pl_profit:,.2f}")
+                    else:
+                        self.log_test('dashboard_data_integrity', 'plBreakdown.netProfit != filtered.netProfit', False, f"PL: ₹{pl_profit:,.2f}, Filtered: ₹{filtered_profit:,.2f}")
+
+                    # Test 3: cancelledCount field exists and >= 0
+                    cancelled_count = data.get('filtered', {}).get('cancelledCount', None)
+                    if cancelled_count is not None and cancelled_count >= 0:
+                        self.log_test('dashboard_data_integrity', 'cancelledCount field exists and valid', True, f"Count: {cancelled_count}")
+                    else:
+                        self.log_test('dashboard_data_integrity', 'cancelledCount field missing or invalid', False, f"Value: {cancelled_count}")
+
+                    # Test 4: totalOrders > 0
+                    total_orders = data.get('filtered', {}).get('totalOrders', 0)
+                    if total_orders > 0:
+                        self.log_test('dashboard_data_integrity', 'totalOrders > 0', True, f"Orders: {total_orders}")
+                    else:
+                        self.log_test('dashboard_data_integrity', 'totalOrders <= 0', False, f"Orders: {total_orders}")
+
+                    # Test 5: Check if pending orders exist and verify totalOrders logic
+                    pending_orders_count = self.db.orders.count_documents({'financialStatus': 'pending'})
+                    total_db_orders = self.db.orders.count_documents({})
+                    
+                    if pending_orders_count > 0:
+                        if total_orders < total_db_orders:
+                            self.log_test('dashboard_data_integrity', 'Dashboard totalOrders < DB total (pending orders excluded)', True, f"Dashboard: {total_orders}, DB: {total_db_orders}, Pending: {pending_orders_count}")
+                        else:
+                            self.log_test('dashboard_data_integrity', 'Dashboard totalOrders should be less than DB total', False, f"Dashboard: {total_orders}, DB: {total_db_orders}")
+                    else:
+                        self.log_test('dashboard_data_integrity', 'No pending orders found in DB', True, f"Pending orders: {pending_orders_count}")
+
+                else:
+                    self.log_test('dashboard_data_integrity', 'Dashboard API call failed', False, f"Status: {response.status}")
+
+        except Exception as e:
+            self.log_test('dashboard_data_integrity', 'Dashboard integrity test failed', False, str(e))
+
+    async def test_date_picker_ux(self):
+        """Test 4: DATE PICKER UX (source code check)"""
+        print("\n🎯 TEST 4: DATE PICKER UX (SOURCE CODE)")
         
-        # Connect to MongoDB to get raw data
-        client = MongoClient(MONGO_URL)
-        db = client[DB_NAME]
+        try:
+            # Read the DashboardView.jsx file
+            with open('/app/components/DashboardView.jsx', 'r') as f:
+                dashboard_content = f.read()
+
+            # Test 1: Check for useEffect guard condition
+            guard_pattern = r'if\s*\(\s*dateRange\s*===\s*["\']custom["\']\s*&&\s*\(\s*!\s*customStart\s*\|\|\s*!\s*customEnd\s*\)\s*\)\s*return'
+            if re.search(guard_pattern, dashboard_content):
+                self.log_test('date_picker_ux', 'useEffect guard condition found', True)
+            else:
+                self.log_test('date_picker_ux', 'useEffect guard condition missing', False)
+
+            # Test 2: Check for pendingRange state
+            if 'pendingRange' in dashboard_content and 'useState(' in dashboard_content:
+                self.log_test('date_picker_ux', 'pendingRange state found', True)
+            else:
+                self.log_test('date_picker_ux', 'pendingRange state missing', False)
+
+            # Test 3: Check for Calendar onSelect with range validation
+            onselect_pattern = r'onSelect.*=.*\(.*range.*\).*=>.*range\?\.\s*from.*&&.*range\?\.\s*to'
+            if re.search(onselect_pattern, dashboard_content, re.DOTALL):
+                self.log_test('date_picker_ux', 'Calendar onSelect with range validation found', True)
+            else:
+                self.log_test('date_picker_ux', 'Calendar onSelect with range validation missing', False)
+
+            # Test 4: Check for setCustomStart/setCustomEnd calls
+            if 'setCustomStart' in dashboard_content and 'setCustomEnd' in dashboard_content:
+                self.log_test('date_picker_ux', 'setCustomStart/setCustomEnd calls found', True)
+            else:
+                self.log_test('date_picker_ux', 'setCustomStart/setCustomEnd calls missing', False)
+
+        except Exception as e:
+            self.log_test('date_picker_ux', 'Date picker UX check failed', False, str(e))
+
+    async def test_ad_spend_tax(self):
+        """Test 5: AD SPEND TAX"""
+        print("\n🎯 TEST 5: AD SPEND TAX")
         
-        # Get raw ad spend from dailyMarketingSpend collection
-        daily_spends = list(db.dailyMarketingSpend.find({}))
-        raw_ad_total = sum(spend.get('spendAmount', 0) for spend in daily_spends)
+        try:
+            # Get dashboard data for alltime range
+            async with self.session.get(f"{self.base_url}/dashboard?range=alltime") as response:
+                if response.status == 200:
+                    data = await response.json()
+                    dashboard_ad_spend = data.get('filtered', {}).get('adSpend', 0)
+
+                    # Test 1: Dashboard has positive ad spend
+                    if dashboard_ad_spend > 0:
+                        self.log_test('ad_spend_tax', 'Dashboard has positive ad spend', True, f"Ad Spend: ₹{dashboard_ad_spend:,.2f}")
+                    else:
+                        self.log_test('ad_spend_tax', 'Dashboard has zero ad spend', False, f"Ad Spend: ₹{dashboard_ad_spend}")
+
+                    # Use pymongo to get raw ad spend data and tax rate
+                    tenant_config = self.db.tenantConfig.find_one({})
+                    ad_spend_tax_rate = tenant_config.get('adSpendTaxRate', 18) if tenant_config else 18
+
+                    # Get raw ad spend total from dailyMarketingSpend collection
+                    daily_spends = list(self.db.dailyMarketingSpend.find({}))
+                    raw_total = sum(spend.get('spendAmount', 0) for spend in daily_spends)
+
+                    # Test 2: Raw ad spend calculation
+                    if raw_total > 0:
+                        self.log_test('ad_spend_tax', 'Raw ad spend data found', True, f"Raw Total: ₹{raw_total:,.2f}")
+                    else:
+                        self.log_test('ad_spend_tax', 'No raw ad spend data found', False, f"Raw Total: ₹{raw_total}")
+
+                    # Test 3: Tax calculation verification
+                    expected_taxed_spend = raw_total * (1 + ad_spend_tax_rate / 100)
+                    difference_percent = abs(dashboard_ad_spend - expected_taxed_spend) / expected_taxed_spend * 100 if expected_taxed_spend > 0 else 0
+                    
+                    if difference_percent <= 1:  # Within 1% tolerance
+                        self.log_test('ad_spend_tax', 'Ad spend tax calculation accurate', True, f"Expected: ₹{expected_taxed_spend:,.2f}, Got: ₹{dashboard_ad_spend:,.2f}, Tax Rate: {ad_spend_tax_rate}%")
+                    else:
+                        self.log_test('ad_spend_tax', 'Ad spend tax calculation inaccurate', False, f"Expected: ₹{expected_taxed_spend:,.2f}, Got: ₹{dashboard_ad_spend:,.2f}, Difference: {difference_percent:.2f}%")
+
+                else:
+                    self.log_test('ad_spend_tax', 'Dashboard API call failed', False, f"Status: {response.status}")
+
+        except Exception as e:
+            self.log_test('ad_spend_tax', 'Ad spend tax test failed', False, str(e))
+
+    async def run_all_tests(self):
+        """Run all Phase 8.9 tests"""
+        print("🚀 Starting Phase 8.9 'Absolute Financial Parity & Date Picker UX Polish' Backend Testing")
+        print(f"Base URL: {self.base_url}")
         
-        print_test_result("Raw ad spend from MongoDB", raw_ad_total >= 0,
-                         f"Raw total: ₹{raw_ad_total:.2f}")
+        if not await self.setup():
+            return False
+
+        try:
+            # Run all tests
+            await self.test_proportional_revenue_allocation()
+            await self.test_strict_financial_status_filtering()
+            await self.test_dashboard_data_integrity()
+            await self.test_date_picker_ux()
+            await self.test_ad_spend_tax()
+
+            # Print summary
+            self.print_summary()
+            return True
+
+        finally:
+            await self.cleanup()
+
+    def print_summary(self):
+        """Print test summary"""
+        print("\n" + "="*80)
+        print("🎯 PHASE 8.9 BACKEND TESTING SUMMARY")
+        print("="*80)
         
-        # Get tenant config for ad spend tax rate
-        tenant_config = db.tenantConfig.find_one({})
-        ad_spend_tax_rate = 18  # Default
-        if tenant_config and 'adSpendTaxRate' in tenant_config:
-            ad_spend_tax_rate = tenant_config['adSpendTaxRate']
+        total_passed = 0
+        total_tests = 0
         
-        print_test_result("Ad spend tax rate", True, f"Tax rate: {ad_spend_tax_rate}%")
-        
-        # Calculate expected dashboard ad spend with tax
-        expected_ad_spend = raw_ad_total * (1 + ad_spend_tax_rate / 100)
-        
-        # Verify calculation (allowing small rounding differences)
-        if expected_ad_spend > 0:
-            ad_spend_diff = abs(dashboard_ad_spend - expected_ad_spend)
-            ad_spend_diff_percent = (ad_spend_diff / expected_ad_spend * 100)
+        for category, results in self.results.items():
+            passed = results['passed']
+            total = results['total']
+            total_passed += passed
+            total_tests += total
             
-            tax_calc_correct = ad_spend_diff_percent < 1.0  # Less than 1% difference
-            
-            print_test_result("Tax calculation accuracy", tax_calc_correct,
-                             f"Expected: ₹{expected_ad_spend:.2f}, Got: ₹{dashboard_ad_spend:.2f}, " +
-                             f"Diff: {ad_spend_diff:.2f} ({ad_spend_diff_percent:.1f}%)")
+            status = "✅ ALL PASSED" if passed == total else f"⚠️  {passed}/{total} PASSED"
+            category_name = category.replace('_', ' ').title()
+            print(f"{category_name}: {status}")
+        
+        print("-" * 80)
+        overall_status = "✅ ALL TESTS PASSED" if total_passed == total_tests else f"⚠️  {total_passed}/{total_tests} TESTS PASSED"
+        print(f"OVERALL: {overall_status}")
+        
+        if total_passed == total_tests:
+            print("\n🎉 PHASE 8.9 'ABSOLUTE FINANCIAL PARITY & DATE PICKER UX POLISH' FULLY FUNCTIONAL!")
         else:
-            print_test_result("Tax calculation (no ads)", dashboard_ad_spend == 0,
-                             "No ad spend data, dashboard correctly shows 0")
-        
-        client.close()
-    
-    except Exception as e:
-        print_test_result("Area 5 Exception", False, f"Error: {str(e)}")
-    
-    print(f"🎯 AREA 5 COMPLETE: Ad Spend Tax verified")
+            print(f"\n❌ {total_tests - total_passed} test(s) failed. Review implementation.")
 
-def main():
-    """Run all Phase 8.8 backend tests"""
-    print("🎉 PHASE 8.8 'THE ABSOLUTE PARITY PATCH' - BACKEND TESTING")
-    print(f"Base URL: {BASE_URL}")
-    print("Real Shopify data (1962+ orders incl. cancelled) and Meta Ads data expected")
-    print("=" * 80)
-    
-    # Run all 5 test areas for Phase 8.8
-    test_area_1_bulletproof_pagination()
-    test_area_2_strict_accounting_parity()
-    test_area_3_timezone_double_shift_fix()
-    test_area_4_dashboard_data_integrity()
-    test_area_5_ad_spend_tax_works()
-    
-    print("\n" + "=" * 80)
-    print("🎉 PHASE 8.8 'THE ABSOLUTE PARITY PATCH' BACKEND TESTING COMPLETE!")
-    print("All 5 critical areas tested: Bulletproof Pagination, Strict Accounting, Timezone Fix, Data Integrity, Ad Tax")
+async def main():
+    """Main test runner"""
+    tester = Phase89Tester()
+    success = await tester.run_all_tests()
+    return 0 if success else 1
 
 if __name__ == "__main__":
-    main()
+    exit_code = asyncio.run(main())
+    sys.exit(exit_code)
