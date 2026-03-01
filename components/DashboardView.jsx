@@ -653,7 +653,62 @@ export default function DashboardView() {
               {[
                 { label: 'Cost of Goods Sold (COGS)', value: plBreakdown.totalCOGS, color: 'text-amber-600', icon: Package },
                 { label: 'Shipping & Logistics', value: plBreakdown.totalShipping, color: 'text-violet-500', icon: Truck },
-                { label: 'Transaction Fees', value: plBreakdown.totalTxnFees, color: 'text-slate-500', icon: CreditCard },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                  <div className="flex items-center gap-2">
+                    <item.icon className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">{item.label}</span>
+                  </div>
+                  <span className={`text-sm font-medium ${item.color}`}>-{fmt(item.value)}</span>
+                </div>
+              ))}
+              {/* Transaction Fees — detailed split */}
+              <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Razorpay Fees</span>
+                  <span className="text-[10px] text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded-full">exact</span>
+                </div>
+                <span className="text-sm font-medium text-slate-500">-{fmt(plBreakdown.razorpayFee || 0)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 pl-10 border-b border-dashed border-border/40">
+                <span className="text-xs text-muted-foreground">GST on Razorpay</span>
+                <span className="text-xs font-medium text-slate-400">-{fmt(plBreakdown.razorpayTax || 0)}</span>
+              </div>
+              {shopifyCharges && (
+                <>
+                  <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">Shopify Txn Fees (2%)</span>
+                      <span className="text-[10px] text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full">imported</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-500">-{fmt(shopifyCharges.orderCommission)}</span>
+                  </div>
+                  {shopifyCharges.appFees > 0 && (
+                    <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Shopify App Fees</span>
+                        <span className="text-[10px] text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full">pro-rated</span>
+                      </div>
+                      <span className="text-sm font-medium text-slate-500">-{fmt(shopifyCharges.appFees)}</span>
+                    </div>
+                  )}
+                  {shopifyCharges.subscriptionFee > 0 && (
+                    <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">Shopify Subscription</span>
+                        <span className="text-[10px] text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded-full">pro-rated</span>
+                      </div>
+                      <span className="text-sm font-medium text-slate-500">-{fmt(shopifyCharges.subscriptionFee)}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {/* Remaining costs */}
+              {[
                 { label: 'Ad Spend (incl. Tax)', value: plBreakdown.adSpend, color: 'text-pink-500', icon: Megaphone },
                 { label: 'Pro-Rata Overhead', value: plBreakdown.overhead, color: 'text-amber-700', icon: Building2 },
               ].map((item) => (
