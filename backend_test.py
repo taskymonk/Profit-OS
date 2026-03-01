@@ -71,7 +71,7 @@ def test_source_code_upsert_logic():
             print("❌ Query filter shopifyOrderId + sku not found")
             return False
         
-        # Check 5: $set contains required fields - check individual field existence 
+        # Check 5: $set contains required fields - look for field names individually
         required_set_fields = [
             'salePrice', 'discount', 'refundAmount', 'totalTax', 
             'financialStatus', 'status', 'shippingCost', 'orderDate', 'updatedAt'
@@ -83,7 +83,11 @@ def test_source_code_upsert_logic():
             set_content = set_match.group(1)
             missing_fields = []
             for field in required_set_fields:
-                if field + ':' not in set_content and field + ' :' not in set_content:
+                # Look for field either as "field:" or just "field," (ES6 shorthand)
+                if (field + ':' not in set_content and 
+                    field + ' :' not in set_content and
+                    field + ',' not in set_content and
+                    field + '\n' not in set_content):
                     missing_fields.append(field)
             
             if missing_fields:
