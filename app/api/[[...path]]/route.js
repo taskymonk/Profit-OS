@@ -600,19 +600,26 @@ async function getDashboardData(params = {}) {
       const acctOrders = rangeOrders.filter(o =>
         !EXCL_STATUS.includes(o.status) && !EXCL_FIN.includes(o.financialStatus)
       );
-      let prepaidRevenue = 0, codRevenue = 0, prepaidCount = 0, codCount = 0, unknownRevenue = 0, unknownCount = 0;
+      let prepaidRevenue = 0, prepaidCount = 0;
+      let reconciledRevenue = 0, unreconciledRevenue = 0, reconciledCount = 0, unreconciledCount = 0;
       acctOrders.forEach(o => {
         const rev = o.salePrice || 0;
-        if (o.paymentMethod === 'prepaid') { prepaidRevenue += rev; prepaidCount++; }
-        else if (o.paymentMethod === 'cod') { codRevenue += rev; codCount++; }
-        else { unknownRevenue += rev; unknownCount++; }
+        prepaidRevenue += rev;
+        prepaidCount++;
+        if (o.razorpayReconciled === true) {
+          reconciledRevenue += rev;
+          reconciledCount++;
+        } else {
+          unreconciledRevenue += rev;
+          unreconciledCount++;
+        }
       });
-      const totalRev = prepaidRevenue + codRevenue + unknownRevenue;
+      const totalRev = prepaidRevenue;
       return {
-        prepaid: { revenue: Math.round(prepaidRevenue * 100) / 100, count: prepaidCount, percent: totalRev > 0 ? Math.round((prepaidRevenue / totalRev) * 10000) / 100 : 0 },
-        cod: { revenue: Math.round(codRevenue * 100) / 100, count: codCount, percent: totalRev > 0 ? Math.round((codRevenue / totalRev) * 10000) / 100 : 0 },
-        unknown: { revenue: Math.round(unknownRevenue * 100) / 100, count: unknownCount },
         totalRevenue: Math.round(totalRev * 100) / 100,
+        totalOrders: prepaidCount,
+        reconciled: { revenue: Math.round(reconciledRevenue * 100) / 100, count: reconciledCount, percent: totalRev > 0 ? Math.round((reconciledRevenue / totalRev) * 10000) / 100 : 0 },
+        unreconciled: { revenue: Math.round(unreconciledRevenue * 100) / 100, count: unreconciledCount, percent: totalRev > 0 ? Math.round((unreconciledRevenue / totalRev) * 10000) / 100 : 0 },
       };
     })(),
     allTime: {
