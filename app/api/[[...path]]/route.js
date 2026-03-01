@@ -519,19 +519,20 @@ async function getDashboardData(params = {}) {
 
   const metrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, startDate, endDate, 1, adSpendMap, adSpendTaxMultiplier);
 
-  // Build daily aggregation for chart
+  // Build daily aggregation for chart — using IST date boundaries
   const dailyData = [];
   const dayMs = 86400000;
-  const chartStart = new Date(startDate);
-  const chartEnd = new Date(endDate);
 
   const skuMap = {};
   skuRecipes.forEach(r => { skuMap[r.sku] = r; });
 
-  for (let d = new Date(chartStart); d <= chartEnd; d = new Date(d.getTime() + dayMs)) {
-    const dayStart = new Date(d); dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = new Date(d); dayEnd.setHours(23, 59, 59, 999);
-    const dateKey = getISTDateKey(dayStart);
+  // Generate IST date keys for each day in the range
+  let cd = new Date(startDate + 'T12:00:00+05:30'); // noon IST to avoid edge cases
+  const chartEndD = new Date(endDate + 'T12:00:00+05:30');
+  while (cd <= chartEndD) {
+    const dateKey = cd.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const dayStart = new Date(dateKey + 'T00:00:00+05:30');
+    const dayEnd = new Date(dateKey + 'T23:59:59.999+05:30');
 
     const dayOrders = orders.filter(o => {
       const od = new Date(o.orderDate);
