@@ -1632,6 +1632,9 @@ export async function GET(request) {
         if (subResource === 'settlements') {
           return json(await getRazorpaySettlements());
         }
+        if (subResource === 'debug') {
+          return json(await razorpayDebugPayments());
+        }
         return json({ error: 'Unknown Razorpay action' }, 404);
       }
 
