@@ -23,11 +23,11 @@ import {
 } from 'recharts';
 
 const fmt = (val, currency = 'INR') => {
-  if (val === undefined || val === null) return '0';
+  if (val === undefined || val === null) return '₹0.00';
   const sign = val < 0 ? '-' : '';
   const abs = Math.abs(val);
-  if (currency === 'INR') return `${sign}\u20B9${abs.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-  return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+  if (currency === 'INR') return `${sign}\u20B9${abs.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${sign}$${abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const DATE_RANGES = [
