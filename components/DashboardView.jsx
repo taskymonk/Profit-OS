@@ -238,7 +238,7 @@ export default function DashboardView() {
     );
   }
 
-  const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown } = data;
+  const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown, dateRange: activeDateRange } = data;
 
   // Trend calc
   const mid = Math.floor(dailyData.length / 2);
