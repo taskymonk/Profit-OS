@@ -258,9 +258,22 @@ export default function DashboardView() {
               {r.label}
             </Button>
           ))}
+          {/* Show active date range for all presets */}
+          {activeDateRange && activeDateRange.start && activeDateRange.end && dateRange !== 'alltime' && (
+            <span className="text-sm font-medium text-muted-foreground ml-2 bg-muted px-3 py-1.5 rounded-md border border-border">
+              {format(new Date(activeDateRange.start + 'T00:00:00'), 'dd MMM yyyy')}
+              {activeDateRange.start !== activeDateRange.end && (
+                <> — {format(new Date(activeDateRange.end + 'T00:00:00'), 'dd MMM yyyy')}</>
+              )}
+            </span>
+          )}
         </div>
         {dateRange === 'custom' && (
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <Popover open={calendarOpen} onOpenChange={(open) => {
+            // Only allow OPENING via this handler, never auto-close
+            // Closing is handled explicitly by Apply/Cancel buttons
+            if (open) setCalendarOpen(true);
+          }}>
             <PopoverTrigger asChild>
               <Button variant="outline" className="h-9 px-3 gap-2 text-sm font-normal" onClick={() => setCalendarOpen(true)}>
                 <CalendarDays className="w-4 h-4 text-muted-foreground" />
@@ -269,27 +282,41 @@ export default function DashboardView() {
                   : 'Pick date range'}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start" sideOffset={8}>
+            <PopoverContent className="w-auto p-0" align="start" sideOffset={8} onInteractOutside={(e) => {
+              // Prevent popover from closing on outside clicks while selecting
+              // User must use Cancel or Apply buttons
+              e.preventDefault();
+            }}>
               <Calendar
                 mode="range"
-                selected={pendingRange.from ? pendingRange : {
-                  from: customStart ? new Date(customStart + 'T00:00:00') : undefined,
-                  to: customEnd ? new Date(customEnd + 'T00:00:00') : undefined,
-                }}
+                selected={pendingRange}
                 onSelect={(range) => {
-                  // Update visual state immediately (keeps calendar open)
                   setPendingRange({ from: range?.from, to: range?.to });
-                  // Only commit to actual state (triggering fetch) when BOTH dates are selected
-                  if (range?.from && range?.to) {
-                    setCustomStart(format(range.from, 'yyyy-MM-dd'));
-                    setCustomEnd(format(range.to, 'yyyy-MM-dd'));
-                    setPendingRange({ from: undefined, to: undefined });
-                    setCalendarOpen(false);
-                  }
                 }}
                 numberOfMonths={2}
                 disabled={{ after: new Date() }}
               />
+              <div className="flex items-center justify-between p-3 border-t border-border bg-muted/30">
+                <p className="text-xs text-muted-foreground">
+                  {pendingRange.from && !pendingRange.to && 'Now select an end date'}
+                  {pendingRange.from && pendingRange.to && (
+                    <>{format(pendingRange.from, 'dd MMM yyyy')} — {format(pendingRange.to, 'dd MMM yyyy')}</>
+                  )}
+                  {!pendingRange.from && 'Select a start date'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
+                    setPendingRange({ from: undefined, to: undefined });
+                    setCalendarOpen(false);
+                  }}>Cancel</Button>
+                  <Button size="sm" className="h-7 text-xs" disabled={!pendingRange.from || !pendingRange.to} onClick={() => {
+                    setCustomStart(format(pendingRange.from, 'yyyy-MM-dd'));
+                    setCustomEnd(format(pendingRange.to, 'yyyy-MM-dd'));
+                    setPendingRange({ from: undefined, to: undefined });
+                    setCalendarOpen(false);
+                  }}>Apply</Button>
+                </div>
+              </div>
             </PopoverContent>
           </Popover>
         )}
