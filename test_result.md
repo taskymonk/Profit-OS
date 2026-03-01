@@ -1381,3 +1381,112 @@ All 3 fixes verified via screenshots. No backend changes."
 ✓ All dashboard ranges (today, 7days, alltime, custom) functioning correctly
 
 **ALL BACKEND PATCHES FULLY FUNCTIONAL AND TESTED!** The IST Date Boundary Fix ensures perfect Shopify financial parity, Rounding Removal maintains precision in revenue calculations, and Calendar UX Fix provides smooth date selection experience."
+
+    - agent: "main"
+      message: "PHASE 9: RAZORPAY INTEGRATION + COD/PREPAID SPLIT + CASHFLOW FORECAST
+
+Implementation complete across 4 files:
+
+**Backend (route.js):**
+1. `razorpaySyncPayments()` - Fetches all Razorpay payments (paginated, max 100/call), matches to Shopify orders using 5 strategies (notes.shopify_order_id, notes.order_id, notes.shopify_order_number, receipt, description). Overwrites gatewayFee/gstOnGateway with exact Razorpay fee/tax. Marks unmatched orders as COD.
+2. `getRazorpaySettlements()` - Fetches latest 10 settlements from Razorpay API.
+3. Dashboard now returns `revenueSplit` object with prepaid/cod/unknown revenue breakdown.
+4. POST /api/razorpay/sync-payments and GET /api/razorpay/settlements routes added.
+5. Razorpay keySecret masked in GET /integrations response.
+
+**Profit Calculator (profitCalculator.js):**
+- If `order.razorpayReconciled === true`: use exact razorpayFee/razorpayTax
+- If `order.paymentMethod === 'cod'`: gateway fee = ₹0
+- Otherwise: keep predictive 2% + GST fallback
+
+**Frontend (IntegrationsView.jsx):**
+- Razorpay card with Key ID, Key Secret inputs, show/hide toggle, Sync button, last sync timestamp
+
+**Frontend (DashboardView.jsx):**
+- COD vs Prepaid Revenue Split widget with progress bar and dual-metric cards
+- Cashflow Forecast widget showing next settlement and recent settlement timeline
+- Clean empty states when Razorpay is inactive
+
+TESTING NOTES:
+- Razorpay API requires valid credentials. Without keys, the sync will return 'credentials not configured' error.
+- Dashboard renders correctly even without Razorpay (shows empty states).
+- Currently all orders are classified as 'unknown' until Razorpay sync runs.
+- DO NOT test Razorpay sync without real API keys.
+
+Test these endpoints:
+1. GET /api/dashboard?range=7days → should include revenueSplit object
+2. GET /api/razorpay/settlements → should return {settlements: [], active: false}
+3. POST /api/razorpay/sync-payments → should return error about missing credentials
+4. PUT /api/integrations with razorpay: {keyId: 'test', keySecret: 'test'} → should save
+5. GET /api/integrations → should show masked razorpay.keySecret"
+
+  - task: "Razorpay Sync Payments API"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/razorpay/sync-payments - fetches all Razorpay payments and reconciles with Shopify orders. Requires valid credentials to test fully."
+
+  - task: "Razorpay Settlements API"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "GET /api/razorpay/settlements - returns settlement data. Should return empty with active:false when no keys configured."
+
+  - task: "Dashboard COD/Prepaid Revenue Split"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Dashboard API now returns revenueSplit object with prepaid/cod/unknown breakdown."
+
+  - task: "Profit Calculator Razorpay Integration"
+    implemented: true
+    working: "NA"
+    file: "lib/profitCalculator.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Profit calculator uses exact Razorpay fees when razorpayReconciled=true, ₹0 for COD, fallback 2%+GST otherwise."
+
+  - task: "Razorpay Integration Save/Load"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Razorpay credentials save in PUT /api/integrations, masked in GET /api/integrations."
+
+test_plan:
+  current_focus:
+    - "Razorpay Sync Payments API"
+    - "Razorpay Settlements API"
+    - "Dashboard COD/Prepaid Revenue Split"
+    - "Profit Calculator Razorpay Integration"
+    - "Razorpay Integration Save/Load"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
