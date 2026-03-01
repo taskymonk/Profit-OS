@@ -554,7 +554,7 @@ async function getDashboardData(params = {}) {
 
     dailyData.push({
       date: dateKey,
-      label: dayStart.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' }),
+      label: dayStart.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata' }),
       orders: dayOrders.length,
       revenue: Math.round(dayRevenue),
       cogs: Math.round(dayCOGS),
@@ -563,6 +563,7 @@ async function getDashboardData(params = {}) {
       netProfit: Math.round(dayProfit),
       rtoCount: dayOrders.filter(o => o.status === 'RTO').length,
     });
+    cd = new Date(cd.getTime() + dayMs);
   }
 
   // All-time stats
