@@ -50,7 +50,7 @@ export default function IntegrationsView() {
       await fetch('/api/integrations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopify, indiaPost, metaAds, exchangeRate }),
+        body: JSON.stringify({ shopify, indiaPost, metaAds, razorpay, exchangeRate }),
       });
       toast.success('Integrations saved securely!');
     } catch (err) { toast.error('Failed to save'); }
