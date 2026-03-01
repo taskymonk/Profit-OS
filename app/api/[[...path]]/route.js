@@ -1230,27 +1230,74 @@ async function razorpaySyncPayments() {
       if (allPayments.length >= 10000) break;
     }
 
-    // Build a lookup map of all orders for matching
+    // Build lookup maps for matching — multiple strategies
     const allOrders = await db.collection('orders').find({}).toArray();
 
-    // Build multiple lookup indexes for flexible matching
-    const orderByShopifyId = {};
-    const orderByOrderNumber = {};
+    // Group orders by shopifyOrderId to get total order amounts
+    const orderGroupByShopifyId = {};
     allOrders.forEach(o => {
-      if (o.shopifyOrderId) orderByShopifyId[o.shopifyOrderId] = o;
-      if (o.orderId) {
-        // "SH-2978" → "2978"
-        const num = o.orderId.replace(/^SH-/, '');
-        orderByOrderNumber[num] = o;
-        orderByOrderNumber[o.orderId] = o;
-        // Also store with # prefix
-        orderByOrderNumber[`#${num}`] = o;
+      if (!o.shopifyOrderId) return;
+      if (!orderGroupByShopifyId[o.shopifyOrderId]) {
+        orderGroupByShopifyId[o.shopifyOrderId] = {
+          shopifyOrderId: o.shopifyOrderId,
+          orderId: o.orderId,
+          totalOrderPrice: o.totalOrderPrice || o.salePrice,
+          customerPhone: o.customerPhone || '',
+          customerEmail: o.customerEmail || '',
+          checkoutToken: o.checkoutToken || '',
+          orderDate: o.orderDate,
+          lines: [o],
+        };
+      } else {
+        orderGroupByShopifyId[o.shopifyOrderId].lines.push(o);
+      }
+    });
+    const orderGroups = Object.values(orderGroupByShopifyId);
+
+    // Build phone-based lookup: normalized phone (last 10 digits) + amount → order group
+    const normalizePhone = (phone) => {
+      if (!phone) return '';
+      return phone.replace(/\D/g, '').slice(-10);
+    };
+
+    // Build amount+phone lookup for matching
+    const phoneAmountMap = {};
+    orderGroups.forEach(g => {
+      const phone = normalizePhone(g.customerPhone);
+      const amountPaise = Math.round((g.totalOrderPrice || 0) * 100);
+      if (phone && amountPaise > 0) {
+        const key = `${phone}_${amountPaise}`;
+        if (!phoneAmountMap[key]) phoneAmountMap[key] = [];
+        phoneAmountMap[key].push(g);
+      }
+    });
+
+    // Build email+amount lookup
+    const emailAmountMap = {};
+    orderGroups.forEach(g => {
+      const email = (g.customerEmail || '').toLowerCase().trim();
+      const amountPaise = Math.round((g.totalOrderPrice || 0) * 100);
+      if (email && amountPaise > 0) {
+        const key = `${email}_${amountPaise}`;
+        if (!emailAmountMap[key]) emailAmountMap[key] = [];
+        emailAmountMap[key].push(g);
+      }
+    });
+
+    // Build amount-only lookup (for fallback)
+    const amountMap = {};
+    orderGroups.forEach(g => {
+      const amountPaise = Math.round((g.totalOrderPrice || 0) * 100);
+      if (amountPaise > 0) {
+        if (!amountMap[amountPaise]) amountMap[amountPaise] = [];
+        amountMap[amountPaise].push(g);
       }
     });
 
     let matched = 0;
     let unmatched = 0;
     let skippedNonCaptured = 0;
+    const matchedShopifyIds = new Set(); // Track already-matched orders to avoid double-matching
 
     for (const payment of allPayments) {
       // Only process captured payments
@@ -1259,57 +1306,45 @@ async function razorpaySyncPayments() {
         continue;
       }
 
-      // Try to match to a Shopify order using multiple strategies
-      let matchedOrder = null;
-      const notes = payment.notes || {};
+      let matchedGroup = null;
+      const payPhone = normalizePhone(payment.contact || '');
+      const payEmail = (payment.email || '').toLowerCase().trim();
+      const payAmount = payment.amount || 0; // in paise
 
-      // Strategy 1: notes.shopify_order_id → shopifyOrderId
-      if (notes.shopify_order_id) {
-        matchedOrder = orderByShopifyId[String(notes.shopify_order_id)];
+      // Strategy 1: Phone + Amount (most reliable for this Razorpay-Shopify integration)
+      if (!matchedGroup && payPhone) {
+        const candidates = phoneAmountMap[`${payPhone}_${payAmount}`] || [];
+        // Pick the first candidate not already matched
+        matchedGroup = candidates.find(g => !matchedShopifyIds.has(g.shopifyOrderId));
       }
 
-      // Strategy 2: notes.order_id → shopifyOrderId or order number
-      if (!matchedOrder && notes.order_id) {
-        matchedOrder = orderByShopifyId[String(notes.order_id)] || orderByOrderNumber[String(notes.order_id)];
+      // Strategy 2: Email + Amount
+      if (!matchedGroup && payEmail) {
+        const candidates = emailAmountMap[`${payEmail}_${payAmount}`] || [];
+        matchedGroup = candidates.find(g => !matchedShopifyIds.has(g.shopifyOrderId));
       }
 
-      // Strategy 3: notes.shopify_order_number → order number
-      if (!matchedOrder && notes.shopify_order_number) {
-        matchedOrder = orderByOrderNumber[String(notes.shopify_order_number)]
-          || orderByOrderNumber[`#${notes.shopify_order_number}`];
-      }
-
-      // Strategy 4: receipt field → extract number, match to order number
-      if (!matchedOrder && payment.receipt) {
-        const receipt = String(payment.receipt).trim();
-        matchedOrder = orderByOrderNumber[receipt];
-        if (!matchedOrder) {
-          // Try extracting just digits from receipt
-          const digits = receipt.replace(/\D/g, '');
-          if (digits) matchedOrder = orderByOrderNumber[digits];
+      // Strategy 3: Amount only (if unique match)
+      if (!matchedGroup) {
+        const candidates = (amountMap[payAmount] || []).filter(g => !matchedShopifyIds.has(g.shopifyOrderId));
+        // Only use amount-only matching if there's exactly 1 unmatched candidate
+        // Otherwise too ambiguous
+        if (candidates.length === 1) {
+          matchedGroup = candidates[0];
         }
       }
 
-      // Strategy 5: description field
-      if (!matchedOrder && payment.description) {
-        const desc = String(payment.description);
-        const orderMatch = desc.match(/#?(\d{3,})/);
-        if (orderMatch) {
-          matchedOrder = orderByOrderNumber[orderMatch[1]] || orderByOrderNumber[`#${orderMatch[1]}`];
-        }
-      }
+      if (matchedGroup) {
+        matchedShopifyIds.add(matchedGroup.shopifyOrderId);
 
-      if (matchedOrder) {
-        // Convert paise to rupees (Razorpay returns amounts in paise)
+        // Convert paise to rupees
         const feeInRupees = (payment.fee || 0) / 100;
         const taxInRupees = (payment.tax || 0) / 100;
 
-        // Update ALL line items (SKUs) for this Shopify order with reconciled fee data
-        // The fee is distributed proportionally across line items of the same order
-        const orderLines = allOrders.filter(o => o.shopifyOrderId === matchedOrder.shopifyOrderId);
-        const totalLines = orderLines.length || 1;
+        // Distribute fee proportionally across line items
+        const totalLines = matchedGroup.lines.length || 1;
 
-        for (const line of orderLines) {
+        for (const line of matchedGroup.lines) {
           await db.collection('orders').updateOne(
             { _id: line._id },
             {
@@ -1331,17 +1366,14 @@ async function razorpaySyncPayments() {
       }
     }
 
-    // Mark remaining orders without Razorpay match as COD (if they have financial_status 'paid' via Shopify COD)
-    // COD orders in Shopify typically have gateway = 'Cash on Delivery' or payment_gateway_names includes 'cod'
-    // Since we can't determine this from Shopify data alone, we mark unmatched paid orders as 'cod' only if not already reconciled
-    const codResult = await db.collection('orders').updateMany(
+    // All orders are prepaid (no COD concept) — mark remaining unmatched orders as prepaid too
+    const prepaidResult = await db.collection('orders').updateMany(
       {
         shopifyOrderId: { $exists: true },
-        razorpayReconciled: { $ne: true },
         paymentMethod: { $ne: 'prepaid' },
       },
       {
-        $set: { paymentMethod: 'cod', updatedAt: new Date().toISOString() }
+        $set: { paymentMethod: 'prepaid', updatedAt: new Date().toISOString() }
       }
     );
 
