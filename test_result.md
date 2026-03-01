@@ -515,7 +515,11 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "IST Date Boundary Fix Testing"
+    - "Rounding Removal Verification" 
+    - "Calendar UX Fix Validation"
+    - "Core Dashboard Functionality"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
