@@ -1550,3 +1550,70 @@ agent_communication:
 ✓ Proper cleanup and restoration of original state
 
 **PHASE 9 RAZORPAY INTEGRATION FULLY FUNCTIONAL AND TESTED!** All 6 critical backend features working perfectly. Ready for production use with proper Razorpay API credentials. Since no actual Razorpay sync performed, orders correctly classified as 'unknown' payment method until sync runs."
+    - agent: "main"
+      message: "PHASE 9B: SHOPIFY BILLS IMPORT + EXPANDED P&L BREAKDOWN + RAZORPAY MATCHING FIX
+
+**Backend Changes:**
+1. New `parseCSV()` and `importShopifyBills()` functions - handles Shopify charges export CSV
+2. New `getShopifyChargesForDateRange()` - computes pro-rated charges for any date range:
+   - order_commission: exact date matching
+   - application_fee: pro-rated by billing cycle overlap
+   - subscription_fee: pro-rated by billing cycle overlap
+3. POST /api/shopify-bills/import - accepts csvText in body, stores in shopifyCharges collection
+4. GET /api/shopify-bills - returns import summary
+5. Dashboard response now includes `shopifyCharges` with orderCommission, appFees, subscriptionFee
+6. Razorpay sync completely rewritten: now matches by phone+amount (1981 matches vs 8 before)
+7. Removed COD concept - all orders marked as prepaid
+8. Revenue split now shows Reconciled vs Unreconciled instead of COD vs Prepaid
+
+**Profit Calculator:**
+- Added razorpayFee and razorpayTax as separate fields in plBreakdown
+- Removed COD gateway fee logic
+
+**Frontend Changes:**
+- IntegrationsView: Added Shopify Bills card with CSV upload + import summary
+- DashboardView: P&L waterfall now shows:
+  - Razorpay Fees (with 'exact' badge)
+  - GST on Razorpay
+  - Shopify Txn Fees (with 'imported' badge)
+  - Shopify App Fees (pro-rated, with 'pro-rated' badge)
+  - Shopify Subscription (pro-rated)
+- Net Profit adjusted to deduct Shopify charges
+- Revenue Split shows Reconciled vs Unreconciled
+
+Test these endpoints:
+1. POST /api/shopify-bills/import with {csvText: '...'} - should parse and import
+2. GET /api/shopify-bills - should return summary
+3. GET /api/dashboard?range=7days - should include shopifyCharges and updated plBreakdown with razorpayFee/razorpayTax"
+
+  - task: "Shopify Bills CSV Import"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/shopify-bills/import with csvText, GET /api/shopify-bills for summary. CSV parser handles quoted fields."
+
+  - task: "Expanded P&L with Shopify Charges"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Dashboard returns shopifyCharges with orderCommission, appFees, subscriptionFee pro-rated by date range. P&L shows separate Razorpay and Shopify fee lines."
+
+test_plan:
+  current_focus:
+    - "Shopify Bills CSV Import"
+    - "Expanded P&L with Shopify Charges"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
