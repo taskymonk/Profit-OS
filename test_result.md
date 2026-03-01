@@ -1091,3 +1091,45 @@ The dashboard API response is missing the 'cancelledCount' field in the filtered
 ✓ Ad spend tax calculation (18% GST) working with precision
 
 **PHASE 8.8 MOSTLY FUNCTIONAL** - Only missing cancelledCount field exposure in dashboard API."
+    - agent: "main"
+      message: "PHASE 8.9 ABSOLUTE FINANCIAL PARITY & DATE PICKER UX POLISH - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data (2044+ orders) and Meta Ads data exist. Test these 5 areas:
+
+1. **PROPORTIONAL REVENUE ALLOCATION (source code check)**:
+   - Read /app/app/api/[[...path]]/route.js
+   - Verify Shopify sync computes: finalOrderPrice = parseFloat(shopifyOrder.total_price)
+   - Verify rawSubtotal = sum of line items (price * quantity) via .reduce()
+   - Verify priceRatio = lineItemRaw / rawSubtotal
+   - Verify salePrice = Math.round(finalOrderPrice * priceRatio * 100) / 100
+   - Verify financialStatus field is mapped from shopifyOrder.financial_status and stored in order doc
+
+2. **STRICT FINANCIAL STATUS FILTERING (source code check)**:
+   - Read /app/lib/profitCalculator.js
+   - Verify EXCLUDED_FINANCIAL array exists containing: ['pending', 'voided', 'refunded']
+   - Verify EXCLUDED_STATUSES array exists containing: ['Cancelled', 'Voided', 'Pending']
+   - Verify accountingOrders filters by BOTH o.status AND o.financialStatus
+   - Verify totalOrders = accountingOrders.length
+   - Verify totalRevenue sums accountingOrders
+   - Verify grossOrderProfits maps over accountingOrders
+   - Verify orderProfits still maps over ALL filteredOrders (for table display)
+
+3. **DASHBOARD DATA INTEGRITY**:
+   - GET /api/dashboard?range=alltime -> verify:
+   - plBreakdown.grossRevenue == filtered.revenue (exact)
+   - plBreakdown.netProfit == filtered.netProfit (exact)
+   - cancelledCount field exists >= 0
+   - totalOrders > 0
+   - Use pymongo to count orders with financialStatus 'pending': db.orders.count_documents({'financialStatus':'pending'})
+   - If pending orders exist, dashboard totalOrders should be less than total DB count
+
+4. **DATE PICKER UX (source code check)**:
+   - Read /app/components/DashboardView.jsx
+   - Verify useEffect has guard: dateRange === 'custom' && (!customStart || !customEnd) -> return
+   - Verify pendingRange state exists
+   - Verify Calendar onSelect only calls setCustomStart/setCustomEnd when range?.from && range?.to
+
+5. **AD SPEND TAX**:
+   - GET /api/dashboard?range=alltime -> filtered.adSpend
+   - pymongo: sum all spendAmount from dailyMarketingSpend, multiply by (1 + adSpendTaxRate/100)
+   - Dashboard adSpend should match within 1%
+
+DO NOT test Shopify sync. Clean up all test data."
