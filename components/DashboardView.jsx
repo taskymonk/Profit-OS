@@ -271,14 +271,19 @@ export default function DashboardView() {
             <PopoverContent className="w-auto p-0" align="start" sideOffset={8}>
               <Calendar
                 mode="range"
-                selected={{
+                selected={pendingRange.from ? pendingRange : {
                   from: customStart ? new Date(customStart + 'T00:00:00') : undefined,
                   to: customEnd ? new Date(customEnd + 'T00:00:00') : undefined,
                 }}
                 onSelect={(range) => {
-                  if (range?.from) setCustomStart(format(range.from, 'yyyy-MM-dd'));
-                  if (range?.to) setCustomEnd(format(range.to, 'yyyy-MM-dd'));
-                  else if (range?.from) setCustomEnd('');
+                  // Update visual state immediately (keeps calendar open)
+                  setPendingRange({ from: range?.from, to: range?.to });
+                  // Only commit to actual state (triggering fetch) when BOTH dates are selected
+                  if (range?.from && range?.to) {
+                    setCustomStart(format(range.from, 'yyyy-MM-dd'));
+                    setCustomEnd(format(range.to, 'yyyy-MM-dd'));
+                    setPendingRange({ from: undefined, to: undefined });
+                  }
                 }}
                 numberOfMonths={2}
                 disabled={{ after: new Date() }}
