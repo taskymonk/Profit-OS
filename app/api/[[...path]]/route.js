@@ -967,6 +967,7 @@ async function shopifySyncOrders() {
             // $set: always overwrite financial data, status, and dates on every sync
             $set: {
               salePrice: finalOrderPrice * priceRatio,
+              totalOrderPrice: finalOrderPrice,
               discount: totalDiscount * priceRatio,
               refundAmount: totalRefunds * priceRatio,
               totalTax: totalTax * priceRatio,
@@ -975,11 +976,14 @@ async function shopifySyncOrders() {
               shippingCost: totalShipping * priceRatio,
               shippingAddress,
               customerPhone,
+              customerEmail: shopifyOrder.customer?.email || shopifyOrder.email || '',
+              checkoutToken: shopifyOrder.checkout_token || '',
               orderDate: shopifyDate,
               productName: item.title || item.name,
               variantName: item.variant_title || '',
               destinationPincode: shippingAddress.zip,
               destinationCity: shippingAddress.city,
+              paymentMethod: 'prepaid',
               updatedAt: new Date().toISOString(),
             },
             // $setOnInsert: only written when this is a brand-new document
