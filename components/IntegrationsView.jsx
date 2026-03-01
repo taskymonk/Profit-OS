@@ -20,6 +20,7 @@ export default function IntegrationsView() {
   const [shopify, setShopify] = useState({ storeUrl: '', accessToken: '', active: false });
   const [indiaPost, setIndiaPost] = useState({ username: '', password: '', clientId: '', active: false, sandboxMode: true });
   const [metaAds, setMetaAds] = useState({ token: '', adAccountId: '', active: false });
+  const [razorpay, setRazorpay] = useState({ keyId: '', keySecret: '', active: false });
   const [exchangeRate, setExchangeRate] = useState({ apiKey: '', active: false });
   const [syncing, setSyncing] = useState({});
   const [syncResults, setSyncResults] = useState({});
