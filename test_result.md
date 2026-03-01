@@ -1338,6 +1338,16 @@ DO NOT call the Shopify sync endpoint. Clean up test data."
    - Verify useEffect guard: dateRange === 'custom' && (!customStart || !customEnd) -> return
 
 DO NOT call Shopify sync."
+    - agent: "main"
+      message: "PHASE 8.11 - THREE FRONTEND UX FIXES (DashboardView.jsx only, no backend changes):
+
+1. **FINANCIAL PRECISION FIX**: Changed fmt() from maximumFractionDigits:0 to minimumFractionDigits:2/maximumFractionDigits:2. Removed all Math.round() wrappers from OrderRow display. All financial values now show 2 decimal places matching Shopify precision.
+
+2. **DATE PICKER UX FIX (BULLETPROOF)**: Replaced onOpenChange={setCalendarOpen} with controlled handler that only allows opening. Added onInteractOutside e.preventDefault() on PopoverContent. Added explicit Cancel/Apply buttons. Calendar now NEVER auto-closes - user must click Apply (only enabled when both dates selected) or Cancel. Verified via Playwright: calendar stays open after first date click.
+
+3. **DATE RANGE DISPLAY**: Added activeDateRange destructuring from API response. Shows formatted date range badge (e.g. '23 Feb 2026 — 01 Mar 2026') next to filter buttons for all presets except 'All Time'.
+
+All 3 fixes verified via screenshots. No backend changes."
     - agent: "testing"
       message: "🎉 IST DATE BOUNDARY FIX + ROUNDING REMOVAL + CALENDAR UX FIX TESTING COMPLETE - ALL 4 TEST AREAS PASSED!
 
