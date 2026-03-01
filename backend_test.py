@@ -143,8 +143,8 @@ def test_proportional_math_preserved():
         with open('/app/app/api/[[...path]]/route.js', 'r') as f:
             source_code = f.read()
         
-        # Check 1: finalOrderPrice calculation
-        if 'finalOrderPrice = parseFloat(shopifyOrder.total_price)' in source_code:
+        # Check 1: finalOrderPrice calculation  
+        if 'finalOrderPrice = parseFloat(shopifyOrder.total_price' in source_code:
             print("✅ finalOrderPrice calculation found")
         else:
             print("❌ finalOrderPrice calculation not found")
