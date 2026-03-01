@@ -1392,13 +1392,13 @@ async function razorpaySyncPayments() {
     );
 
     return {
-      message: `Razorpay sync complete. ${matched} orders reconciled with exact fees. ${unmatched} payments unmatched. ${codResult.modifiedCount} orders marked as COD.`,
+      message: `Razorpay sync complete. ${matched} orders reconciled with exact fees. ${unmatched} payments unmatched. All orders marked as prepaid.`,
       totalPaymentsFetched: allPayments.length,
       captured: allPayments.filter(p => p.status === 'captured').length,
       matched,
       unmatched,
       skippedNonCaptured,
-      codMarked: codResult.modifiedCount,
+      prepaidMarked: prepaidResult.modifiedCount,
     };
   } catch (err) {
     return { error: `Razorpay sync failed: ${err.message}`, synced: 0 };
