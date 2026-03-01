@@ -1496,12 +1496,7 @@ Test these endpoints:
           comment: "✅ TESTED - Razorpay integration save/load fully functional. PUT /api/integrations successfully saves test credentials {keyId: 'rzp_test_123', keySecret: 'test_secret_123'}. GET /api/integrations properly masks keySecret ('***********_123') while keeping keyId visible. Cleanup restored original empty state."
 
 test_plan:
-  current_focus:
-    - "Razorpay Sync Payments API"
-    - "Razorpay Settlements API"
-    - "Dashboard COD/Prepaid Revenue Split"
-    - "Profit Calculator Razorpay Integration"
-    - "Razorpay Integration Save/Load"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
