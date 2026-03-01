@@ -260,9 +260,9 @@ export default function DashboardView() {
           ))}
         </div>
         {dateRange === 'custom' && (
-          <Popover>
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="h-9 px-3 gap-2 text-sm font-normal">
+              <Button variant="outline" className="h-9 px-3 gap-2 text-sm font-normal" onClick={() => setCalendarOpen(true)}>
                 <CalendarDays className="w-4 h-4 text-muted-foreground" />
                 {customStart && customEnd
                   ? `${format(new Date(customStart + 'T00:00:00'), 'dd MMM yyyy')} — ${format(new Date(customEnd + 'T00:00:00'), 'dd MMM yyyy')}`
@@ -284,6 +284,7 @@ export default function DashboardView() {
                     setCustomStart(format(range.from, 'yyyy-MM-dd'));
                     setCustomEnd(format(range.to, 'yyyy-MM-dd'));
                     setPendingRange({ from: undefined, to: undefined });
+                    setCalendarOpen(false);
                   }
                 }}
                 numberOfMonths={2}
