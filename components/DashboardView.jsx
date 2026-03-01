@@ -376,14 +376,14 @@ export default function DashboardView() {
 
       {/* COD vs Prepaid Split + Cashflow Forecast */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* COD vs Prepaid Revenue Split */}
+        {/* Gateway Fee Reconciliation Status */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-muted-foreground" />
+              <CreditCard className="w-4 h-4 text-muted-foreground" />
               <div>
-                <CardTitle className="text-base">Revenue Split — Prepaid vs COD</CardTitle>
-                <CardDescription>Cash locked in logistics vs. digitally settled</CardDescription>
+                <CardTitle className="text-base">Gateway Fee Reconciliation</CardTitle>
+                <CardDescription>Exact Razorpay fees vs. estimated 2%+GST</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -393,52 +393,52 @@ export default function DashboardView() {
                 {/* Split Progress Bar */}
                 <div className="relative h-6 rounded-full overflow-hidden bg-muted">
                   <div
-                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-l-full transition-all duration-500"
-                    style={{ width: `${revenueSplit.prepaid.percent}%` }}
+                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-l-full transition-all duration-500"
+                    style={{ width: `${revenueSplit.reconciled.percent}%` }}
                   />
                   <div
-                    className="absolute inset-y-0 right-0 bg-gradient-to-r from-amber-400 to-amber-500 rounded-r-full transition-all duration-500"
-                    style={{ width: `${revenueSplit.cod.percent}%` }}
+                    className="absolute inset-y-0 right-0 bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 rounded-r-full transition-all duration-500"
+                    style={{ width: `${revenueSplit.unreconciled.percent}%` }}
                   />
-                  {revenueSplit.prepaid.percent > 15 && (
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.prepaid.percent}%</span>
+                  {revenueSplit.reconciled.percent > 12 && (
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.reconciled.percent}%</span>
                   )}
-                  {revenueSplit.cod.percent > 15 && (
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.cod.percent}%</span>
+                  {revenueSplit.unreconciled.percent > 12 && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.unreconciled.percent}%</span>
                   )}
                 </div>
                 {/* Labels */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/50">
-                    <div className="p-1.5 rounded-md bg-indigo-100 dark:bg-indigo-900/50">
-                      <CreditCard className="w-4 h-4 text-indigo-600" />
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
+                    <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/50">
+                      <CreditCard className="w-4 h-4 text-emerald-600" />
                     </div>
                     <div>
-                      <p className="text-[11px] text-muted-foreground">Prepaid ({revenueSplit.prepaid.count} orders)</p>
-                      <p className="text-sm font-bold text-indigo-700 dark:text-indigo-300">{fmt(revenueSplit.prepaid.revenue)}</p>
+                      <p className="text-[11px] text-muted-foreground">Exact Fees ({revenueSplit.reconciled.count} orders)</p>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{fmt(revenueSplit.reconciled.revenue)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50">
-                    <div className="p-1.5 rounded-md bg-amber-100 dark:bg-amber-900/50">
-                      <Banknote className="w-4 h-4 text-amber-600" />
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border">
+                    <div className="p-1.5 rounded-md bg-muted">
+                      <CreditCard className="w-4 h-4 text-muted-foreground" />
                     </div>
                     <div>
-                      <p className="text-[11px] text-muted-foreground">COD ({revenueSplit.cod.count} orders)</p>
-                      <p className="text-sm font-bold text-amber-700 dark:text-amber-300">{fmt(revenueSplit.cod.revenue)}</p>
+                      <p className="text-[11px] text-muted-foreground">Estimated ({revenueSplit.unreconciled.count} orders)</p>
+                      <p className="text-sm font-bold text-muted-foreground">{fmt(revenueSplit.unreconciled.revenue)}</p>
                     </div>
                   </div>
                 </div>
-                {revenueSplit.unknown.count > 0 && (
+                {revenueSplit.unreconciled.count > 0 && revenueSplit.reconciled.count > 0 && (
                   <p className="text-[11px] text-muted-foreground text-center">
-                    {revenueSplit.unknown.count} orders ({fmt(revenueSplit.unknown.revenue)}) not yet classified — sync Razorpay to classify
+                    {revenueSplit.unreconciled.count} orders still using estimated 2%+GST — re-sync Razorpay to reconcile
                   </p>
                 )}
               </div>
             ) : (
               <div className="text-center py-6 text-muted-foreground">
-                <Wallet className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">No revenue data for selected period</p>
-                <p className="text-xs mt-1">Sync Razorpay in Integrations to see the Prepaid / COD split</p>
+                <p className="text-xs mt-1">Sync Razorpay in Integrations to get exact gateway fees</p>
               </div>
             )}
           </CardContent>
