@@ -1152,6 +1152,237 @@ async function indiaPostSyncTracking() {
   }
 }
 
+// ==================== RAZORPAY INTEGRATION ====================
+
+async function razorpaySyncPayments() {
+  const db = await getDb();
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+
+  if (!integrations?.razorpay?.keyId || !integrations?.razorpay?.keySecret) {
+    return { error: 'Razorpay credentials not configured. Enter your Key ID and Key Secret in Integrations.', synced: 0 };
+  }
+
+  const { keyId, keySecret } = integrations.razorpay;
+  const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+
+  try {
+    // Fetch all captured payments from Razorpay (paginated, max 100 per call)
+    let allPayments = [];
+    let skip = 0;
+    const count = 100;
+    let hasMore = true;
+
+    while (hasMore) {
+      const res = await fetch(`https://api.razorpay.com/v1/payments?count=${count}&skip=${skip}`, {
+        headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        return { error: `Razorpay API error: ${res.status} - ${errText}`, synced: allPayments.length > 0 ? 'partial' : 0 };
+      }
+
+      const data = await res.json();
+      const items = data.items || [];
+      allPayments = allPayments.concat(items);
+
+      // If we got fewer than requested, we've reached the end
+      if (items.length < count) {
+        hasMore = false;
+      } else {
+        skip += count;
+      }
+
+      // Safety limit: max 10000 payments
+      if (allPayments.length >= 10000) break;
+    }
+
+    // Build a lookup map of all orders for matching
+    const allOrders = await db.collection('orders').find({}).toArray();
+
+    // Build multiple lookup indexes for flexible matching
+    const orderByShopifyId = {};
+    const orderByOrderNumber = {};
+    allOrders.forEach(o => {
+      if (o.shopifyOrderId) orderByShopifyId[o.shopifyOrderId] = o;
+      if (o.orderId) {
+        // "SH-2978" → "2978"
+        const num = o.orderId.replace(/^SH-/, '');
+        orderByOrderNumber[num] = o;
+        orderByOrderNumber[o.orderId] = o;
+        // Also store with # prefix
+        orderByOrderNumber[`#${num}`] = o;
+      }
+    });
+
+    let matched = 0;
+    let unmatched = 0;
+    let skippedNonCaptured = 0;
+
+    for (const payment of allPayments) {
+      // Only process captured payments
+      if (payment.status !== 'captured') {
+        skippedNonCaptured++;
+        continue;
+      }
+
+      // Try to match to a Shopify order using multiple strategies
+      let matchedOrder = null;
+      const notes = payment.notes || {};
+
+      // Strategy 1: notes.shopify_order_id → shopifyOrderId
+      if (notes.shopify_order_id) {
+        matchedOrder = orderByShopifyId[String(notes.shopify_order_id)];
+      }
+
+      // Strategy 2: notes.order_id → shopifyOrderId or order number
+      if (!matchedOrder && notes.order_id) {
+        matchedOrder = orderByShopifyId[String(notes.order_id)] || orderByOrderNumber[String(notes.order_id)];
+      }
+
+      // Strategy 3: notes.shopify_order_number → order number
+      if (!matchedOrder && notes.shopify_order_number) {
+        matchedOrder = orderByOrderNumber[String(notes.shopify_order_number)]
+          || orderByOrderNumber[`#${notes.shopify_order_number}`];
+      }
+
+      // Strategy 4: receipt field → extract number, match to order number
+      if (!matchedOrder && payment.receipt) {
+        const receipt = String(payment.receipt).trim();
+        matchedOrder = orderByOrderNumber[receipt];
+        if (!matchedOrder) {
+          // Try extracting just digits from receipt
+          const digits = receipt.replace(/\D/g, '');
+          if (digits) matchedOrder = orderByOrderNumber[digits];
+        }
+      }
+
+      // Strategy 5: description field
+      if (!matchedOrder && payment.description) {
+        const desc = String(payment.description);
+        const orderMatch = desc.match(/#?(\d{3,})/);
+        if (orderMatch) {
+          matchedOrder = orderByOrderNumber[orderMatch[1]] || orderByOrderNumber[`#${orderMatch[1]}`];
+        }
+      }
+
+      if (matchedOrder) {
+        // Convert paise to rupees (Razorpay returns amounts in paise)
+        const feeInRupees = (payment.fee || 0) / 100;
+        const taxInRupees = (payment.tax || 0) / 100;
+
+        // Update ALL line items (SKUs) for this Shopify order with reconciled fee data
+        // The fee is distributed proportionally across line items of the same order
+        const orderLines = allOrders.filter(o => o.shopifyOrderId === matchedOrder.shopifyOrderId);
+        const totalLines = orderLines.length || 1;
+
+        for (const line of orderLines) {
+          await db.collection('orders').updateOne(
+            { _id: line._id },
+            {
+              $set: {
+                razorpayPaymentId: payment.id,
+                razorpayFee: feeInRupees / totalLines,
+                razorpayTax: taxInRupees / totalLines,
+                razorpayReconciled: true,
+                razorpaySettlementId: payment.settlement_id || null,
+                paymentMethod: 'prepaid',
+                updatedAt: new Date().toISOString(),
+              }
+            }
+          );
+        }
+        matched++;
+      } else {
+        unmatched++;
+      }
+    }
+
+    // Mark remaining orders without Razorpay match as COD (if they have financial_status 'paid' via Shopify COD)
+    // COD orders in Shopify typically have gateway = 'Cash on Delivery' or payment_gateway_names includes 'cod'
+    // Since we can't determine this from Shopify data alone, we mark unmatched paid orders as 'cod' only if not already reconciled
+    const codResult = await db.collection('orders').updateMany(
+      {
+        shopifyOrderId: { $exists: true },
+        razorpayReconciled: { $ne: true },
+        paymentMethod: { $ne: 'prepaid' },
+      },
+      {
+        $set: { paymentMethod: 'cod', updatedAt: new Date().toISOString() }
+      }
+    );
+
+    // Update integrations status
+    await db.collection('integrations').updateOne(
+      { _id: 'integrations-config' },
+      {
+        $set: {
+          'razorpay.active': true,
+          'razorpay.lastSyncAt': new Date().toISOString(),
+          'razorpay.totalPaymentsFetched': allPayments.length,
+          'razorpay.matchedOrders': matched,
+          'razorpay.unmatchedPayments': unmatched,
+        }
+      }
+    );
+
+    return {
+      message: `Razorpay sync complete. ${matched} orders reconciled with exact fees. ${unmatched} payments unmatched. ${codResult.modifiedCount} orders marked as COD.`,
+      totalPaymentsFetched: allPayments.length,
+      captured: allPayments.filter(p => p.status === 'captured').length,
+      matched,
+      unmatched,
+      skippedNonCaptured,
+      codMarked: codResult.modifiedCount,
+    };
+  } catch (err) {
+    return { error: `Razorpay sync failed: ${err.message}`, synced: 0 };
+  }
+}
+
+async function getRazorpaySettlements() {
+  const db = await getDb();
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+
+  if (!integrations?.razorpay?.keyId || !integrations?.razorpay?.keySecret) {
+    return { settlements: [], error: null, active: false };
+  }
+
+  if (!integrations?.razorpay?.active) {
+    return { settlements: [], error: null, active: false };
+  }
+
+  const { keyId, keySecret } = integrations.razorpay;
+  const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+
+  try {
+    const res = await fetch('https://api.razorpay.com/v1/settlements?count=10&skip=0', {
+      headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { settlements: [], error: `Razorpay API error: ${res.status}`, active: true };
+    }
+
+    const data = await res.json();
+    const items = (data.items || []).map(s => ({
+      id: s.id,
+      amount: (s.amount || 0) / 100, // Convert paise to rupees
+      status: s.status,
+      fees: (s.fees || 0) / 100,
+      tax: (s.tax || 0) / 100,
+      utr: s.utr || null,
+      createdAt: s.created_at ? new Date(s.created_at * 1000).toISOString() : null,
+    }));
+
+    return { settlements: items, error: null, active: true };
+  } catch (err) {
+    return { settlements: [], error: err.message, active: true };
+  }
+}
+
+
 // ==================== ROUTE HANDLERS ====================
 
 export async function OPTIONS() {
