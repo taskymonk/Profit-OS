@@ -1625,6 +1625,10 @@ export async function POST(request) {
         if (subResource === 'sync') return json(await metaAdsSyncSpend());
         return json({ error: 'Unknown Meta Ads action' }, 404);
 
+      case 'razorpay':
+        if (subResource === 'sync-payments') return json(await razorpaySyncPayments());
+        return json({ error: 'Unknown Razorpay action' }, 404);
+
       case 'employee-claim': {
         // Bulk claim: accepts single orderId or array of orderIds
         const { employeeId, orderId, orderIds: rawOrderIds } = body;
