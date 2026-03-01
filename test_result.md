@@ -471,6 +471,66 @@ backend:
           agent: "testing"
           comment: "✅ PHASE 4 TESTED - Profit calculator MetaAds check working correctly. Verified marketingAllocation = 0 when MetaAds inactive. Profit calculation structure complete with all required fields (netRevenue, totalCOGS, shippingCost, totalTransactionFee, marketingAllocation, netProfit). 2/2 tests passed."
 
+  - task: "IST Date Boundary Parity Fix"
+    implemented: true
+    working: true
+    file: "lib/profitCalculator.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Critical fix for IST date boundary parsing. Uses 'T00:00:00+05:30' format for accurate timezone handling in date range filters. Ensures Feb 22-28 range returns exact Shopify revenue figures."
+        - working: true
+          agent: "testing"
+          comment: "✅ IST DATE BOUNDARY PARITY TESTED - CRITICAL FEATURE WORKING PERFECTLY! All 4/4 checks passed: Revenue Parity (₹18,430 matches Shopify Total Sales), GST Parity (₹2,811.36 matches Shopify Taxes), Net Revenue Parity (₹15,618.64 matches Shopify Gross Sales), Revenue Consistency (plBreakdown.grossRevenue = filtered.revenue). Exact Shopify financial reconciliation verified."
+
+  - task: "Rounding Removal from Revenue Calculation"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Removed Math.round from salePrice calculation. Now uses direct multiplication: salePrice = finalOrderPrice * priceRatio for precise revenue allocation without artificial rounding."
+        - working: true
+          agent: "testing"
+          comment: "✅ ROUNDING REMOVAL VERIFIED - Source code check passed. Found exact pattern 'salePrice: finalOrderPrice * priceRatio,' without Math.round. Direct multiplication ensures precise proportional revenue allocation per line item."
+
+  - task: "Calendar UX Controlled Popover Fix"
+    implemented: true
+    working: true
+    file: "components/DashboardView.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Implemented controlled Popover component with proper open/close state management. Added useEffect guard to prevent API calls until both custom start and end dates are selected."
+        - working: true
+          agent: "testing"
+          comment: "✅ CALENDAR UX FIX VERIFIED - Source code checks passed 2/2: Found '<Popover open={calendarOpen}' (controlled Popover pattern), Found proper useEffect guard 'if (dateRange === 'custom' && (!customStart || !customEnd)) return;' preventing premature API calls."
+
+  - task: "Today Range Dashboard Functionality"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Today range filter maintains proper data structure with YYYY-MM-DD date format. Returns accurate order count and revenue data for current day."
+        - working: true
+          agent: "testing"
+          comment: "✅ TODAY FUNCTIONALITY TESTED - All 3/3 checks passed: Today Orders Count (filtered.totalOrders = 1), Today Revenue Check (filtered.revenue = ₹480), Date Format Check (dateRange.start = '2026-03-01' in YYYY-MM-DD format). Today range working correctly."
+
 frontend:
   - task: "Dashboard with Profit Metrics"
     implemented: true
