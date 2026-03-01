@@ -917,10 +917,12 @@ async function shopifySyncOrders() {
         continue;
       }
 
-      // Calculate per-line-item splits
+      // Proportional Revenue Allocation — use exact share of Shopify's final checkout total
       const totalLineItems = (shopifyOrder.line_items || []).length || 1;
       const totalShipping = parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0);
       const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
+      const finalOrderPrice = parseFloat(shopifyOrder.total_price || 0);
+      const rawSubtotal = (shopifyOrder.line_items || []).reduce((sum, i) => sum + (parseFloat(i.price) * (i.quantity || 1)), 0);
 
       // Shopify Revenue Parity: extract refund amounts
       const totalRefunds = (shopifyOrder.refunds || []).reduce((sum, refund) => {
@@ -929,8 +931,15 @@ async function shopifySyncOrders() {
         }, 0);
       }, 0);
 
+      // Map Shopify financial_status for strict filtering
+      const financialStatus = shopifyOrder.financial_status || 'unknown';
+
       for (const item of (shopifyOrder.line_items || [])) {
         const sku = item.sku || `SHOP-${item.variant_id || item.product_id}`;
+
+        // Each line item gets its proportional share of the final checkout price
+        const lineItemRaw = parseFloat(item.price) * (item.quantity || 1);
+        const priceRatio = rawSubtotal > 0 ? lineItemRaw / rawSubtotal : (1 / totalLineItems);
 
         await db.collection('orders').insertOne({
           _id: uuidv4(),
@@ -941,13 +950,14 @@ async function shopifySyncOrders() {
           variantName: item.variant_title || '',
           customerName: shopifyOrder.customer ? `${shopifyOrder.customer.first_name || ''} ${shopifyOrder.customer.last_name || ''}`.trim() : 'Unknown',
           customerPhone: customerPhone,
-          salePrice: parseFloat(item.price) * (item.quantity || 1),
-          discount: totalDiscount / totalLineItems,
-          refundAmount: totalRefunds / totalLineItems,
-          totalTax: totalTax / totalLineItems,
+          salePrice: Math.round(finalOrderPrice * priceRatio * 100) / 100,
+          discount: totalDiscount * priceRatio,
+          refundAmount: totalRefunds * priceRatio,
+          totalTax: totalTax * priceRatio,
+          financialStatus,
           status,
           shippingMethod: 'shopify',
-          shippingCost: totalShipping / totalLineItems,
+          shippingCost: totalShipping * priceRatio,
           shippingAddress,
           isUrgent: false,
           manualCourierName: null,
