@@ -1588,15 +1588,18 @@ Test these endpoints:
 
   - task: "Shopify Bills CSV Import"
     implemented: true
-    working: "NA"
+    working: true
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
           comment: "POST /api/shopify-bills/import with csvText, GET /api/shopify-bills for summary. CSV parser handles quoted fields."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Shopify Bills CSV Import fully functional. Successfully imported 4 test charges (order_commission: 2 charges totaling ₹70.2, application_fee: 1 charge ₹100, subscription_fee: 1 charge ₹500). POST /api/shopify-bills/import correctly parses CSV and returns proper summary structure. GET /api/shopify-bills returns complete import summary with totalCharges: 4 and detailed breakdown by category. Empty CSV properly handled with error message."
 
   - task: "Expanded P&L with Shopify Charges"
     implemented: true
