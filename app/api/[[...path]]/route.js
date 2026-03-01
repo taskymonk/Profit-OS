@@ -586,6 +586,35 @@ async function getDashboardData(params = {}) {
     },
     overhead: metrics.overhead,
     plBreakdown: metrics.plBreakdown,
+    // COD vs Prepaid Revenue Split
+    revenueSplit: (() => {
+      const start = new Date(startDate + 'T00:00:00+05:30');
+      const end = new Date(endDate + 'T23:59:59.999+05:30');
+      const rangeOrders = orders.filter(o => {
+        const d = new Date(o.orderDate);
+        return d >= start && d <= end;
+      });
+      // Exclude cancelled/voided/pending
+      const EXCL_STATUS = ['Cancelled', 'Voided', 'Pending'];
+      const EXCL_FIN = ['pending', 'voided', 'refunded'];
+      const acctOrders = rangeOrders.filter(o =>
+        !EXCL_STATUS.includes(o.status) && !EXCL_FIN.includes(o.financialStatus)
+      );
+      let prepaidRevenue = 0, codRevenue = 0, prepaidCount = 0, codCount = 0, unknownRevenue = 0, unknownCount = 0;
+      acctOrders.forEach(o => {
+        const rev = o.salePrice || 0;
+        if (o.paymentMethod === 'prepaid') { prepaidRevenue += rev; prepaidCount++; }
+        else if (o.paymentMethod === 'cod') { codRevenue += rev; codCount++; }
+        else { unknownRevenue += rev; unknownCount++; }
+      });
+      const totalRev = prepaidRevenue + codRevenue + unknownRevenue;
+      return {
+        prepaid: { revenue: Math.round(prepaidRevenue * 100) / 100, count: prepaidCount, percent: totalRev > 0 ? Math.round((prepaidRevenue / totalRev) * 10000) / 100 : 0 },
+        cod: { revenue: Math.round(codRevenue * 100) / 100, count: codCount, percent: totalRev > 0 ? Math.round((codRevenue / totalRev) * 10000) / 100 : 0 },
+        unknown: { revenue: Math.round(unknownRevenue * 100) / 100, count: unknownCount },
+        totalRevenue: Math.round(totalRev * 100) / 100,
+      };
+    })(),
     allTime: {
       totalOrders: allTimeMetrics.totalOrders,
       netProfit: allTimeMetrics.netProfit,
