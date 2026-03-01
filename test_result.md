@@ -1603,15 +1603,18 @@ Test these endpoints:
 
   - task: "Expanded P&L with Shopify Charges"
     implemented: true
-    working: "NA"
+    working: true
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
           comment: "Dashboard returns shopifyCharges with orderCommission, appFees, subscriptionFee pro-rated by date range. P&L shows separate Razorpay and Shopify fee lines."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Expanded P&L with Shopify Charges fully functional. Dashboard GET /api/dashboard includes complete shopifyCharges object with orderCommission, appFees, subscriptionFee, and total fields. Pro-rating logic verified: when testing with Feb 2026 date range, imported data correctly shows (orderCommission: ₹70.2, appFees: ₹100, subscriptionFee: ₹500, total: ₹670.2). P&L breakdown includes required razorpayFee (₹382.45) and razorpayTax (₹52.36) fields. Revenue split working with reconciled/unreconciled breakdown showing reconciled revenue ₹15,980 (29 orders) and unreconciled revenue ₹0 (0 orders)."
 
 test_plan:
   current_focus:
