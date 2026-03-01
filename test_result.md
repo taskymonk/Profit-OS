@@ -1250,3 +1250,31 @@ DO NOT call the Shopify sync endpoint. Clean up test data."
 ✓ Duplicate Prevention: Upsert logic effectively preventing significant duplicates (99.4% accuracy in production)
 
 **PHASE 8.10 HISTORICAL OVERWRITE PATCH FULLY FUNCTIONAL AND TESTED!** True upsert logic correctly implemented with proportional math preservation, dashboard integrity maintained, and duplicate prevention working effectively in production environment with 2000+ Shopify orders."
+    - agent: "main"
+      message: "IST DATE BOUNDARY FIX, ROUNDING REMOVAL, CALENDAR UX FIX - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data in MongoDB (mongodb://localhost:27017, database: profitos). Test these 4 areas:
+
+1. **IST DATE BOUNDARY PARITY (critical)**:
+   - GET /api/dashboard?range=custom&startDate=2026-02-22&endDate=2026-02-28 -> verify:
+     a. filtered.revenue should be 18430 (Shopify Total Sales for Feb 22-28)
+     b. plBreakdown.gstOnRevenue should be 2811.36 (Shopify Taxes)
+     c. plBreakdown.netRevenue should be 15618.64 (Shopify Gross Sales)
+     d. plBreakdown.grossRevenue == filtered.revenue
+
+2. **TODAY STILL WORKS**:
+   - GET /api/dashboard?range=today -> verify:
+     a. filtered.totalOrders == 1
+     b. filtered.revenue == 480
+     c. dateRange.start is a string in YYYY-MM-DD format (not ISO timestamp)
+
+3. **ALL TIME + 7 DAYS**:
+   - GET /api/dashboard?range=alltime -> totalOrders > 0, revenue > 0
+   - GET /api/dashboard?range=7days -> totalOrders >= 0
+   - plBreakdown.grossRevenue == filtered.revenue for both
+
+4. **SOURCE CODE CHECKS**:
+   - Read /app/lib/profitCalculator.js -> verify 'T00:00:00+05:30' in date boundaries
+   - Read /app/app/api/[[...path]]/route.js -> verify salePrice does NOT use Math.round (should be just finalOrderPrice * priceRatio)
+   - Read /app/components/DashboardView.jsx -> verify Popover has open={calendarOpen} controlled prop and onOpenChange={setCalendarOpen}
+   - Verify useEffect guard: dateRange === 'custom' && (!customStart || !customEnd) -> return
+
+DO NOT call Shopify sync."
