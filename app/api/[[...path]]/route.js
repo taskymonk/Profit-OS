@@ -1972,6 +1972,15 @@ export async function POST(request) {
         if (subResource === 'sync-payments') return json(await razorpaySyncPayments());
         return json({ error: 'Unknown Razorpay action' }, 404);
 
+      case 'shopify-bills': {
+        if (subResource === 'import') {
+          const csvText = body.csvText || body.csv || '';
+          if (!csvText.trim()) return json({ error: 'No CSV data provided. Please paste or upload the Shopify charges export CSV.' }, 400);
+          return json(await importShopifyBills(csvText));
+        }
+        return json({ error: 'Unknown action. Use /api/shopify-bills/import with csvText in body.' }, 404);
+      }
+
       case 'employee-claim': {
         // Bulk claim: accepts single orderId or array of orderIds
         const { employeeId, orderId, orderIds: rawOrderIds } = body;
