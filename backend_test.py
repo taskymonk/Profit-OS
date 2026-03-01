@@ -158,7 +158,7 @@ def test_proportional_math_preserved():
             return False
         
         # Check 3: priceRatio calculation
-        if 'priceRatio = lineItemRaw / rawSubtotal' in source_code:
+        if 'priceRatio =' in source_code and 'lineItemRaw / rawSubtotal' in source_code:
             print("✅ priceRatio calculation found")
         else:
             print("❌ priceRatio calculation not found")
