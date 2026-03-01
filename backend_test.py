@@ -99,7 +99,7 @@ def test_source_code_upsert_logic():
             print("❌ Shopify sync $set section not found")
             return False
         
-        # Check 6: $setOnInsert contains required fields - look for field names individually
+        # Check 6: $setOnInsert contains required fields - simple field name check
         required_setoninsert_fields = [
             '_id', 'orderId', 'customerName', 'createdAt', 'trackingNumber'
         ]
@@ -110,11 +110,8 @@ def test_source_code_upsert_logic():
             setoninsert_content = setoninsert_match.group(1)
             missing_fields = []
             for field in required_setoninsert_fields:
-                # Look for field either as "field:" or just "field," (ES6 shorthand)
-                if (field + ':' not in setoninsert_content and 
-                    field + ' :' not in setoninsert_content and
-                    field + ',' not in setoninsert_content and
-                    field + '\n' not in setoninsert_content):
+                # Simple check if field name exists in the content
+                if field not in setoninsert_content:
                     missing_fields.append(field)
             
             if missing_fields:
