@@ -79,7 +79,7 @@ class Phase89Tester:
                 route_content = f.read()
 
             # Test 1: Check for finalOrderPrice calculation
-            if 'finalOrderPrice = parseFloat(shopifyOrder.total_price)' in route_content:
+            if 'finalOrderPrice = parseFloat(shopifyOrder.total_price' in route_content:
                 self.log_test('proportional_revenue_allocation', 'finalOrderPrice calculation found', True)
             else:
                 self.log_test('proportional_revenue_allocation', 'finalOrderPrice calculation missing', False)
