@@ -35,6 +35,7 @@ export default function IntegrationsView() {
           if (data.shopify) setShopify(prev => ({ ...prev, ...data.shopify }));
           if (data.indiaPost) setIndiaPost(prev => ({ ...prev, ...data.indiaPost }));
           if (data.metaAds) setMetaAds(prev => ({ ...prev, ...data.metaAds }));
+          if (data.razorpay) setRazorpay(prev => ({ ...prev, ...data.razorpay }));
           if (data.exchangeRate) setExchangeRate(prev => ({ ...prev, ...data.exchangeRate }));
         }
       } catch (err) { console.error(err); }
