@@ -1547,9 +1547,17 @@ export async function GET(request) {
           if (masked.indiaPost?.password) masked.indiaPost.password = '********';
           if (masked.metaAds?.token) masked.metaAds.token = masked.metaAds.token.replace(/.(?=.{4})/g, '*');
           if (masked.exchangeRate?.apiKey) masked.exchangeRate.apiKey = masked.exchangeRate.apiKey.replace(/.(?=.{4})/g, '*');
+          if (masked.razorpay?.keySecret) masked.razorpay.keySecret = masked.razorpay.keySecret.replace(/.(?=.{4})/g, '*');
           return json(masked);
         }
         return json({});
+      }
+
+      case 'razorpay': {
+        if (subResource === 'settlements') {
+          return json(await getRazorpaySettlements());
+        }
+        return json({ error: 'Unknown Razorpay action' }, 404);
       }
 
       case 'calculate-profit': {
