@@ -253,6 +253,59 @@ export default function IntegrationsView() {
         </CardContent>
       </Card>
 
+      {/* Razorpay */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30"><CreditCard className="w-5 h-5 text-indigo-600" /></div>
+              <div><CardTitle className="text-base">Razorpay</CardTitle><CardDescription>Reconcile exact gateway fees & track settlements</CardDescription></div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={razorpay.active ? 'default' : 'secondary'}>{razorpay.active ? 'Active' : 'Inactive'}</Badge>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label>Key ID</Label>
+            <Input value={razorpay.keyId} onChange={e => setRazorpay({...razorpay, keyId: e.target.value})} placeholder="rzp_live_xxxxxxxxx" />
+          </div>
+          <div>
+            <Label>Key Secret</Label>
+            <div className="flex gap-2">
+              <Input type={showSecrets.razorpaySecret ? 'text' : 'password'} value={razorpay.keySecret} onChange={e => setRazorpay({...razorpay, keySecret: e.target.value})} placeholder="Enter Razorpay Key Secret" />
+              <Button variant="outline" size="icon" onClick={() => toggleSecret('razorpaySecret')}>
+                {showSecrets.razorpaySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+          <Separator />
+          <div className="flex flex-col sm:flex-row gap-2 items-start">
+            <Button size="sm" variant="outline" disabled={syncing.razorpay}
+              onClick={() => runSync('razorpay', '/api/razorpay/sync-payments')}>
+              {syncing.razorpay ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
+              Sync Payments & Reconcile Fees
+            </Button>
+            {razorpay.lastSyncAt && (
+              <span className="text-[11px] text-muted-foreground self-center">
+                Last synced: {new Date(razorpay.lastSyncAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                {razorpay.matchedOrders > 0 && ` · ${razorpay.matchedOrders} matched`}
+              </span>
+            )}
+          </div>
+          {syncResults.razorpay && (
+            <div className="text-xs p-2 rounded bg-muted flex items-start gap-1.5">
+              {syncResults.razorpay.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />}
+              <span>{syncResults.razorpay.error || syncResults.razorpay.message}</span>
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            Syncing replaces the predicted 2%+GST gateway fee with exact Razorpay deductions. Orders not matched to Razorpay are marked as COD (₹0 gateway fee).
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Exchange Rate */}
     </div>
   );
