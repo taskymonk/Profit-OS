@@ -1179,3 +1179,32 @@ DO NOT test Shopify sync. Clean up all test data."
 ✓ Ad Spend Tax Multiplier: Precise 18% GST application on raw ad spend
 
 **PHASE 8.9 'ABSOLUTE FINANCIAL PARITY & DATE PICKER UX POLISH' FULLY FUNCTIONAL AND TESTED!** All 25 tests passed across 5 critical areas. Real Shopify data (2044+ orders) confirmed operational with exact financial parity matching Shopify Analytics."
+    - agent: "main"
+      message: "PHASE 8.10 HISTORICAL OVERWRITE PATCH (TRUE UPSERT LOGIC) - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data in MongoDB (mongodb://localhost:27017, database: profitos). Test these 4 areas:
+
+1. **UPSERT LOGIC (source code check)**:
+   - Read /app/app/api/[[...path]]/route.js
+   - Verify: NO 'if (existingOrder)' early-exit block exists in shopifySyncOrders — it must be completely removed
+   - Verify: The sync uses db.collection('orders').updateOne() with { upsert: true } (NOT insertOne)
+   - Verify: The query matches on { shopifyOrderId: shopifyOrderIdStr, sku: sku }
+   - Verify: $set contains salePrice, discount, refundAmount, totalTax, financialStatus, status, shippingCost, orderDate, updatedAt
+   - Verify: $setOnInsert contains _id, orderId, customerName, createdAt, trackingNumber
+   - Verify: result.upsertedCount and result.modifiedCount are tracked for synced/updated counters
+
+2. **PROPORTIONAL MATH PRESERVED**:
+   - In the same sync function verify: finalOrderPrice, rawSubtotal, priceRatio are still computed
+   - Verify salePrice = Math.round(finalOrderPrice * priceRatio * 100) / 100 is in the $set block
+   - Verify totalRefunds extraction from shopifyOrder.refunds still exists
+   - Verify financialStatus = shopifyOrder.financial_status is in $set
+
+3. **DASHBOARD STILL WORKS**:
+   - GET /api/dashboard?range=alltime -> verify plBreakdown.grossRevenue == filtered.revenue
+   - Verify plBreakdown.netProfit == filtered.netProfit
+   - Verify totalOrders > 0 and revenue > 0
+
+4. **NO DUPLICATE ORDERS**:
+   - Use pymongo: count total orders: db.orders.count_documents({})
+   - Also count distinct shopifyOrderId+sku combos: len(list(db.orders.aggregate([{'$group':{'_id':{'sid':'$shopifyOrderId','sku':'$sku'}}}}])))
+   - These two counts should be EQUAL (no duplicates from upsert)
+
+DO NOT call the Shopify sync endpoint. Clean up test data."
