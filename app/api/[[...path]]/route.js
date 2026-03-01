@@ -622,6 +622,12 @@ async function getDashboardData(params = {}) {
         unreconciled: { revenue: Math.round(unreconciledRevenue * 100) / 100, count: unreconciledCount, percent: totalRev > 0 ? Math.round((unreconciledRevenue / totalRev) * 10000) / 100 : 0 },
       };
     })(),
+    // Shopify charges for date range (from imported bills)
+    shopifyCharges: await (async () => {
+      const charges = await db.collection('shopifyCharges').find({}).toArray();
+      if (charges.length === 0) return null;
+      return getShopifyChargesForDateRange(charges, startDate, endDate);
+    })(),
     allTime: {
       totalOrders: allTimeMetrics.totalOrders,
       netProfit: allTimeMetrics.netProfit,
