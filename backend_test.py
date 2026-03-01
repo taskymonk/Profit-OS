@@ -71,12 +71,15 @@ def test_source_code_upsert_logic():
             print("❌ Query filter shopifyOrderId + sku not found")
             return False
         
-        # Check 5: $set contains required fields
+        # Check 5: $set contains required fields - look for the specific Shopify sync $set
         required_set_fields = [
             'salePrice', 'discount', 'refundAmount', 'totalTax', 
             'financialStatus', 'status', 'shippingCost', 'orderDate', 'updatedAt'
         ]
-        set_section = re.search(r'\$set:\s*{([^}]+)}', source_code, re.DOTALL)
+        
+        # Find the specific Shopify orders $set section
+        shopify_set_pattern = r'// \$set: always overwrite.*?\$set:\s*{([^}]+)}'
+        set_section = re.search(shopify_set_pattern, source_code, re.DOTALL)
         if set_section:
             set_content = set_section.group(1)
             missing_fields = []
@@ -90,7 +93,7 @@ def test_source_code_upsert_logic():
             else:
                 print("✅ All required fields found in $set")
         else:
-            print("❌ $set section not found")
+            print("❌ Shopify sync $set section not found")
             return False
         
         # Check 6: $setOnInsert contains required fields
