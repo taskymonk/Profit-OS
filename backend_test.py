@@ -1,414 +1,371 @@
 #!/usr/bin/env python3
-
 """
-Phase 8.10 Historical Overwrite Patch (True Upsert Logic) Backend Testing
-================================================================
-
-This script tests 4 critical areas:
-1. UPSERT LOGIC (source code check)
-2. PROPORTIONAL MATH PRESERVED (source code check)  
-3. DASHBOARD STILL WORKS
-4. NO DUPLICATE ORDERS
-
-Base URL: https://profit-dashboard-v2.preview.emergentagent.com/api
+Profit OS Backend Test Suite - IST Date Boundary Fix + Rounding Removal + Calendar UX Fix
+Tests 4 critical areas: IST date boundary parity, today functionality, all time/7days ranges, and source code checks
 """
 
 import requests
 import json
 import sys
+import os
 from pymongo import MongoClient
-import re
+import subprocess
 
-BASE_URL = "https://profit-dashboard-v2.preview.emergentagent.com/api"
+# Configuration from .env
+BASE_URL = "http://localhost:3000/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "profitos"
 
-def test_source_code_upsert_logic():
-    """Test 1: UPSERT LOGIC (source code check)"""
-    print("🎯 **TEST 1: UPSERT LOGIC (SOURCE CODE CHECK)**")
-    
-    try:
-        # Read the route.js file
-        with open('/app/app/api/[[...path]]/route.js', 'r') as f:
-            source_code = f.read()
-        
-        # Check 1: NO early-exit block with existingOrder check
-        early_exit_pattern = r'if\s*\(\s*existingOrder\s*\)'
-        if re.search(early_exit_pattern, source_code):
-            print("❌ Found early-exit 'if (existingOrder)' block - should be removed")
-            return False
-        else:
-            print("✅ No early-exit 'if (existingOrder)' block found")
-        
-        # Check 2: NO findOne check for existing orders before processing
-        findone_pattern = r'findOne.*shopify.*existing'
-        if re.search(findone_pattern, source_code, re.IGNORECASE):
-            print("❌ Found findOne check for existing orders - should be removed")
-            return False
-        else:
-            print("✅ No findOne check for existing orders found")
-        
-        # Check 3: Uses updateOne with upsert: true (NOT insertOne)
-        if 'insertOne' in source_code and 'shopify' in source_code.lower():
-            # Check if insertOne is used for Shopify orders
-            shopify_section = re.findall(r'shopifySyncOrders.*?(?=function|\n\n|\Z)', source_code, re.DOTALL)
-            if shopify_section and 'insertOne' in str(shopify_section):
-                print("❌ Found insertOne in Shopify sync - should use updateOne with upsert")
-                return False
-        
-        upsert_pattern = r'updateOne.*upsert:\s*true'
-        if re.search(upsert_pattern, source_code):
-            print("✅ Uses updateOne with upsert: true")
-        else:
-            print("❌ updateOne with upsert: true not found")
-            return False
-        
-        # Check 4: Query filter is shopifyOrderId + sku
-        query_pattern = r'shopifyOrderId:\s*shopifyOrderIdStr,\s*sku:\s*sku'
-        if re.search(query_pattern, source_code):
-            print("✅ Query filter uses shopifyOrderId + sku")
-        else:
-            print("❌ Query filter shopifyOrderId + sku not found")
-            return False
-        
-        # Check 5: $set contains required fields - look for field names individually
-        required_set_fields = [
-            'salePrice', 'discount', 'refundAmount', 'totalTax', 
-            'financialStatus', 'status', 'shippingCost', 'orderDate', 'updatedAt'
-        ]
-        
-        # Find the Shopify $set section content
-        set_match = re.search(r'// \$set: always overwrite.*?\$set:\s*{([^}]+)}', source_code, re.DOTALL)
-        if set_match:
-            set_content = set_match.group(1)
-            missing_fields = []
-            for field in required_set_fields:
-                # Look for field either as "field:" or just "field," (ES6 shorthand)
-                if (field + ':' not in set_content and 
-                    field + ' :' not in set_content and
-                    field + ',' not in set_content and
-                    field + '\n' not in set_content):
-                    missing_fields.append(field)
-            
-            if missing_fields:
-                print(f"❌ Missing fields in $set: {missing_fields}")
-                return False
-            else:
-                print("✅ All required fields found in $set")
-        else:
-            print("❌ Shopify sync $set section not found")
-            return False
-        
-        # Check 6: $setOnInsert contains required fields - check in wider context
-        required_setoninsert_fields = [
-            '_id', 'orderId', 'customerName', 'createdAt', 'trackingNumber'
-        ]
-        
-        # Find the $setOnInsert section and look for fields in context
-        setoninsert_pos = source_code.find('$setOnInsert:')
-        if setoninsert_pos != -1:
-            # Look for the fields in a reasonable section around $setOnInsert
-            context_start = setoninsert_pos
-            context_end = source_code.find('{ upsert: true }', setoninsert_pos)
-            if context_end == -1:
-                context_end = setoninsert_pos + 1000  # fallback
-            
-            setoninsert_context = source_code[context_start:context_end]
-            missing_fields = []
-            for field in required_setoninsert_fields:
-                if field not in setoninsert_context:
-                    missing_fields.append(field)
-            
-            if missing_fields:
-                print(f"❌ Missing fields in $setOnInsert: {missing_fields}")
-                return False
-            else:
-                print("✅ All required fields found in $setOnInsert")
-        else:
-            print("❌ $setOnInsert section not found")
-            return False
-        
-        # Check 7: Uses upsertedCount and modifiedCount for tracking
-        if 'result.upsertedCount' in source_code and 'result.modifiedCount' in source_code:
-            print("✅ Uses result.upsertedCount and result.modifiedCount for tracking")
-        else:
-            print("❌ Missing upsertedCount/modifiedCount tracking")
-            return False
-        
-        print("✅ **TEST 1 PASSED**: Upsert logic correctly implemented\n")
-        return True
-        
-    except Exception as e:
-        print(f"❌ **TEST 1 FAILED**: {str(e)}\n")
-        return False
+def log_test_result(test_name, status, details=""):
+    """Log test results with clear status"""
+    symbol = "✅" if status else "❌"
+    print(f"{symbol} {test_name}: {details}")
 
-def test_proportional_math_preserved():
-    """Test 2: PROPORTIONAL MATH PRESERVED (source code check)"""
-    print("🎯 **TEST 2: PROPORTIONAL MATH PRESERVED (SOURCE CODE CHECK)**")
-    
-    try:
-        # Read the route.js file
-        with open('/app/app/api/[[...path]]/route.js', 'r') as f:
-            source_code = f.read()
-        
-        # Check 1: finalOrderPrice calculation  
-        if 'finalOrderPrice = parseFloat(shopifyOrder.total_price' in source_code:
-            print("✅ finalOrderPrice calculation found")
-        else:
-            print("❌ finalOrderPrice calculation not found")
-            return False
-        
-        # Check 2: rawSubtotal computation from line items
-        if 'rawSubtotal' in source_code and 'reduce' in source_code:
-            print("✅ rawSubtotal computation from line items found")
-        else:
-            print("❌ rawSubtotal computation not found")
-            return False
-        
-        # Check 3: priceRatio calculation
-        if 'priceRatio =' in source_code and 'lineItemRaw / rawSubtotal' in source_code:
-            print("✅ priceRatio calculation found")
-        else:
-            print("❌ priceRatio calculation not found")
-            return False
-        
-        # Check 4: salePrice proportional allocation
-        salePrice_pattern = r'salePrice.*finalOrderPrice.*priceRatio'
-        if re.search(salePrice_pattern, source_code):
-            print("✅ salePrice proportional allocation found")
-        else:
-            print("❌ salePrice proportional allocation not found")
-            return False
-        
-        # Check 5: Math.round formula for precision
-        if 'Math.round(finalOrderPrice * priceRatio * 100) / 100' in source_code:
-            print("✅ Math.round precision formula found")
-        else:
-            print("❌ Math.round precision formula not found")
-            return False
-        
-        # Check 6: totalRefunds extraction from refunds
-        if 'totalRefunds' in source_code and 'refunds' in source_code:
-            print("✅ totalRefunds extraction found")
-        else:
-            print("❌ totalRefunds extraction not found")
-            return False
-        
-        # Check 7: financialStatus mapping
-        if 'financialStatus' in source_code and 'financial_status' in source_code:
-            print("✅ financialStatus mapping found")
-        else:
-            print("❌ financialStatus mapping not found")
-            return False
-        
-        print("✅ **TEST 2 PASSED**: Proportional math preserved\n")
-        return True
-        
-    except Exception as e:
-        print(f"❌ **TEST 2 FAILED**: {str(e)}\n")
-        return False
+def get_mongo_connection():
+    """Get MongoDB connection"""
+    client = MongoClient(MONGO_URL)
+    return client[DB_NAME]
 
-def test_dashboard_still_works():
-    """Test 3: DASHBOARD STILL WORKS"""
-    print("🎯 **TEST 3: DASHBOARD STILL WORKS**")
-    
+def make_request(method, endpoint, data=None, params=None):
+    """Make HTTP request with error handling"""
     try:
-        # GET dashboard with alltime range
-        response = requests.get(f"{BASE_URL}/dashboard?range=alltime")
-        
-        if response.status_code != 200:
-            print(f"❌ Dashboard API failed: {response.status_code}")
-            return False
-        
-        data = response.json()
-        
-        # Check for required fields
-        if 'plBreakdown' not in data or 'filtered' not in data:
-            print("❌ Missing plBreakdown or filtered in dashboard response")
-            return False
-        
-        pl_breakdown = data['plBreakdown']
-        filtered = data['filtered']
-        
-        # Check 1: plBreakdown.grossRevenue == filtered.revenue (exact match)
-        if pl_breakdown.get('grossRevenue') == filtered.get('revenue'):
-            print(f"✅ plBreakdown.grossRevenue ({pl_breakdown.get('grossRevenue')}) == filtered.revenue (exact match)")
+        url = f"{BASE_URL}{endpoint}"
+        if method.upper() == "GET":
+            response = requests.get(url, params=params)
+        elif method.upper() == "POST":
+            response = requests.post(url, json=data)
+        elif method.upper() == "PUT":
+            response = requests.put(url, json=data)
+        elif method.upper() == "DELETE":
+            response = requests.delete(url)
         else:
-            print(f"❌ plBreakdown.grossRevenue ({pl_breakdown.get('grossRevenue')}) != filtered.revenue ({filtered.get('revenue')})")
-            return False
+            raise ValueError(f"Unsupported method: {method}")
         
-        # Check 2: plBreakdown.netProfit == filtered.netProfit (exact match)
-        if pl_breakdown.get('netProfit') == filtered.get('netProfit'):
-            print(f"✅ plBreakdown.netProfit ({pl_breakdown.get('netProfit')}) == filtered.netProfit (exact match)")
-        else:
-            print(f"❌ plBreakdown.netProfit ({pl_breakdown.get('netProfit')}) != filtered.netProfit ({filtered.get('netProfit')})")
-            return False
-        
-        # Check 3: totalOrders > 0
-        total_orders = filtered.get('totalOrders', 0)
-        if total_orders > 0:
-            print(f"✅ totalOrders: {total_orders} > 0")
-        else:
-            print(f"❌ totalOrders: {total_orders} not > 0")
-            return False
-        
-        # Check 4: revenue > 0
-        revenue = filtered.get('revenue', 0)
-        if revenue > 0:
-            print(f"✅ revenue: ₹{revenue:,.2f} > 0")
-        else:
-            print(f"❌ revenue: ₹{revenue:,.2f} not > 0")
-            return False
-        
-        print("✅ **TEST 3 PASSED**: Dashboard working correctly\n")
-        return True
-        
+        return response.status_code, response.json() if response.content else {}
     except Exception as e:
-        print(f"❌ **TEST 3 FAILED**: {str(e)}\n")
-        return False
+        print(f"Request error for {method} {endpoint}: {e}")
+        return 0, {"error": str(e)}
 
-def test_no_duplicate_orders():
-    """Test 4: NO DUPLICATE ORDERS"""
-    print("🎯 **TEST 4: NO DUPLICATE ORDERS**")
+def test_ist_date_boundary_parity():
+    """
+    Test 1: IST DATE BOUNDARY PARITY (most critical)
+    Verify dashboard returns exact Shopify revenue figures for Feb 22-28 date range
+    """
+    print("\n🎯 TEST 1: IST DATE BOUNDARY PARITY (MOST CRITICAL)")
     
     try:
-        # Connect to MongoDB
-        client = MongoClient(MONGO_URL)
-        db = client[DB_NAME]
-        
-        # Count total orders
-        total_orders = db.orders.count_documents({})
-        print(f"📊 Total orders in database: {total_orders}")
-        
-        # Count distinct shopifyOrderId+sku combinations
-        pipeline = [
-            {
-                '$group': {
-                    '_id': {
-                        'shopifyOrderId': '$shopifyOrderId',
-                        'sku': '$sku'
-                    }
-                }
-            }
-        ]
-        
-        distinct_combinations = list(db.orders.aggregate(pipeline))
-        distinct_count = len(distinct_combinations)
-        print(f"📊 Distinct shopifyOrderId+sku combinations: {distinct_count}")
-        
-        # Count orders with shopifyOrderId (Shopify orders)
-        shopify_orders = db.orders.count_documents({'shopifyOrderId': {'$exists': True, '$ne': None}})
-        print(f"📊 Orders with shopifyOrderId: {shopify_orders}")
-        
-        # Count orders without shopifyOrderId (non-Shopify orders)
-        non_shopify_orders = db.orders.count_documents({
-            '$or': [
-                {'shopifyOrderId': {'$exists': False}},
-                {'shopifyOrderId': None},
-                {'shopifyOrderId': ''}
-            ]
+        # Test the specific date range mentioned in the request
+        status_code, response = make_request("GET", "/dashboard", params={
+            "range": "custom",
+            "startDate": "2026-02-22", 
+            "endDate": "2026-02-28"
         })
-        print(f"📊 Orders without shopifyOrderId (non-Shopify): {non_shopify_orders}")
         
-        # For Shopify orders specifically, check for duplicates
-        shopify_pipeline = [
-            {
-                '$match': {
-                    'shopifyOrderId': {'$exists': True, '$ne': None, '$ne': ''}
-                }
-            },
-            {
-                '$group': {
-                    '_id': {
-                        'shopifyOrderId': '$shopifyOrderId',
-                        'sku': '$sku'
-                    }
-                }
-            }
-        ]
-        
-        shopify_distinct = list(db.orders.aggregate(shopify_pipeline))
-        shopify_distinct_count = len(shopify_distinct)
-        print(f"📊 Distinct Shopify order+sku combinations: {shopify_distinct_count}")
-        
-        # Check for duplicates in Shopify orders - allow reasonable tolerance
-        if shopify_orders == shopify_distinct_count:
-            print("✅ No duplicate Shopify orders found (perfect upsert)")
-        elif abs(shopify_orders - shopify_distinct_count) <= 20:  # Allow larger tolerance for production system
-            print(f"✅ Minimal duplicates in Shopify orders (difference: {abs(shopify_orders - shopify_distinct_count)}) - acceptable for production system")
-        else:
-            print(f"❌ Significant duplicates found in Shopify orders (difference: {abs(shopify_orders - shopify_distinct_count)})")
+        if status_code != 200:
+            log_test_result("IST Date Boundary API Call", False, f"HTTP {status_code}: {response.get('error', 'Unknown error')}")
             return False
         
-        # Overall duplicate check
-        expected_total = shopify_distinct_count + non_shopify_orders
-        if abs(total_orders - expected_total) <= 20:  # Allow larger tolerance for edge cases
-            print("✅ Total order count consistent with expected (upsert preventing major duplicates)")
+        # Extract the key metrics
+        filtered = response.get("filtered", {})
+        plBreakdown = response.get("plBreakdown", {})
+        
+        # Critical checks as specified in the request
+        revenue = filtered.get("revenue")
+        gstOnRevenue = plBreakdown.get("gstOnRevenue") 
+        netRevenue = plBreakdown.get("netRevenue")
+        grossRevenue = plBreakdown.get("grossRevenue")
+        
+        # Test the specific values mentioned in the request
+        tests_passed = 0
+        total_tests = 4
+        
+        # 1. Check filtered.revenue == 18430 (Shopify's exact Total Sales for Feb 22-28)
+        if revenue == 18430:
+            log_test_result("Revenue Parity Check", True, f"filtered.revenue = ₹{revenue} (matches Shopify Total Sales)")
+            tests_passed += 1
         else:
-            print(f"❌ Total order count inconsistent (expected ~{expected_total}, got {total_orders})")
-            return False
+            log_test_result("Revenue Parity Check", False, f"Expected ₹18,430, got ₹{revenue}")
         
-        client.close()
+        # 2. Check plBreakdown.gstOnRevenue == 2811.36 (Shopify's exact Taxes)
+        if abs(gstOnRevenue - 2811.36) < 0.1:
+            log_test_result("GST Parity Check", True, f"plBreakdown.gstOnRevenue = ₹{gstOnRevenue} (matches Shopify Taxes)")
+            tests_passed += 1
+        else:
+            log_test_result("GST Parity Check", False, f"Expected ₹2,811.36, got ₹{gstOnRevenue}")
         
-        print("✅ **TEST 4 PASSED**: No significant duplicate orders\n")
-        return True
+        # 3. Check plBreakdown.netRevenue == 15618.64 (Shopify's exact Gross Sales)
+        if abs(netRevenue - 15618.64) < 0.1:
+            log_test_result("Net Revenue Parity Check", True, f"plBreakdown.netRevenue = ₹{netRevenue} (matches Shopify Gross Sales)")
+            tests_passed += 1
+        else:
+            log_test_result("Net Revenue Parity Check", False, f"Expected ₹15,618.64, got ₹{netRevenue}")
+        
+        # 4. Check plBreakdown.grossRevenue == filtered.revenue
+        if grossRevenue == revenue:
+            log_test_result("Revenue Consistency Check", True, f"plBreakdown.grossRevenue = filtered.revenue (₹{grossRevenue})")
+            tests_passed += 1
+        else:
+            log_test_result("Revenue Consistency Check", False, f"plBreakdown.grossRevenue (₹{grossRevenue}) != filtered.revenue (₹{revenue})")
+        
+        # Overall result for IST Date Boundary Parity
+        success = tests_passed == total_tests
+        log_test_result("IST Date Boundary Parity (CRITICAL)", success, f"{tests_passed}/{total_tests} checks passed")
+        return success
         
     except Exception as e:
-        print(f"❌ **TEST 4 FAILED**: {str(e)}\n")
+        log_test_result("IST Date Boundary Parity (CRITICAL)", False, f"Exception: {e}")
+        return False
+
+def test_today_still_works():
+    """
+    Test 2: TODAY STILL WORKS
+    Verify today range returns proper data structure
+    """
+    print("\n🎯 TEST 2: TODAY STILL WORKS")
+    
+    try:
+        status_code, response = make_request("GET", "/dashboard", params={"range": "today"})
+        
+        if status_code != 200:
+            log_test_result("Today Range API Call", False, f"HTTP {status_code}: {response.get('error', 'Unknown error')}")
+            return False
+        
+        filtered = response.get("filtered", {})
+        dateRange = response.get("dateRange", {})
+        
+        tests_passed = 0
+        total_tests = 3
+        
+        # Check if totalOrders == 1 as specified
+        totalOrders = filtered.get("totalOrders")
+        if totalOrders == 1:
+            log_test_result("Today Orders Count", True, f"filtered.totalOrders = {totalOrders}")
+            tests_passed += 1
+        else:
+            log_test_result("Today Orders Count", False, f"Expected 1 order, got {totalOrders}")
+        
+        # Check if revenue == 480 as specified
+        revenue = filtered.get("revenue")
+        if revenue == 480:
+            log_test_result("Today Revenue Check", True, f"filtered.revenue = ₹{revenue}")
+            tests_passed += 1
+        else:
+            log_test_result("Today Revenue Check", False, f"Expected ₹480, got ₹{revenue}")
+        
+        # Check if dateRange.start is YYYY-MM-DD string (not ISO timestamp)
+        dateStart = dateRange.get("start")
+        if dateStart and len(dateStart) == 10 and dateStart.count("-") == 2:
+            log_test_result("Date Format Check", True, f"dateRange.start = '{dateStart}' (YYYY-MM-DD format)")
+            tests_passed += 1
+        else:
+            log_test_result("Date Format Check", False, f"Expected YYYY-MM-DD format, got '{dateStart}'")
+        
+        success = tests_passed == total_tests
+        log_test_result("TODAY Functionality", success, f"{tests_passed}/{total_tests} checks passed")
+        return success
+        
+    except Exception as e:
+        log_test_result("TODAY Functionality", False, f"Exception: {e}")
+        return False
+
+def test_alltime_and_7days():
+    """
+    Test 3: ALL TIME + 7 DAYS
+    Test these ranges work correctly
+    """
+    print("\n🎯 TEST 3: ALL TIME + 7 DAYS RANGES")
+    
+    try:
+        tests_passed = 0
+        total_tests = 4
+        
+        # Test All Time
+        status_code, response = make_request("GET", "/dashboard", params={"range": "alltime"})
+        if status_code != 200:
+            log_test_result("All Time API Call", False, f"HTTP {status_code}")
+            return False
+            
+        filtered = response.get("filtered", {})
+        plBreakdown = response.get("plBreakdown", {})
+        
+        # Check totalOrders > 0
+        totalOrders = filtered.get("totalOrders", 0)
+        if totalOrders > 0:
+            log_test_result("All Time Orders Check", True, f"totalOrders = {totalOrders}")
+            tests_passed += 1
+        else:
+            log_test_result("All Time Orders Check", False, f"Expected > 0, got {totalOrders}")
+        
+        # Check revenue > 0
+        revenue = filtered.get("revenue", 0)
+        if revenue > 0:
+            log_test_result("All Time Revenue Check", True, f"revenue = ₹{revenue:,.2f}")
+            tests_passed += 1
+        else:
+            log_test_result("All Time Revenue Check", False, f"Expected > 0, got ₹{revenue}")
+        
+        # Test 7 Days
+        status_code, response = make_request("GET", "/dashboard", params={"range": "7days"})
+        if status_code != 200:
+            log_test_result("7 Days API Call", False, f"HTTP {status_code}")
+            return False
+            
+        filtered = response.get("filtered", {})
+        plBreakdown = response.get("plBreakdown", {})
+        
+        # Check totalOrders >= 0 (could be 0 for 7 days)
+        totalOrders = filtered.get("totalOrders", -1)
+        if totalOrders >= 0:
+            log_test_result("7 Days Orders Check", True, f"totalOrders = {totalOrders}")
+            tests_passed += 1
+        else:
+            log_test_result("7 Days Orders Check", False, f"Expected >= 0, got {totalOrders}")
+        
+        # For both ranges: plBreakdown.grossRevenue == filtered.revenue
+        grossRevenue = plBreakdown.get("grossRevenue", 0)
+        revenue = filtered.get("revenue", 0)
+        if abs(grossRevenue - revenue) < 0.01:  # Allow for small floating point differences
+            log_test_result("7 Days Revenue Consistency", True, f"plBreakdown.grossRevenue = filtered.revenue (₹{revenue:,.2f})")
+            tests_passed += 1
+        else:
+            log_test_result("7 Days Revenue Consistency", False, f"grossRevenue (₹{grossRevenue:,.2f}) != revenue (₹{revenue:,.2f})")
+        
+        success = tests_passed == total_tests
+        log_test_result("ALL TIME + 7 DAYS Ranges", success, f"{tests_passed}/{total_tests} checks passed")
+        return success
+        
+    except Exception as e:
+        log_test_result("ALL TIME + 7 DAYS Ranges", False, f"Exception: {e}")
+        return False
+
+def test_source_code_checks():
+    """
+    Test 4: SOURCE CODE CHECKS
+    Verify specific implementation details in the codebase
+    """
+    print("\n🎯 TEST 4: SOURCE CODE CHECKS")
+    
+    try:
+        tests_passed = 0
+        total_tests = 4
+        
+        # 1. Check profitCalculator.js for 'T00:00:00+05:30' in date boundary parsing
+        try:
+            with open('/app/lib/profitCalculator.js', 'r') as f:
+                profit_calc_content = f.read()
+            
+            if 'T00:00:00+05:30' in profit_calc_content:
+                log_test_result("IST Date Boundary in profitCalculator.js", True, "Found 'T00:00:00+05:30' IST offset")
+                tests_passed += 1
+            else:
+                log_test_result("IST Date Boundary in profitCalculator.js", False, "IST offset 'T00:00:00+05:30' not found")
+        except Exception as e:
+            log_test_result("IST Date Boundary in profitCalculator.js", False, f"File read error: {e}")
+        
+        # 2. Check route.js for salePrice NOT using Math.round
+        try:
+            with open('/app/app/api/[[...path]]/route.js', 'r') as f:
+                route_content = f.read()
+            
+            # Look for salePrice assignment and verify it doesn't use Math.round
+            if 'salePrice = finalOrderPrice * priceRatio' in route_content and 'Math.round(' not in route_content.split('salePrice = finalOrderPrice * priceRatio')[1].split(';')[0]:
+                log_test_result("No Math.round in salePrice calculation", True, "salePrice uses direct multiplication without rounding")
+                tests_passed += 1
+            else:
+                log_test_result("No Math.round in salePrice calculation", False, "salePrice calculation may still use Math.round")
+        except Exception as e:
+            log_test_result("No Math.round in salePrice calculation", False, f"File read error: {e}")
+        
+        # 3. Check DashboardView.jsx for controlled Popover
+        try:
+            with open('/app/components/DashboardView.jsx', 'r') as f:
+                dashboard_content = f.read()
+            
+            if '<Popover open={calendarOpen}' in dashboard_content:
+                log_test_result("Controlled Popover in DashboardView.jsx", True, "Found <Popover open={calendarOpen} (controlled)")
+                tests_passed += 1
+            else:
+                log_test_result("Controlled Popover in DashboardView.jsx", False, "Controlled Popover pattern not found")
+        except Exception as e:
+            log_test_result("Controlled Popover in DashboardView.jsx", False, f"File read error: {e}")
+        
+        # 4. Check useEffect guard in DashboardView.jsx
+        try:
+            with open('/app/components/DashboardView.jsx', 'r') as f:
+                dashboard_content = f.read()
+            
+            if "if (dateRange === 'custom' && (!customStart || !customEnd)) return;" in dashboard_content:
+                log_test_result("useEffect guard in DashboardView.jsx", True, "Found proper useEffect guard for custom date range")
+                tests_passed += 1
+            else:
+                log_test_result("useEffect guard in DashboardView.jsx", False, "useEffect guard for custom date range not found")
+        except Exception as e:
+            log_test_result("useEffect guard in DashboardView.jsx", False, f"File read error: {e}")
+        
+        success = tests_passed == total_tests
+        log_test_result("SOURCE CODE CHECKS", success, f"{tests_passed}/{total_tests} checks passed")
+        return success
+        
+    except Exception as e:
+        log_test_result("SOURCE CODE CHECKS", False, f"Exception: {e}")
         return False
 
 def main():
-    """Run all Phase 8.10 tests"""
-    print("=" * 80)
-    print("🚀 PHASE 8.10 HISTORICAL OVERWRITE PATCH (TRUE UPSERT LOGIC) TESTING")
-    print("=" * 80)
-    print()
+    """Run all backend tests"""
+    print("🚀 PROFIT OS BACKEND TEST SUITE")
+    print("=" * 70)
+    print("Testing: IST Date Boundary Fix + Rounding Removal + Calendar UX Fix")
+    print("Base URL:", BASE_URL)
+    print("MongoDB:", MONGO_URL, "Database:", DB_NAME)
+    print("=" * 70)
     
+    # Track overall results
     test_results = []
     
-    # Test 1: Upsert Logic Source Code
-    test_results.append(test_source_code_upsert_logic())
-    
-    # Test 2: Proportional Math Source Code  
-    test_results.append(test_proportional_math_preserved())
-    
-    # Test 3: Dashboard Functionality
-    test_results.append(test_dashboard_still_works())
-    
-    # Test 4: No Duplicate Orders
-    test_results.append(test_no_duplicate_orders())
+    # Run all test suites
+    test_results.append(("IST Date Boundary Parity (CRITICAL)", test_ist_date_boundary_parity()))
+    test_results.append(("TODAY Still Works", test_today_still_works()))
+    test_results.append(("ALL TIME + 7 DAYS Ranges", test_alltime_and_7days()))
+    test_results.append(("SOURCE CODE CHECKS", test_source_code_checks()))
     
     # Summary
-    print("=" * 80)
-    print("📊 **PHASE 8.10 TEST SUMMARY**")
-    print("=" * 80)
+    print("\n" + "=" * 70)
+    print("📊 BACKEND TEST SUMMARY")
+    print("=" * 70)
     
-    passed = sum(test_results)
-    total = len(test_results)
+    passed_tests = 0
+    total_tests = len(test_results)
     
-    test_names = [
-        "Upsert Logic (Source Code)",
-        "Proportional Math (Source Code)", 
-        "Dashboard Functionality",
-        "No Duplicate Orders"
-    ]
+    for test_name, result in test_results:
+        status_symbol = "✅" if result else "❌"
+        print(f"{status_symbol} {test_name}")
+        if result:
+            passed_tests += 1
     
-    for i, (name, result) in enumerate(zip(test_names, test_results)):
-        status = "✅ PASSED" if result else "❌ FAILED"
-        print(f"{i+1}. {name}: {status}")
+    print("\n" + "=" * 70)
+    overall_success = passed_tests == total_tests
     
-    print()
-    if passed == total:
-        print(f"🎉 **ALL {total} TESTS PASSED!** Phase 8.10 Historical Overwrite Patch fully functional.")
-        print("✅ True upsert logic correctly implemented")
-        print("✅ Proportional revenue allocation preserved")  
-        print("✅ Dashboard data integrity maintained")
-        print("✅ No duplicate orders (upsert preventing duplicates)")
-        return True
+    if overall_success:
+        print("🎉 ALL BACKEND TESTS PASSED!")
+        print(f"✅ {passed_tests}/{total_tests} test suites completed successfully")
+        print("\n✅ IST Date Boundary Fix: VERIFIED")
+        print("✅ Rounding Removal: VERIFIED") 
+        print("✅ Calendar UX Fix: VERIFIED")
+        print("✅ Core Functionality: WORKING")
     else:
-        print(f"⚠️ **{passed}/{total} TESTS PASSED** - {total-passed} critical issues need attention")
-        return False
+        print("⚠️  SOME BACKEND TESTS FAILED")
+        print(f"❌ {passed_tests}/{total_tests} test suites passed")
+        
+        # List failed tests
+        failed_tests = [name for name, result in test_results if not result]
+        if failed_tests:
+            print("\n🔍 Failed Test Suites:")
+            for failed_test in failed_tests:
+                print(f"   • {failed_test}")
+    
+    print("=" * 70)
+    return 0 if overall_success else 1
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    exit_code = main()
+    sys.exit(exit_code)
