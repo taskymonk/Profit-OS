@@ -720,16 +720,22 @@ export default function DashboardView() {
                   <span className={`text-sm font-medium ${item.color}`}>-{fmt(item.value)}</span>
                 </div>
               ))}
-              {/* Net Profit */}
-              <div className={`flex items-center justify-between py-3 px-3 rounded-lg mt-2 ${plBreakdown.netProfit >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50'}`}>
-                <div className="flex items-center gap-2">
-                  {plBreakdown.netProfit >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
-                  <span className="text-sm font-bold">True Net Profit</span>
-                </div>
-                <span className={`text-lg font-bold ${plBreakdown.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {fmt(plBreakdown.netProfit)}
-                </span>
-              </div>
+              {/* Net Profit — adjusted for Shopify charges */}
+              {(() => {
+                const shopifyDeduction = shopifyCharges ? shopifyCharges.total : 0;
+                const adjustedNetProfit = plBreakdown.netProfit - shopifyDeduction;
+                return (
+                  <div className={`flex items-center justify-between py-3 px-3 rounded-lg mt-2 ${adjustedNetProfit >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50' : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50'}`}>
+                    <div className="flex items-center gap-2">
+                      {adjustedNetProfit >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
+                      <span className="text-sm font-bold">True Net Profit</span>
+                    </div>
+                    <span className={`text-lg font-bold ${adjustedNetProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {fmt(adjustedNetProfit)}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </CardContent>
         </Card>
