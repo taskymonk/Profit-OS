@@ -2309,3 +2309,53 @@ Test these endpoints:
 ✓ Revenue Classification: Reconciled vs Unreconciled revenue split replacing COD vs Prepaid
 
 **PHASE 9B SHOPIFY BILLS IMPORT & EXPANDED P&L FULLY FUNCTIONAL AND TESTED!** All 6 critical features working perfectly. CSV import handles Shopify charges export format, pro-rating logic works correctly for date ranges, and dashboard shows complete P&L breakdown with Razorpay and Shopify fee separation."
+
+
+  - task: "Phase 9C: Shopify Txn Fee Rate in Settings"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "shopifyTxnFeeRate field added to tenant config. PUT /api/tenant-config saves it. profitCalculator uses it to compute per-order Shopify txn fee (salePrice * rate%) + 18% GST. Settings UI has input with helper text. Verified via API: setting rate=2 produces correct fee amounts in plBreakdown."
+
+  - task: "Phase 9C: Shopify Bills CSV Import Removed"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Removed ~170 lines of dead code: parseCSV(), importShopifyBills(), getShopifyBillsSummary(), getShopifyChargesForDateRange(). No frontend references to shopify-bills. IntegrationsView has no bill import UI. No csv-parse dependency."
+
+  - task: "Phase 9D: Enhanced Expense System"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/expense-categories returns pre-loaded categories (Platform Fees, Salary, Raw Material Purchases, Operations, Utilities). POST /api/expense-categories/save saves category tree. POST /api/overhead-expenses creates expenses with: category, subCategory, gstInclusive, frequency (one-time/monthly/yearly), totalCycles, infiniteCycles, startDate, nextGenerationDate. POST /api/expense-recurring/generate auto-generates due recurring entries. POST /api/expense-recurring/stop halts a recurring series. Frontend ExpensesView has full UI for all features."
+
+  - task: "Phase 9E: P&L Waterfall Deep Breakdown"
+    implemented: true
+    working: true
+    file: "lib/profitCalculator.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "plBreakdown now includes: grossRevenue, discount, refunds, gstOnRevenue, netRevenue, totalCOGS, totalShipping, totalTxnFees, razorpayFee, razorpayTax, shopifyTxnFee, shopifyTxnGST, totalShopifyFee, adSpend, overhead, overheadCategoryBreakdown, netProfit. DashboardView renders the full waterfall with collapsible overhead categories."
+
