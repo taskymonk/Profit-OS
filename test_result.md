@@ -2362,11 +2362,14 @@ Test these endpoints:
     file: "lib/profitCalculator.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "plBreakdown now includes: grossRevenue, discount, refunds, gstOnRevenue, netRevenue, totalCOGS, totalShipping, totalTxnFees, razorpayFee, razorpayTax, shopifyTxnFee, shopifyTxnGST, totalShopifyFee, adSpend, overhead, overheadCategoryBreakdown, netProfit. DashboardView renders the full waterfall with collapsible overhead categories."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - P&L Waterfall Deep Breakdown fully functional with ALL 17 required keys verified: grossRevenue, discount, refunds, gstOnRevenue, netRevenue, totalCOGS, totalShipping, totalTxnFees, razorpayFee, razorpayTax, shopifyTxnFee, shopifyTxnGST, totalShopifyFee, adSpend, overhead, overheadCategoryBreakdown, netProfit. overheadCategoryBreakdown properly structured as array with 4 categories (Rent, Platform Fees, Operations, Utilities), each containing {category, total, items} fields. Waterfall consistency verified: filtered.netProfit (₹7,603.14) exactly matches plBreakdown.netProfit (₹7,603.14) with 0% difference."
 
     - agent: "main"
       message: "PHASE 9C/9D/9E TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data (2049+ orders) and Meta Ads data exist. Test these 7 areas:
