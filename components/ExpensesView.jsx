@@ -45,14 +45,17 @@ export default function ExpensesView() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [expRes, catRes] = await Promise.all([
+      const [expRes, catRes, invRes] = await Promise.all([
         fetch('/api/overhead-expenses'),
         fetch('/api/expense-categories'),
+        fetch('/api/inventory-items'),
       ]);
       const expData = await expRes.json();
       const catData = await catRes.json();
+      const invData = await invRes.json();
       setExpenses(Array.isArray(expData) ? expData : []);
       setCategories(Array.isArray(catData) ? catData : []);
+      setInventoryItems(Array.isArray(invData) ? invData : []);
     } catch (err) { console.error(err); }
     setLoading(false);
   }, []);
