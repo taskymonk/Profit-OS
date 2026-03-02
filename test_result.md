@@ -2317,11 +2317,14 @@ Test these endpoints:
     file: "app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "shopifyTxnFeeRate field added to tenant config. PUT /api/tenant-config saves it. profitCalculator uses it to compute per-order Shopify txn fee (salePrice * rate%) + 18% GST. Settings UI has input with helper text. Verified via API: setting rate=2 produces correct fee amounts in plBreakdown."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Shopify Txn Fee Rate fully functional. Successfully verified: (1) tenant-config stores shopifyTxnFeeRate field (default: 2%), (2) PUT /api/tenant-config updates rate to 3%, (3) dashboard P&L breakdown calculates correct Shopify fees: ₹529.2 (3% of ₹17,640 revenue), (4) GST calculation correct: ₹95.26 (18% of fee), (5) restored original rate after test. Fee calculation formula verified: shopifyTxnFee = revenue × rate%, shopifyTxnGST = fee × 18%."
 
   - task: "Phase 9C: Shopify Bills CSV Import Removed"
     implemented: true
