@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit, Package, Boxes, Info, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import { Plus, Trash2, Edit, Package, AlertTriangle, TrendingDown, TrendingUp, ChevronDown, ChevronRight, History, Boxes, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 
-const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const DEFAULT_CATEGORIES = ['Raw Material', 'Packaging', 'Consumables', 'Labels & Stickers'];
 
 export default function InventoryView() {
@@ -20,28 +22,58 @@ export default function InventoryView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [filterCategory, setFilterCategory] = useState('all');
-  const [customCategory, setCustomCategory] = useState('');
-  const [showGuide, setShowGuide] = useState(true);
+  const [preparable, setPreparable] = useState([]);
+  const [expandedItem, setExpandedItem] = useState(null);
+  const [movements, setMovements] = useState([]);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [batchItemId, setBatchItemId] = useState(null);
 
   const [form, setForm] = useState({
     name: '', category: 'Raw Material', purchasePrice: '',
-    purchaseQuantity: '1', unit: 'meters',
+    purchaseQuantity: '1', unit: 'units', lowStockThreshold: '0',
   });
 
-  const fetchItems = async () => {
+  const [batchForm, setBatchForm] = useState({
+    date: new Date().toISOString().split('T')[0],
+    quantity: '', costPerUnit: '',
+  });
+
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/inventory-items');
-      const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
+      const [itemsRes, summaryRes] = await Promise.all([
+        fetch('/api/inventory-items'),
+        fetch('/api/stock/summary'),
+      ]);
+      const itemsData = await itemsRes.json();
+      const summaryData = await summaryRes.json();
+      setItems(Array.isArray(itemsData) ? itemsData : (summaryData.items || []));
+      setPreparable(summaryData.preparable || []);
     } catch (err) { toast.error('Failed to load inventory'); }
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { fetchItems(); }, []);
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const fetchMovements = async (itemId) => {
+    if (expandedItem === itemId) {
+      setExpandedItem(null);
+      return;
+    }
+    setMovementsLoading(true);
+    setExpandedItem(itemId);
+    try {
+      const res = await fetch(`/api/stock/movements/${itemId}`);
+      const data = await res.json();
+      setMovements(Array.isArray(data) ? data : []);
+    } catch (err) { toast.error('Failed to load movements'); }
+    setMovementsLoading(false);
+  };
 
   const allCategories = [...new Set([...DEFAULT_CATEGORIES, ...items.map(i => i.category).filter(Boolean)])];
   const filteredItems = filterCategory === 'all' ? items : items.filter(i => i.category === filterCategory);
+
   const grouped = {};
   filteredItems.forEach(item => {
     const cat = item.category || 'Uncategorized';
@@ -49,218 +81,383 @@ export default function InventoryView() {
     grouped[cat].push(item);
   });
 
-  const getBaseCost = (item) => {
-    const price = item.purchasePrice ?? item.costPerUnit ?? 0;
-    const qty = item.purchaseQuantity || 1;
-    return price / Math.max(1, qty);
+  const totalStock = items.reduce((s, i) => s + (i.currentStock || 0), 0);
+  const lowStockCount = items.filter(i => i.isLowStock).length;
+  const totalValue = items.reduce((s, i) => s + ((i.currentStock || 0) * (i.avgCostPerUnit || i.baseCostPerUnit || 0)), 0);
+
+  const resetForm = () => {
+    setForm({ name: '', category: 'Raw Material', purchasePrice: '', purchaseQuantity: '1', unit: 'units', lowStockThreshold: '0' });
+    setEditingItem(null);
   };
 
-  const handleSubmit = async () => {
-    const finalCategory = form.category === '__custom__' ? customCategory : form.category;
-    const data = {
-      name: form.name,
-      category: finalCategory,
-      purchasePrice: Number(form.purchasePrice) || 0,
-      purchaseQuantity: Math.max(1, Number(form.purchaseQuantity) || 1),
-      unit: form.unit,
+  const handleSave = async () => {
+    if (!form.name.trim()) return toast.error('Name is required');
+    const payload = {
+      name: form.name, category: form.category, unit: form.unit,
+      purchasePrice: parseFloat(form.purchasePrice) || 0,
+      purchaseQuantity: parseInt(form.purchaseQuantity) || 1,
+      lowStockThreshold: parseInt(form.lowStockThreshold) || 0,
     };
+
     try {
       if (editingItem) {
-        await fetch(`/api/inventory-items/${editingItem._id}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
-        });
+        const res = await fetch(`/api/inventory-items/${editingItem._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error('Failed to update');
         toast.success('Item updated');
       } else {
-        await fetch('/api/inventory-items', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
-        });
-        toast.success('Item added');
+        const res = await fetch('/api/inventory-items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (!res.ok) throw new Error('Failed to create');
+        toast.success('Item created with initial stock batch');
       }
-      setDialogOpen(false); setEditingItem(null); setCustomCategory(''); fetchItems();
-    } catch (err) { toast.error('Failed to save'); }
+      setDialogOpen(false);
+      resetForm();
+      fetchItems();
+    } catch (err) { toast.error(err.message); }
   };
 
-  const deleteItem = async (id) => {
-    if (!confirm('Delete this inventory item?')) return;
-    await fetch(`/api/inventory-items/${id}`, { method: 'DELETE' });
-    toast.success('Deleted'); fetchItems();
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this item and all its stock batches?')) return;
+    try {
+      await fetch(`/api/inventory-items/${id}`, { method: 'DELETE' });
+      toast.success('Item deleted');
+      fetchItems();
+    } catch (err) { toast.error('Failed to delete'); }
   };
 
-  const openEdit = (item) => {
-    setEditingItem(item);
-    const isCustom = !DEFAULT_CATEGORIES.includes(item.category);
-    setForm({
-      name: item.name, category: isCustom ? '__custom__' : item.category,
-      purchasePrice: String(item.purchasePrice ?? item.costPerUnit ?? ''),
-      purchaseQuantity: String(item.purchaseQuantity || 1),
-      unit: item.unit || item.unitMeasurement || 'units',
-    });
-    if (isCustom) setCustomCategory(item.category);
-    setDialogOpen(true);
-  };
-
-  const openNew = () => {
-    setEditingItem(null); setCustomCategory('');
-    setForm({ name: '', category: 'Raw Material', purchasePrice: '', purchaseQuantity: '1', unit: 'meters' });
-    setDialogOpen(true);
+  const handleAddBatch = async () => {
+    if (!batchForm.quantity || !batchForm.costPerUnit) return toast.error('Quantity and cost required');
+    const item = items.find(i => i._id === batchItemId);
+    try {
+      const res = await fetch('/api/stock-batches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inventoryItemId: batchItemId,
+          inventoryItemName: item?.name || '',
+          date: batchForm.date,
+          quantity: parseFloat(batchForm.quantity),
+          costPerUnit: parseFloat(batchForm.costPerUnit),
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      toast.success('Stock batch added');
+      setBatchDialogOpen(false);
+      setBatchForm({ date: new Date().toISOString().split('T')[0], quantity: '', costPerUnit: '' });
+      fetchItems();
+      if (expandedItem === batchItemId) fetchMovements(batchItemId);
+    } catch (err) { toast.error(err.message); }
   };
 
   return (
-    <div className="space-y-4 max-w-[1400px] mx-auto">
-      {/* Inline UX Guide */}
-      {showGuide && (
-        <div className="relative rounded-xl border border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 p-5">
-          <button onClick={() => setShowGuide(false)} className="absolute top-3 right-3 text-blue-400 hover:text-blue-600 transition">
-            <X className="w-4 h-4" />
-          </button>
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/50">
-              <Info className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-blue-900 dark:text-blue-100">How Inventory Works</h3>
-              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                Enter your bulk purchases here. <strong>Example:</strong> If you buy a <strong>50-meter roll of bubble wrap for {"\u20B9"}500</strong>, enter Price: 500, Qty: 50, Unit: meters.
-                The True Profit Engine will automatically calculate the <strong>per-meter cost ({"\u20B9"}10.00/meter)</strong> for your recipes.
-              </p>
-              <p className="text-xs text-blue-500 dark:text-blue-400 mt-2">Base Cost Per Unit = Purchase Price / Purchase Quantity</p>
-            </div>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Inventory & Stock</h2>
+          <p className="text-sm text-muted-foreground">FIFO-based stock tracking with purchase batches</p>
         </div>
-      )}
-
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-        <p className="text-sm text-muted-foreground">
-          Unified inventory with automatic cost-per-unit calculation.
-        </p>
-        <div className="flex gap-2 items-center">
-          <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-44 h-9 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditingItem(null); }}>
-            <DialogTrigger asChild>
-              <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Add Item</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>{editingItem ? 'Edit' : 'Add'} Inventory Item</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div><Label>Item Name</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Bubble Wrap Roll, Belgian Chocolate Slab" /></div>
-
-                <div>
-                  <Label>Category</Label>
-                  <Select value={form.category} onValueChange={v => setForm({...form, category: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      <SelectItem value="__custom__">+ Custom Category</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {form.category === '__custom__' && (
-                    <Input className="mt-2" placeholder="Enter new category name" value={customCategory} onChange={e => setCustomCategory(e.target.value)} />
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div><Label>Total Price Paid ({"\u20B9"})</Label><Input type="number" value={form.purchasePrice} onChange={e => setForm({...form, purchasePrice: e.target.value})} placeholder="500" /></div>
-                  <div><Label>Total Quantity Received</Label><Input type="number" min="1" value={form.purchaseQuantity} onChange={e => setForm({...form, purchaseQuantity: e.target.value})} placeholder="50" /></div>
-                </div>
-
-                <div>
-                  <Label>Unit of Measurement</Label>
-                  <Select value={form.unit} onValueChange={v => setForm({...form, unit: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="grams">grams</SelectItem>
-                      <SelectItem value="kg">kg</SelectItem>
-                      <SelectItem value="ml">ml</SelectItem>
-                      <SelectItem value="liters">liters</SelectItem>
-                      <SelectItem value="meters">meters</SelectItem>
-                      <SelectItem value="units">units</SelectItem>
-                      <SelectItem value="pieces">pieces</SelectItem>
-                      <SelectItem value="rolls">rolls</SelectItem>
-                      <SelectItem value="boxes">boxes</SelectItem>
-                      <SelectItem value="sheets">sheets</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {Number(form.purchasePrice) > 0 && Number(form.purchaseQuantity) > 0 && (
-                  <div className="p-3 rounded-md bg-primary/5 border border-primary/20 text-center">
-                    <p className="text-xs text-muted-foreground">Calculated Base Cost Per Unit</p>
-                    <p className="text-2xl font-bold text-primary">{fmt(Number(form.purchasePrice) / Number(form.purchaseQuantity))}<span className="text-sm font-normal text-muted-foreground"> / {form.unit}</span></p>
-                  </div>
-                )}
-              </div>
-              <Button onClick={handleSubmit} className="w-full mt-2">{editingItem ? 'Update' : 'Add'} Item</Button>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
+          <Plus className="h-4 w-4 mr-2" /> Add Item
+        </Button>
       </div>
 
-      {Object.entries(grouped).map(([category, categoryItems]) => (
-        <div key={category} className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Boxes className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-sm">{category}</h3>
-            <Badge variant="outline" className="text-xs">{categoryItems.length}</Badge>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {categoryItems.map(item => {
-              const baseCost = getBaseCost(item);
-              const price = item.purchasePrice ?? item.costPerUnit ?? 0;
-              const qty = item.purchaseQuantity || 1;
-              const unit = item.unit || item.unitMeasurement || 'units';
-              return (
-                <Card key={item._id} className="group hover:shadow-sm transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1 flex-1 min-w-0">
-                        <h4 className="font-medium text-sm truncate">{item.name}</h4>
-                        <div className="flex gap-2 flex-wrap">
-                          <Badge variant="outline" className="text-[10px]">{unit}</Badge>
-                          <Badge variant="secondary" className="text-[10px]">{qty} {unit} purchased</Badge>
-                        </div>
-                      </div>
-                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(item)}>
-                          <Edit className="w-3 h-3" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteItem(item._id)}>
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex justify-between items-end">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Total Price Paid</p>
-                        <p className="text-sm font-bold">{fmt(price)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Base Cost / {unit}</p>
-                        <p className="text-lg font-bold text-primary">{fmt(baseCost)}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {items.length === 0 && !loading && (
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <Package className="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
-            <p className="font-medium">Inventory is empty</p>
-            <p className="text-sm mt-1">Add raw materials, packaging, and consumables. These will appear as selectable options in your SKU Recipes.</p>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-500/10"><Package className="h-5 w-5 text-blue-500" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Items</p>
+                <p className="text-xl font-bold">{items.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-500/10"><Boxes className="h-5 w-5 text-green-500" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Stock Units</p>
+                <p className="text-xl font-bold">{totalStock.toLocaleString('en-IN')}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-purple-500/10"><TrendingUp className="h-5 w-5 text-purple-500" /></div>
+              <div>
+                <p className="text-sm text-muted-foreground">Stock Value</p>
+                <p className="text-xl font-bold">{fmt(totalValue)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-lg ${lowStockCount > 0 ? 'bg-red-500/10' : 'bg-muted'}`}>
+                <AlertTriangle className={`h-5 w-5 ${lowStockCount > 0 ? 'text-red-500' : 'text-muted-foreground'}`} />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Low Stock Alerts</p>
+                <p className={`text-xl font-bold ${lowStockCount > 0 ? 'text-red-500' : ''}`}>{lowStockCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Orders We Can Prepare */}
+      {preparable.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShoppingCart className="h-4 w-4" /> Orders We Can Prepare
+            </CardTitle>
+            <CardDescription>Based on current stock levels and SKU recipes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {preparable.map(p => (
+                <div key={p.sku} className="border rounded-lg p-3">
+                  <p className="text-sm font-medium truncate">{p.name}</p>
+                  <p className={`text-lg font-bold ${p.canPrepare === 0 ? 'text-red-500' : p.canPrepare !== null && p.canPrepare < 10 ? 'text-amber-500' : 'text-green-600'}`}>
+                    {p.canPrepare === null ? 'N/A' : p.canPrepare}
+                  </p>
+                  {p.missingItems.length > 0 && (
+                    <p className="text-xs text-red-500 mt-1">Missing: {p.missingItems.join(', ')}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Filter */}
+      <div className="flex items-center gap-4">
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="w-48"><SelectValue placeholder="Filter by category" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Inventory Items grouped by category */}
+      {loading ? (
+        <div className="text-center py-12 text-muted-foreground">Loading inventory...</div>
+      ) : Object.keys(grouped).length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p className="text-lg font-medium">No inventory items yet</p>
+            <p className="text-sm mt-1">Add your first item to start tracking stock with FIFO costing</p>
+          </CardContent>
+        </Card>
+      ) : (
+        Object.entries(grouped).map(([cat, catItems]) => (
+          <Card key={cat}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{cat} <Badge variant="secondary" className="ml-2">{catItems.length}</Badge></CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {catItems.map(item => (
+                <div key={item._id}>
+                  <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{item.name}</p>
+                          {item.isLowStock && (
+                            <Badge variant="destructive" className="text-xs">
+                              <AlertTriangle className="h-3 w-3 mr-1" /> Low Stock
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Unit: {item.unit || 'units'} | Avg Cost: {fmt(item.avgCostPerUnit || item.baseCostPerUnit || 0)}/{item.unit || 'unit'}
+                          {(item.lowStockThreshold || 0) > 0 && ` | Alert below: ${item.lowStockThreshold}`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-lg font-bold ${item.isLowStock ? 'text-red-500' : item.currentStock > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                          {(item.currentStock || 0).toLocaleString('en-IN')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{item.batchCount || 0} active batches</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 ml-4">
+                      <Button variant="ghost" size="sm" onClick={() => fetchMovements(item._id)} title="Stock history">
+                        {expandedItem === item._id ? <ChevronDown className="h-4 w-4" /> : <History className="h-4 w-4" />}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        setBatchItemId(item._id);
+                        setBatchForm({ date: new Date().toISOString().split('T')[0], quantity: '', costPerUnit: '' });
+                        setBatchDialogOpen(true);
+                      }} title="Add stock batch">
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        setEditingItem(item);
+                        setForm({
+                          name: item.name, category: item.category || 'Raw Material',
+                          purchasePrice: String(item.purchasePrice || ''),
+                          purchaseQuantity: String(item.purchaseQuantity || '1'),
+                          unit: item.unit || 'units',
+                          lowStockThreshold: String(item.lowStockThreshold || '0'),
+                        });
+                        setDialogOpen(true);
+                      }} title="Edit">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(item._id)} title="Delete">
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                  {/* Stock Movement History */}
+                  {expandedItem === item._id && (
+                    <div className="ml-6 mt-2 mb-2 border-l-2 border-muted pl-4">
+                      {movementsLoading ? (
+                        <p className="text-sm text-muted-foreground py-2">Loading...</p>
+                      ) : movements.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">No stock movements yet</p>
+                      ) : (
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-muted-foreground mb-2">Stock Movement History (FIFO)</p>
+                          {movements.map((m, idx) => (
+                            <div key={idx} className="flex items-center gap-3 text-sm py-1">
+                              <span className="text-xs text-muted-foreground w-20">{m.date?.substring(0, 10)}</span>
+                              {m.type === 'purchase' ? (
+                                <TrendingUp className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                              ) : (
+                                <TrendingDown className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                              )}
+                              <span className={m.type === 'purchase' ? 'text-green-600' : 'text-red-500'}>
+                                {m.type === 'purchase' ? '+' : ''}{m.quantity}
+                              </span>
+                              <span className="text-muted-foreground">@ {fmt(m.costPerUnit)}</span>
+                              <span className="text-muted-foreground">= {fmt(Math.abs(m.totalCost))}</span>
+                              {m.type === 'purchase' && m.remainingQty !== undefined && (
+                                <Badge variant="outline" className="text-xs">{m.remainingQty} left</Badge>
+                              )}
+                              {m.insufficientStock && (
+                                <Badge variant="destructive" className="text-xs">Insufficient</Badge>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))
+      )}
+
+      {/* Add/Edit Item Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? 'Edit' : 'Add'} Inventory Item</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div>
+              <Label>Item Name *</Label>
+              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Red Roses" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Category</Label>
+                <Select value={form.category} onValueChange={v => setForm(p => ({ ...p, category: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Unit</Label>
+                <Select value={form.unit} onValueChange={v => setForm(p => ({ ...p, unit: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['units', 'stems', 'kg', 'grams', 'liters', 'ml', 'meters', 'pieces', 'sheets', 'rolls'].map(u => (
+                      <SelectItem key={u} value={u}>{u}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {!editingItem && (
+              <>
+                <Separator />
+                <p className="text-sm font-medium text-muted-foreground">Initial Stock (creates first FIFO batch)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Total Purchase Price ({'\u20B9'})</Label>
+                    <Input type="number" value={form.purchasePrice} onChange={e => setForm(p => ({ ...p, purchasePrice: e.target.value }))} placeholder="0" />
+                  </div>
+                  <div>
+                    <Label>Quantity</Label>
+                    <Input type="number" value={form.purchaseQuantity} onChange={e => setForm(p => ({ ...p, purchaseQuantity: e.target.value }))} placeholder="1" />
+                  </div>
+                </div>
+                {form.purchasePrice && form.purchaseQuantity && parseInt(form.purchaseQuantity) > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Cost per unit: {fmt(parseFloat(form.purchasePrice) / parseInt(form.purchaseQuantity))}
+                  </p>
+                )}
+              </>
+            )}
+            <div>
+              <Label>Low Stock Alert Threshold</Label>
+              <Input type="number" value={form.lowStockThreshold} onChange={e => setForm(p => ({ ...p, lowStockThreshold: e.target.value }))} placeholder="0 (disabled)" />
+              <p className="text-xs text-muted-foreground mt-1">Shows alert when stock falls below this. Set 0 to disable.</p>
+            </div>
+            <Button onClick={handleSave} className="w-full">{editingItem ? 'Update Item' : 'Create Item'}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Stock Batch Dialog */}
+      <Dialog open={batchDialogOpen} onOpenChange={setBatchDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Stock Batch</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-muted-foreground">Add a new purchase batch for <strong>{items.find(i => i._id === batchItemId)?.name}</strong></p>
+            <div>
+              <Label>Purchase Date</Label>
+              <Input type="date" value={batchForm.date} onChange={e => setBatchForm(p => ({ ...p, date: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Quantity</Label>
+                <Input type="number" value={batchForm.quantity} onChange={e => setBatchForm(p => ({ ...p, quantity: e.target.value }))} placeholder="0" />
+              </div>
+              <div>
+                <Label>Cost per Unit ({'\u20B9'})</Label>
+                <Input type="number" step="0.01" value={batchForm.costPerUnit} onChange={e => setBatchForm(p => ({ ...p, costPerUnit: e.target.value }))} placeholder="0.00" />
+              </div>
+            </div>
+            {batchForm.quantity && batchForm.costPerUnit && (
+              <p className="text-sm text-muted-foreground">
+                Total: {fmt(parseFloat(batchForm.quantity) * parseFloat(batchForm.costPerUnit))}
+              </p>
+            )}
+            <Button onClick={handleAddBatch} className="w-full">Add Batch</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
