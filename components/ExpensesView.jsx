@@ -130,6 +130,7 @@ export default function ExpensesView() {
       expenseName: '', category: '', subCategory: '', amount: '',
       gstInclusive: false, frequency: 'monthly', totalCycles: '12',
       infiniteCycles: false, date: new Date().toISOString().split('T')[0],
+      inventoryItemId: '', inventoryItemName: '', purchaseQty: '',
     });
   };
 
