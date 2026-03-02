@@ -16,7 +16,7 @@ export default function SettingsView() {
   const [config, setConfig] = useState({
     tenantName: '', logo: '', primaryColor: '#059669', themePreference: 'system',
     baseCurrency: 'INR', supportedCurrencies: ['INR', 'USD'], timezone: 'Asia/Kolkata',
-    gstRate: 18, maxOrdersPerMonth: 5000, allowEmployeeTracking: true,
+    gstRate: 18, shopifyTxnFeeRate: 2, maxOrdersPerMonth: 5000, allowEmployeeTracking: true,
     integrations: { shopifyActive: false, indiaPostActive: false, metaAdsActive: false },
   });
   const [saving, setSaving] = useState(false);
