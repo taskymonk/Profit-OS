@@ -547,7 +547,7 @@ async function getDashboardData(params = {}) {
 
     let dayProfit = 0, dayRevenue = 0, dayCOGS = 0, dayShipping = 0;
     dayOrders.forEach(order => {
-      const profit = calculateOrderProfit(order, skuMap[order.sku], dayAdSpend, dayOrders.length, 1, adSpendTaxMultiplier);
+      const profit = calculateOrderProfit(order, skuMap[order.sku], dayAdSpend, dayOrders.length, 1, adSpendTaxMultiplier, calcOptions);
       dayProfit += profit.netProfit;
       dayRevenue += profit.netRevenue;
       dayCOGS += profit.totalCOGS;
