@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from 'sonner';
 import {
   Plus, Trash2, Edit2, FolderTree, Save, Loader2, RefreshCw,
-  Calendar, Repeat, Infinity as InfinityIcon, StopCircle, ChevronDown, ChevronRight, Banknote, ReceiptText, Settings2
+  Calendar, Repeat, Infinity as InfinityIcon, StopCircle, ChevronDown, ChevronRight, Banknote, ReceiptText, Settings2, Package
 } from 'lucide-react';
 
 const fmt = (val) => `₹${Math.abs(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
