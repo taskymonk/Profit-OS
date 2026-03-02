@@ -255,9 +255,10 @@ export default function DashboardView() {
   const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown, dateRange: activeDateRange, revenueSplit } = data;
 
   // Trend calc
-  const mid = Math.floor(dailyData.length / 2);
-  const firstHalf = dailyData.slice(0, mid).reduce((s, d) => s + d.netProfit, 0);
-  const secondHalf = dailyData.slice(mid).reduce((s, d) => s + d.netProfit, 0);
+  const dd = dailyData || [];
+  const mid = Math.floor(dd.length / 2);
+  const firstHalf = dd.slice(0, mid).reduce((s, d) => s + d.netProfit, 0);
+  const secondHalf = dd.slice(mid).reduce((s, d) => s + d.netProfit, 0);
   const profitTrend = firstHalf !== 0 ? ((secondHalf - firstHalf) / Math.abs(firstHalf)) * 100 : 0;
 
   return (
