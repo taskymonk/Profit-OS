@@ -113,6 +113,7 @@ export default function SettingsView() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div><Label>GST Rate (%)</Label><Input type="number" value={config.gstRate} onChange={e => setConfig({...config, gstRate: Number(e.target.value)})} /></div>
+            <div><Label>Shopify Txn Fee Rate (%)</Label><Input type="number" step="0.1" value={config.shopifyTxnFeeRate} onChange={e => setConfig({...config, shopifyTxnFeeRate: Number(e.target.value)})} /><p className="text-[11px] text-muted-foreground mt-1">Shopify charges this on each order when using third-party payment gateway (Basic=2%, Shopify=1%, Advanced=0.5%)</p></div>
             <div><Label>Max Orders/Month</Label><Input type="number" value={config.maxOrdersPerMonth} onChange={e => setConfig({...config, maxOrdersPerMonth: Number(e.target.value)})} /></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
