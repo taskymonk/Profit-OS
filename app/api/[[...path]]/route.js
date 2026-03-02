@@ -1194,29 +1194,7 @@ async function indiaPostSyncTracking() {
   }
 }
 
-// ==================== RAZORPAY INTEGRATION ====================
 // (Shopify Bills CSV import removed — automated fee calculation via shopifyTxnFeeRate in Settings)
-
-// ==================== RAZORPAY INTEGRATION ====================
-    const line = lines[r].trim();
-    if (!line) continue;
-    const values = [];
-    let val = '';
-    let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i];
-      if (c === '"') { inQ = !inQ; }
-      else if (c === ',' && !inQ) { values.push(val.trim()); val = ''; }
-      else { val += c; }
-    }
-    values.push(val.trim());
-    
-    const row = {};
-    headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
-    rows.push(row);
-  }
-  return rows;
-}
 
 async function importShopifyBills(csvText) {
   const db = await getDb();
