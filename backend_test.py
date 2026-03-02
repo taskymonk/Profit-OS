@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 PHASE 9B - SHOPIFY BILLS IMPORT AND EXPANDED P&L BACKEND TESTING
-Base URL: https://profit-os.preview.emergentagent.com/api
+Base URL: https://overhead-refactor.preview.emergentagent.com/api
 
 Tests the following NEW Shopify Bills Import endpoints and features:
 1. POST /api/shopify-bills/import - Test with sample CSV data
@@ -17,7 +17,7 @@ import requests
 import json
 import sys
 
-BASE_URL = "https://profit-os.preview.emergentagent.com/api"
+BASE_URL = "https://overhead-refactor.preview.emergentagent.com/api"
 
 def print_test_result(test_name, passed, details=""):
     status = "✅ PASS" if passed else "❌ FAIL"
