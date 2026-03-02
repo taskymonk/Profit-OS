@@ -1922,7 +1922,7 @@ export async function GET(request) {
         const allOrders = await db.collection('orders').find({}).toArray();
         const dayOrders = allOrders.filter(o => getISTDateKey(o.orderDate) === dateKey);
 
-        const profit = calculateOrderProfit(order, recipe, dayAdSpend, dayOrders.length || 1, 1, taxMul);
+        const profit = calculateOrderProfit(order, recipe, dayAdSpend, dayOrders.length || 1, 1, taxMul, { shopifyTxnFeeRate: tc?.shopifyTxnFeeRate || 0 });
         return json(profit);
       }
 
