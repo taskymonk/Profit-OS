@@ -2489,3 +2489,51 @@ Test these endpoints:
 ✓ All Phase 9C/9D/9E UI requirements successfully implemented
 
 **PHASE 9C/9D/9E FRONTEND UI TESTING COMPLETE - ALL FLOWS FULLY FUNCTIONAL!** Application ready for production with complete P&L breakdown, configurable Shopify fees, and enhanced expense management system.""
+    - agent: "main"
+      message: "PHASE 9F: FIFO INVENTORY COSTING TESTING NEEDED. Base URL: http://localhost:3000/api. Test these 8 areas:
+
+1. **INVENTORY ITEMS WITH STOCK**:
+   - POST /api/inventory-items with body: {\"name\":\"Red Roses\",\"category\":\"Raw Material\",\"purchasePrice\":2500,\"purchaseQuantity\":500,\"unit\":\"stems\",\"lowStockThreshold\":50}
+   - Verify 201 response with baseCostPerUnit = 5.00, lowStockThreshold = 50
+   - GET /api/inventory-items -> verify Red Roses has currentStock = 500 (auto-created batch)
+   - GET /api/stock-batches?inventoryItemId=<id> -> verify 1 batch with qty=500, costPerUnit=5, remainingQty=500
+
+2. **MANUAL STOCK BATCH CREATION**:
+   - POST /api/stock-batches with body: {\"inventoryItemId\":\"<red_roses_id>\",\"inventoryItemName\":\"Red Roses\",\"date\":\"2026-03-15\",\"quantity\":300,\"costPerUnit\":6}
+   - Verify 201 with totalCost=1800
+   - GET /api/stock/summary -> Red Roses currentStock should be 800, avgCostPerUnit should be 5.38
+
+3. **FIFO CONSUMPTION**:
+   - POST /api/stock/consume with body: {\"orderId\":\"test-fifo-order\",\"orderDate\":\"2026-03-10\",\"items\":[{\"inventoryItemId\":\"<id>\",\"inventoryItemName\":\"Red Roses\",\"quantity\":600}]}
+   - Verify 201, totalCOGS should be 3100.00 (500*5 + 100*6 = 2500 + 600 = 3100)
+   - Verify consumptions array has 2 entries: first batch 500@5, second batch 100@6
+   - GET /api/stock/summary -> Red Roses currentStock should be 200
+
+4. **STOCK REVERSAL**:
+   - POST /api/stock/reverse with body: {\"orderId\":\"test-fifo-order\"}
+   - Verify reversed = 2
+   - GET /api/stock/summary -> Red Roses currentStock should be back to 800
+
+5. **STOCK MOVEMENTS**:
+   - GET /api/stock/movements/<red_roses_id>
+   - Verify returns array of movements with 'purchase' and possibly 'consumption' types
+   - Each movement has: type, date, quantity, costPerUnit, totalCost
+
+6. **EXPENSE → INVENTORY BRIDGE**:
+   - POST /api/overhead-expenses with body: {\"expenseName\":\"Rose Purchase March\",\"category\":\"Raw Material Purchases\",\"amount\":4000,\"frequency\":\"one-time\",\"date\":\"2026-03-20\",\"inventoryItemId\":\"<id>\",\"inventoryItemName\":\"Red Roses\",\"purchaseQty\":800,\"gstInclusive\":false}
+   - Verify 201, response should have _stockBatchCreated field (non-null)
+   - GET /api/stock-batches?inventoryItemId=<id> -> should now have 3 batches total
+   - New batch should have: qty=800, costPerUnit=5, expenseId=<expense_id>
+
+7. **LOW STOCK ALERT**:
+   - After consuming enough stock, verify inventory item isLowStock flag
+   - POST /api/stock/consume with body: {\"orderId\":\"test-low-stock\",\"items\":[{\"inventoryItemId\":\"<id>\",\"quantity\":1550}]}
+   - GET /api/stock/summary -> Red Roses currentStock should be 50, isLowStock=true (threshold=50)
+   - Reverse and clean up after
+
+8. **DASHBOARD STILL WORKS**:
+   - GET /api/dashboard?range=7days -> verify still returns 200 with plBreakdown
+   - Verify plBreakdown has all 17+ keys including overheadCategoryBreakdown
+
+Clean up ALL test data (inventory items, batches, consumptions, expenses) after each test.
+DO NOT test Shopify sync by calling the actual Shopify API."
