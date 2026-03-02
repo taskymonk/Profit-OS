@@ -1,272 +1,472 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit, Megaphone, Home, Laptop, Zap, Tag, Settings2, Pencil } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import {
+  Plus, Trash2, Edit2, FolderTree, Save, Loader2, RefreshCw,
+  Calendar, Repeat, Infinity as InfinityIcon, StopCircle, ChevronDown, ChevronRight, Banknote, ReceiptText, Settings2
+} from 'lucide-react';
 
-const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN')}`;
-
-const catIcons = { MetaAds: Megaphone, Rent: Home, Software: Laptop, Utilities: Zap };
-const catColors = {
-  MetaAds: 'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
-  Rent: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  Software: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  Utilities: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-};
-const PRESET_CATEGORIES = ['MetaAds', 'Rent', 'Software', 'Utilities'];
+const fmt = (val) => `₹${Math.abs(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function ExpensesView() {
   const [expenses, setExpenses] = useState([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [customCategory, setCustomCategory] = useState('');
-  const [form, setForm] = useState({ expenseName: '', category: 'Rent', amount: '', currency: 'INR', frequency: 'recurring', date: new Date().toISOString().split('T')[0] });
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [showCatManager, setShowCatManager] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [expandedCats, setExpandedCats] = useState({});
 
-  // Category Management Modal
-  const [catModalOpen, setCatModalOpen] = useState(false);
-  const [renamingCat, setRenamingCat] = useState(null);
-  const [renameValue, setRenameValue] = useState('');
+  // Form state
+  const [form, setForm] = useState({
+    expenseName: '', category: '', subCategory: '', amount: '',
+    gstInclusive: false, frequency: 'monthly', totalCycles: '12',
+    infiniteCycles: false, date: new Date().toISOString().split('T')[0],
+  });
 
-  const fetchData = async () => {
-    const res = await fetch('/api/overhead-expenses');
-    setExpenses(await res.json());
-  };
-  useEffect(() => { fetchData(); }, []);
+  // Category manager state
+  const [catEditing, setCatEditing] = useState([]);
+  const [newCatName, setNewCatName] = useState('');
+  const [newSubCat, setNewSubCat] = useState({});
 
-  const allCategories = [...new Set([
-    ...PRESET_CATEGORIES,
-    ...expenses.map(e => e.category).filter(Boolean)
-  ])];
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [expRes, catRes] = await Promise.all([
+        fetch('/api/overhead-expenses'),
+        fetch('/api/expense-categories'),
+      ]);
+      const expData = await expRes.json();
+      const catData = await catRes.json();
+      setExpenses(Array.isArray(expData) ? expData : []);
+      setCategories(Array.isArray(catData) ? catData : []);
+    } catch (err) { console.error(err); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Auto-generate recurring expenses on load
+  useEffect(() => {
+    async function generateRecurring() {
+      try {
+        const res = await fetch('/api/expense-recurring/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json();
+        if (data.generated > 0) {
+          toast.info(`Auto-generated ${data.generated} recurring expense(s)`);
+          loadData();
+        }
+      } catch (err) { /* ignore */ }
+    }
+    if (!loading && expenses.length > 0) generateRecurring();
+  }, [loading]);
 
   const handleSubmit = async () => {
-    const finalCategory = form.category === '__custom__' ? customCategory.trim() : form.category;
-    if (!finalCategory) { toast.error('Category is required'); return; }
-    const data = { ...form, category: finalCategory, amount: Number(form.amount) };
+    if (!form.expenseName || !form.amount || !form.category) {
+      toast.error('Name, Category, and Amount are required');
+      return;
+    }
     try {
-      if (editing) {
-        await fetch(`/api/overhead-expenses/${editing._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      if (editingExpense) {
+        await fetch(`/api/overhead-expenses/${editingExpense._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
+        });
         toast.success('Expense updated');
       } else {
-        await fetch('/api/overhead-expenses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        await fetch('/api/overhead-expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...form, amount: parseFloat(form.amount) }),
+        });
         toast.success('Expense added');
       }
-      setDialogOpen(false); setEditing(null); setCustomCategory(''); fetchData();
-    } catch (err) { toast.error('Failed to save'); }
+      setShowForm(false);
+      setEditingExpense(null);
+      resetForm();
+      loadData();
+    } catch (err) { toast.error('Failed: ' + err.message); }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this expense?')) return;
-    await fetch(`/api/overhead-expenses/${id}`, { method: 'DELETE' });
-    toast.success('Deleted'); fetchData();
+    try {
+      await fetch(`/api/overhead-expenses/${id}`, { method: 'DELETE' });
+      toast.success('Expense deleted');
+      loadData();
+    } catch (err) { toast.error('Failed to delete'); }
   };
 
-  const openEdit = (exp) => {
-    setEditing(exp);
-    const isPreset = PRESET_CATEGORIES.includes(exp.category);
+  const handleStop = async (id) => {
+    try {
+      await fetch('/api/expense-recurring/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expenseId: id }),
+      });
+      toast.success('Recurring stopped');
+      loadData();
+    } catch (err) { toast.error('Failed to stop'); }
+  };
+
+  const resetForm = () => {
     setForm({
-      expenseName: exp.expenseName,
-      category: isPreset ? exp.category : '__custom__',
-      amount: String(exp.amount),
-      currency: exp.currency || 'INR',
-      frequency: exp.frequency || 'recurring',
-      date: exp.date?.split('T')[0] || '',
+      expenseName: '', category: '', subCategory: '', amount: '',
+      gstInclusive: false, frequency: 'monthly', totalCycles: '12',
+      infiniteCycles: false, date: new Date().toISOString().split('T')[0],
     });
-    if (!isPreset) setCustomCategory(exp.category);
-    setDialogOpen(true);
   };
 
-  const openNew = () => {
-    setEditing(null); setCustomCategory('');
-    setForm({ expenseName: '', category: 'Rent', amount: '', currency: 'INR', frequency: 'recurring', date: new Date().toISOString().split('T')[0] });
-    setDialogOpen(true);
+  const startEdit = (exp) => {
+    setEditingExpense(exp);
+    setForm({
+      expenseName: exp.expenseName || '',
+      category: exp.category || '',
+      subCategory: exp.subCategory || '',
+      amount: String(exp.amount || ''),
+      gstInclusive: exp.gstInclusive || false,
+      frequency: exp.frequency || 'monthly',
+      totalCycles: String(exp.totalCycles || '1'),
+      infiniteCycles: exp.infiniteCycles || false,
+      date: exp.date ? exp.date.split('T')[0] : '',
+    });
+    setShowForm(true);
   };
 
-  // Category Management Actions
-  const handleRenameCategory = async () => {
-    if (!renamingCat || !renameValue.trim()) return;
+  // Save categories
+  const saveCategories = async () => {
     try {
-      const res = await fetch('/api/expense-categories/rename', {
+      await fetch('/api/expense-categories/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oldName: renamingCat, newName: renameValue.trim() }),
+        body: JSON.stringify({ categories: catEditing }),
       });
-      const data = await res.json();
-      toast.success(data.message || 'Category renamed');
-      setRenamingCat(null); setRenameValue(''); fetchData();
-    } catch { toast.error('Rename failed'); }
+      toast.success('Categories saved');
+      setShowCatManager(false);
+      loadData();
+    } catch (err) { toast.error('Failed to save categories'); }
   };
 
-  const handleDeleteCategory = async (category) => {
-    if (!confirm(`Delete category "${category}" and ALL its expenses?`)) return;
-    try {
-      const res = await fetch('/api/expense-categories/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category }),
-      });
-      const data = await res.json();
-      toast.success(data.message || 'Category deleted');
-      fetchData();
-    } catch { toast.error('Delete failed'); }
+  // Group expenses by category
+  const grouped = {};
+  expenses.filter(e => e.category !== 'MetaAds').forEach(e => {
+    const cat = e.category || 'Uncategorized';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(e);
+  });
+
+  // Get sub-categories for a given category
+  const getSubCategories = (catName) => {
+    const cat = categories.find(c => c.name === catName);
+    return cat?.subCategories || [];
   };
 
-  const grouped = expenses.reduce((acc, e) => { acc[e.category] = acc[e.category] || []; acc[e.category].push(e); return acc; }, {});
-  const totalByCategory = Object.entries(grouped).map(([cat, items]) => ({ category: cat, total: items.reduce((s, i) => s + (i.amount || 0), 0), count: items.length }));
+  const toggleCat = (cat) => setExpandedCats(prev => ({ ...prev, [cat]: !prev[cat] }));
+
+  // Calc total monthly
+  const totalMonthly = expenses.filter(e => e.category !== 'MetaAds' && (e.frequency === 'monthly' || e.frequency === 'recurring')).reduce((s, e) => s + (e.amount || 0), 0);
+  const totalYearly = expenses.filter(e => e.category !== 'MetaAds' && e.frequency === 'yearly').reduce((s, e) => s + (e.amount || 0), 0);
+
+  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
 
   return (
-    <div className="space-y-4 max-w-[1400px] mx-auto">
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
-        <p className="text-sm text-muted-foreground">Track overhead costs that impact your true profit. Create and manage your own expense categories.</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2"><Banknote className="w-5 h-5" /> Expenses & Overhead</h2>
+          <p className="text-sm text-muted-foreground">Manage recurring and one-time business expenses. These are pro-rated in your P&L.</p>
+        </div>
         <div className="flex gap-2">
-          {/* Manage Categories Button */}
-          <Dialog open={catModalOpen} onOpenChange={setCatModalOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Settings2 className="w-4 h-4" /> Manage Categories
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle>Manage Expense Categories</DialogTitle></DialogHeader>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                {allCategories.map(cat => {
-                  const Icon = catIcons[cat] || Tag;
-                  const count = (grouped[cat] || []).length;
-                  const isRenaming = renamingCat === cat;
-                  return (
-                    <div key={cat} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition">
-                      <div className={`p-1.5 rounded-md ${catColors[cat] || 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      {isRenaming ? (
-                        <div className="flex-1 flex gap-2">
-                          <Input value={renameValue} onChange={e => setRenameValue(e.target.value)} className="h-8 text-sm" placeholder="New name" autoFocus />
-                          <Button size="sm" className="h-8" onClick={handleRenameCategory}>Save</Button>
-                          <Button size="sm" variant="ghost" className="h-8" onClick={() => setRenamingCat(null)}>Cancel</Button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">{cat}</p>
-                            <p className="text-xs text-muted-foreground">{count} expense{count !== 1 ? 's' : ''}</p>
-                          </div>
-                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setRenamingCat(cat); setRenameValue(cat); }}>
-                            <Pencil className="w-3 h-3" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDeleteCategory(cat)}>
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-                {allCategories.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No categories yet.</p>}
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Add Expense Button */}
-          <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) { setEditing(null); setCustomCategory(''); } }}>
-            <DialogTrigger asChild>
-              <Button onClick={openNew}>
-                <Plus className="w-4 h-4 mr-2" /> Add Expense
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>{editing ? 'Edit' : 'Add'} Expense</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <div><Label>Name</Label><Input value={form.expenseName} onChange={e => setForm({...form, expenseName: e.target.value})} placeholder="e.g. Kitchen Rent, Shopify Subscription" /></div>
-                <div>
-                  <Label>Category</Label>
-                  <Select value={form.category} onValueChange={v => { setForm({...form, category: v}); if (v !== '__custom__') setCustomCategory(''); }}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {allCategories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                      <SelectItem value="__custom__">+ Create New Category</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {form.category === '__custom__' && (
-                    <Input className="mt-2" placeholder="Enter new category name" value={customCategory} onChange={e => setCustomCategory(e.target.value)} />
-                  )}
-                </div>
-                <div><Label>Amount (INR)</Label><Input type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value})} /></div>
-                <div>
-                  <Label>Frequency</Label>
-                  <Select value={form.frequency} onValueChange={v => setForm({...form, frequency: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="recurring">Recurring (Monthly)</SelectItem>
-                      <SelectItem value="one-time">One-time</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div><Label>Date</Label><Input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} /></div>
-              </div>
-              <Button onClick={handleSubmit} className="w-full mt-2">{editing ? 'Update' : 'Add'} Expense</Button>
-            </DialogContent>
-          </Dialog>
+          <Button variant="outline" size="sm" onClick={() => { setCatEditing(categories.map(c => ({ ...c }))); setShowCatManager(true); }}>
+            <Settings2 className="w-3.5 h-3.5 mr-1.5" /> Categories
+          </Button>
+          <Button size="sm" onClick={() => { resetForm(); setEditingExpense(null); setShowForm(true); }}>
+            <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Expense
+          </Button>
         </div>
       </div>
 
-      {/* Category Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {totalByCategory.map(({ category, total, count }) => {
-          const Icon = catIcons[category] || Tag;
-          return (
-            <Card key={category}>
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${catColors[category] || 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}><Icon className="w-5 h-5" /></div>
-                <div>
-                  <p className="text-xs text-muted-foreground">{category}</p>
-                  <p className="font-bold">{fmt(total)}</p>
-                  <p className="text-xs text-muted-foreground">{count} entries</p>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+      {/* Summary Cards */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card><CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">Monthly Expenses</p>
+          <p className="text-lg font-bold">{fmt(totalMonthly)}<span className="text-xs text-muted-foreground font-normal">/mo</span></p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">Yearly Expenses</p>
+          <p className="text-lg font-bold">{fmt(totalYearly)}<span className="text-xs text-muted-foreground font-normal">/yr</span></p>
+        </CardContent></Card>
+        <Card><CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">Total Categories</p>
+          <p className="text-lg font-bold">{Object.keys(grouped).length}</p>
+        </CardContent></Card>
       </div>
 
-      {/* Expenses Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead><tr className="border-b bg-muted/50">
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Name</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Category</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Amount</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Frequency</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Date</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground w-24">Actions</th>
-              </tr></thead>
-              <tbody>
-                {expenses.map(exp => (
-                  <tr key={exp._id} className="border-b hover:bg-muted/30">
-                    <td className="py-3 px-4 text-sm font-medium">{exp.expenseName}</td>
-                    <td className="py-3 px-4"><Badge className={`text-xs ${catColors[exp.category] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>{exp.category}</Badge></td>
-                    <td className="py-3 px-4 text-sm text-right font-mono">{fmt(exp.amount)}</td>
-                    <td className="py-3 px-4 text-sm text-muted-foreground">{exp.frequency}</td>
-                    <td className="py-3 px-4 text-xs text-muted-foreground">{exp.date?.split('T')[0]}</td>
-                    <td className="py-3 px-4"><div className="flex gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => openEdit(exp)}><Edit className="w-3.5 h-3.5" /></Button>
-                      <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(exp._id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                    </div></td>
-                  </tr>
+      {/* Expenses grouped by category */}
+      {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([cat, items]) => (
+        <Card key={cat}>
+          <CardHeader className="py-3 cursor-pointer" onClick={() => toggleCat(cat)}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {expandedCats[cat] ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <CardTitle className="text-sm">{cat}</CardTitle>
+                <Badge variant="secondary" className="text-[10px]">{items.length}</Badge>
+              </div>
+              <span className="text-sm font-semibold text-muted-foreground">
+                {fmt(items.filter(e => e.frequency === 'monthly' || e.frequency === 'recurring').reduce((s, e) => s + (e.amount || 0), 0))}/mo
+              </span>
+            </div>
+          </CardHeader>
+          {expandedCats[cat] && (
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {items.sort((a, b) => (a.subCategory || '').localeCompare(b.subCategory || '')).map(exp => (
+                  <div key={exp._id} className={`flex items-center justify-between py-2.5 px-3 rounded-lg border ${exp.autoGenerated ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200/50 dark:border-blue-900/30' : 'bg-muted/30 border-border/50'}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium truncate">{exp.expenseName}</span>
+                        {exp.subCategory && <Badge variant="outline" className="text-[10px] h-4">{exp.subCategory}</Badge>}
+                        {exp.gstInclusive && <Badge variant="outline" className="text-[10px] h-4 text-orange-600 border-orange-300">GST incl.</Badge>}
+                        {exp.autoGenerated && (
+                          <Badge variant="outline" className="text-[10px] h-4 text-blue-600 border-blue-300">
+                            Auto · Cycle {exp.currentCycle}/{exp.infiniteCycles ? '∞' : exp.totalCycles}
+                          </Badge>
+                        )}
+                        {!exp.autoGenerated && (exp.frequency === 'monthly' || exp.frequency === 'yearly') && !exp.stopped && (
+                          <Badge variant="default" className="text-[10px] h-4 gap-0.5">
+                            <Repeat className="w-2.5 h-2.5" />
+                            {exp.frequency === 'monthly' ? 'Monthly' : 'Yearly'}
+                            {exp.totalCycles > 0 && !exp.infiniteCycles ? ` · ${exp.currentCycle || 1}/${exp.totalCycles}` : ''}
+                            {exp.infiniteCycles && ' · ∞'}
+                          </Badge>
+                        )}
+                        {exp.stopped && <Badge variant="destructive" className="text-[10px] h-4">Stopped</Badge>}
+                        {exp.frequency === 'one-time' && <Badge variant="secondary" className="text-[10px] h-4">One-time</Badge>}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                        {exp.date && <span>{new Date(exp.date + (exp.date.includes('T') ? '' : 'T00:00:00')).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                        {exp.autoGenerated && exp.parentExpenseId && <span className="text-blue-500">Auto-generated from parent</span>}
+                        {!exp.autoGenerated && exp.nextGenerationDate && !exp.stopped && (
+                          <span className="text-emerald-600">Next: {new Date(exp.nextGenerationDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-3">
+                      <span className="text-sm font-bold whitespace-nowrap">{fmt(exp.amount)}</span>
+                      {!exp.autoGenerated && (exp.frequency === 'monthly' || exp.frequency === 'yearly') && !exp.stopped && (
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => handleStop(exp._id)} title="Stop recurring">
+                          <StopCircle className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => startEdit(exp)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => handleDelete(exp._id)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      ))}
+
+      {Object.keys(grouped).length === 0 && (
+        <Card><CardContent className="py-12 text-center text-muted-foreground">
+          <Banknote className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p>No expenses yet. Click "Add Expense" to get started.</p>
+        </CardContent></Card>
+      )}
+
+      {/* Add/Edit Expense Dialog */}
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingExpense ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
+            <DialogDescription>Enter expense details. Recurring expenses are auto-generated on schedule.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Expense Name *</Label>
+              <Input value={form.expenseName} onChange={e => setForm({ ...form, expenseName: e.target.value })} placeholder="e.g., Shopify Subscription" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Category *</Label>
+                <Select value={form.category} onValueChange={v => setForm({ ...form, category: v, subCategory: '' })}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {categories.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Sub-Category</Label>
+                <Select value={form.subCategory || '__none__'} onValueChange={v => setForm({ ...form, subCategory: v === '__none__' ? '' : v })}>
+                  <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None —</SelectItem>
+                    {getSubCategories(form.category).map(sc => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Amount (₹) *</Label>
+                <Input type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0.00" />
+              </div>
+              <div className="flex items-end gap-2 pb-0.5">
+                <Switch checked={form.gstInclusive} onCheckedChange={v => setForm({ ...form, gstInclusive: v })} />
+                <Label className="text-sm">Amount includes GST (18%)</Label>
+              </div>
+            </div>
+            <Separator />
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label>Frequency</Label>
+                <Select value={form.frequency} onValueChange={v => setForm({ ...form, frequency: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="one-time">One-time</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="yearly">Yearly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.frequency !== 'one-time' && (
+                <>
+                  <div>
+                    <Label>Total Cycles</Label>
+                    <Input type="number" min="1" value={form.infiniteCycles ? '' : form.totalCycles} disabled={form.infinityCycles}
+                      onChange={e => setForm({ ...form, totalCycles: e.target.value })}
+                      placeholder={form.infiniteCycles ? '∞' : '12'} />
+                  </div>
+                  <div className="flex items-end gap-2 pb-0.5">
+                    <Switch checked={form.infiniteCycles} onCheckedChange={v => setForm({ ...form, infiniteCycles: v })} />
+                    <Label className="text-sm flex items-center gap-1"><InfinityIcon className="w-3.5 h-3.5" /> Infinite</Label>
+                  </div>
+                </>
+              )}
+            </div>
+            <div>
+              <Label>Start Date</Label>
+              <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+              {form.frequency !== 'one-time' && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Cycle 1 starts on this date. Next cycles auto-generated {form.frequency === 'monthly' ? 'every month' : 'every year'}.
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setShowForm(false); setEditingExpense(null); }}>Cancel</Button>
+              <Button onClick={handleSubmit}><Save className="w-3.5 h-3.5 mr-1.5" />{editingExpense ? 'Update' : 'Add Expense'}</Button>
+            </div>
           </div>
-          {expenses.length === 0 && <div className="text-center py-12 text-muted-foreground">No expenses recorded yet.</div>}
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
+
+      {/* Category Manager Dialog */}
+      <Dialog open={showCatManager} onOpenChange={setShowCatManager}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FolderTree className="w-4 h-4" /> Manage Categories & Sub-Categories</DialogTitle>
+            <DialogDescription>Organize your expense categories. Sub-categories appear in the expense form dropdown.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {catEditing.map((cat, catIdx) => (
+              <div key={catIdx} className="p-3 rounded-lg border border-border bg-muted/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Input value={cat.name} onChange={e => {
+                    const updated = [...catEditing];
+                    updated[catIdx] = { ...cat, name: e.target.value };
+                    setCatEditing(updated);
+                  }} className="font-medium" />
+                  <Button size="icon" variant="ghost" className="h-8 w-8 text-red-500 shrink-0" onClick={() => setCatEditing(catEditing.filter((_, i) => i !== catIdx))}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <div className="pl-4 space-y-1.5">
+                  {(cat.subCategories || []).map((sc, scIdx) => (
+                    <div key={scIdx} className="flex items-center gap-2">
+                      <span className="text-muted-foreground text-xs">└</span>
+                      <Input value={sc} className="h-7 text-sm" onChange={e => {
+                        const updated = [...catEditing];
+                        const subs = [...(updated[catIdx].subCategories || [])];
+                        subs[scIdx] = e.target.value;
+                        updated[catIdx] = { ...cat, subCategories: subs };
+                        setCatEditing(updated);
+                      }} />
+                      <Button size="icon" variant="ghost" className="h-6 w-6 text-red-400 shrink-0" onClick={() => {
+                        const updated = [...catEditing];
+                        const subs = [...(updated[catIdx].subCategories || [])];
+                        subs.splice(scIdx, 1);
+                        updated[catIdx] = { ...cat, subCategories: subs };
+                        setCatEditing(updated);
+                      }}><Trash2 className="w-3 h-3" /></Button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground text-xs">└</span>
+                    <Input className="h-7 text-sm" placeholder="New sub-category..." value={newSubCat[catIdx] || ''}
+                      onChange={e => setNewSubCat({ ...newSubCat, [catIdx]: e.target.value })}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && newSubCat[catIdx]?.trim()) {
+                          const updated = [...catEditing];
+                          updated[catIdx] = { ...cat, subCategories: [...(cat.subCategories || []), newSubCat[catIdx].trim()] };
+                          setCatEditing(updated);
+                          setNewSubCat({ ...newSubCat, [catIdx]: '' });
+                        }
+                      }}
+                    />
+                    <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => {
+                      if (newSubCat[catIdx]?.trim()) {
+                        const updated = [...catEditing];
+                        updated[catIdx] = { ...cat, subCategories: [...(cat.subCategories || []), newSubCat[catIdx].trim()] };
+                        setCatEditing(updated);
+                        setNewSubCat({ ...newSubCat, [catIdx]: '' });
+                      }
+                    }}><Plus className="w-3 h-3" /></Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="flex gap-2">
+              <Input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="New category name..."
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newCatName.trim()) {
+                    setCatEditing([...catEditing, { name: newCatName.trim(), subCategories: [] }]);
+                    setNewCatName('');
+                  }
+                }} />
+              <Button variant="outline" onClick={() => {
+                if (newCatName.trim()) {
+                  setCatEditing([...catEditing, { name: newCatName.trim(), subCategories: [] }]);
+                  setNewCatName('');
+                }
+              }}><Plus className="w-3.5 h-3.5 mr-1" /> Add Category</Button>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowCatManager(false)}>Cancel</Button>
+              <Button onClick={saveCategories}><Save className="w-3.5 h-3.5 mr-1.5" /> Save Categories</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
