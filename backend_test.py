@@ -175,7 +175,7 @@ def test_2_manual_stock_batch_creation():
     print(f"    ✅ Manual batch totalCost: {result.get('totalCost')}")
     
     # Check updated stock summary
-    inventory_summary = test_api_call('GET', '/stock/summary')
+    inventory_summary = test_api_call('GET', '/inventory-items')
     if not inventory_summary:
         return False
         
