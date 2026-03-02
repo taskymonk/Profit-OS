@@ -519,13 +519,18 @@ def test_6_pl_waterfall_breakdown():
         net_revenue = pl_breakdown.get('netRevenue', 0)
         total_cogs = pl_breakdown.get('totalCOGS', 0)
         total_shipping = pl_breakdown.get('totalShipping', 0)
-        total_txn_fees = pl_breakdown.get('totalTxnFees', 0)
-        total_shopify_fee = pl_breakdown.get('totalShopifyFee', 0)
+        razorpay_fee = pl_breakdown.get('razorpayFee', 0)
+        razorpay_tax = pl_breakdown.get('razorpayTax', 0)
+        shopify_txn_fee = pl_breakdown.get('shopifyTxnFee', 0)
+        shopify_txn_gst = pl_breakdown.get('shopifyTxnGST', 0)
         ad_spend = pl_breakdown.get('adSpend', 0)
         overhead = pl_breakdown.get('overhead', 0)
         net_profit = pl_breakdown.get('netProfit', 0)
         
-        calculated_profit = net_revenue - total_cogs - total_shipping - total_txn_fees - total_shopify_fee - ad_spend - overhead
+        # Correct formula: NetRevenue - COGS - Shipping - RazorpayFees - ShopifyFees - AdSpend - Overhead
+        total_razorpay = razorpay_fee + razorpay_tax
+        total_shopify = shopify_txn_fee + shopify_txn_gst
+        calculated_profit = net_revenue - total_cogs - total_shipping - total_razorpay - total_shopify - ad_spend - overhead
         profit_diff = abs(net_profit - calculated_profit)
         
         print(f"   Net Revenue: ₹{net_revenue}")
