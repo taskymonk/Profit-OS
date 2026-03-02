@@ -1778,10 +1778,111 @@ export async function GET(request) {
 
 
       case 'inventory-items': {
-        if (subResource) return json(await getDoc('inventoryItems', subResource));
+        // Enhanced: include currentStock from batches
+        if (subResource) {
+          const item = await getDoc('inventoryItems', subResource);
+          if (item) {
+            const db = await getDb();
+            const batches = await db.collection('stockBatches').find({ inventoryItemId: subResource }).sort({ date: 1 }).toArray();
+            item.currentStock = batches.reduce((sum, b) => sum + (b.remainingQty || 0), 0);
+            item.batches = batches;
+          }
+          return json(item);
+        }
         const db = await getDb();
-        const items = await db.collection('inventoryItems').find({}).sort({ category: 1, name: 1 }).toArray();
-        return json(items);
+        const stockItems = await getInventoryStockSummary(db);
+        return json(stockItems);
+      }
+
+      case 'stock-batches': {
+        const db = await getDb();
+        const params = getSearchParams(request);
+        const query = {};
+        if (params.inventoryItemId) query.inventoryItemId = params.inventoryItemId;
+        const batches = await db.collection('stockBatches').find(query).sort({ date: -1 }).toArray();
+        return json(batches);
+      }
+
+      case 'stock': {
+        const db = await getDb();
+        if (subResource === 'movements') {
+          // GET /api/stock/movements/:inventoryItemId — all movements (purchases + consumptions)
+          const itemId = segments[2];
+          if (!itemId) return json({ error: 'Inventory item ID required' }, 400);
+
+          const batches = await db.collection('stockBatches').find({ inventoryItemId: itemId }).sort({ date: 1 }).toArray();
+          const consumptions = await db.collection('stockConsumptions').find({ inventoryItemId: itemId }).sort({ date: 1 }).toArray();
+
+          // Build timeline: purchases (in) and consumptions (out)
+          const movements = [];
+          batches.forEach(b => {
+            movements.push({
+              type: 'purchase',
+              date: b.date,
+              quantity: b.quantity,
+              costPerUnit: b.costPerUnit,
+              totalCost: Math.round(b.quantity * b.costPerUnit * 100) / 100,
+              remainingQty: b.remainingQty,
+              batchId: b._id,
+              expenseId: b.expenseId || null,
+            });
+          });
+          consumptions.forEach(c => {
+            movements.push({
+              type: 'consumption',
+              date: c.date,
+              quantity: -c.quantity,
+              costPerUnit: c.costPerUnit,
+              totalCost: c.totalCost,
+              orderId: c.orderId,
+              batchId: c.batchId,
+              insufficientStock: c.insufficientStock || false,
+            });
+          });
+          movements.sort((a, b) => new Date(a.date) - new Date(b.date));
+          return json(movements);
+        }
+
+        if (subResource === 'summary') {
+          // GET /api/stock/summary — preparable orders count per SKU
+          const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
+          const stockSummary = await getInventoryStockSummary(db);
+          const stockMap = {};
+          stockSummary.forEach(s => { stockMap[s._id] = s.currentStock; });
+
+          const preparable = skuRecipes.map(recipe => {
+            if (!recipe.ingredients || recipe.ingredients.length === 0) {
+              return { sku: recipe.sku, name: recipe.productName || recipe.sku, canPrepare: null, missingItems: [] };
+            }
+            let minPrepare = Infinity;
+            const missingItems = [];
+            recipe.ingredients.forEach(ing => {
+              const available = stockMap[ing.inventoryItemId] || 0;
+              const needed = ing.quantityUsed || ing.quantity || 1;
+              const canMake = Math.floor(available / needed);
+              if (canMake < minPrepare) minPrepare = canMake;
+              if (available <= 0) missingItems.push(ing.inventoryItemName || ing.inventoryItemId);
+            });
+            return {
+              sku: recipe.sku,
+              name: recipe.productName || recipe.sku,
+              canPrepare: minPrepare === Infinity ? 0 : minPrepare,
+              missingItems,
+            };
+          });
+          return json({ items: stockSummary, preparable });
+        }
+
+        if (subResource === 'consumption') {
+          // GET /api/stock/consumption?orderId=xxx — get consumptions for an order
+          const params = getSearchParams(request);
+          const query = {};
+          if (params.orderId) query.orderId = params.orderId;
+          const consumptions = await db.collection('stockConsumptions').find(query).sort({ date: -1 }).toArray();
+          return json(consumptions);
+        }
+
+        return json({ error: 'Unknown stock action. Use /movements/:id, /summary, or /consumption' }, 404);
       }
 
       case 'daily-marketing-spend': {
