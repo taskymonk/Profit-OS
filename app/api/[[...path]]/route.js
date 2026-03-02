@@ -518,7 +518,15 @@ async function getDashboardData(params = {}) {
   // Get exchange rate for currency conversion
   const exchangeRate = await getExchangeRate('USD', 'INR');
 
-  const calcOptions = { shopifyTxnFeeRate: tenantConfig.shopifyTxnFeeRate || 0 };
+  // Fetch FIFO consumption records for COGS calculation
+  const allConsumptions = await db.collection('stockConsumptions').find({}).toArray();
+  const consumptionMap = {};
+  allConsumptions.forEach(c => {
+    if (!consumptionMap[c.orderId]) consumptionMap[c.orderId] = [];
+    consumptionMap[c.orderId].push(c);
+  });
+
+  const calcOptions = { shopifyTxnFeeRate: tenantConfig.shopifyTxnFeeRate || 0, consumptionMap };
   const metrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, startDate, endDate, 1, adSpendMap, adSpendTaxMultiplier, calcOptions);
 
   // Build daily aggregation for chart — using IST date boundaries
