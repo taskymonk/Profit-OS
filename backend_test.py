@@ -258,7 +258,7 @@ def test_3_fifo_consumption():
     print(f"    ✅ Second batch consumption: 100@6 = {second_consumption.get('totalCost')}")
     
     # Verify remaining stock is 200 (800 - 600)
-    inventory_summary = test_api_call('GET', '/stock/summary')
+    inventory_summary = test_api_call('GET', '/inventory-items')
     if inventory_summary:
         our_item = next((item for item in inventory_summary if item['_id'] == test_inventory_item_id), None)
         if our_item and our_item.get('currentStock') == 200:
