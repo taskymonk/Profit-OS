@@ -290,7 +290,7 @@ def test_4_stock_reversal():
     print(f"    ✅ Reversed consumption records: {actual_reversed}")
     
     # Verify stock is back to 800
-    inventory_summary = test_api_call('GET', '/stock/summary')
+    inventory_summary = test_api_call('GET', '/inventory-items')
     if not inventory_summary:
         return False
         
