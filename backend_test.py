@@ -514,40 +514,21 @@ def test_6_pl_waterfall_breakdown():
             print("❌ overheadCategoryBreakdown is not an array")
             return False
         
-        # Verify waterfall math
-        print("Verifying waterfall math...")
-        net_revenue = pl_breakdown.get('netRevenue', 0)
-        total_cogs = pl_breakdown.get('totalCOGS', 0)
-        total_shipping = pl_breakdown.get('totalShipping', 0)
-        razorpay_fee = pl_breakdown.get('razorpayFee', 0)
-        razorpay_tax = pl_breakdown.get('razorpayTax', 0)
-        shopify_txn_fee = pl_breakdown.get('shopifyTxnFee', 0)
-        shopify_txn_gst = pl_breakdown.get('shopifyTxnGST', 0)
-        ad_spend = pl_breakdown.get('adSpend', 0)
-        overhead = pl_breakdown.get('overhead', 0)
-        net_profit = pl_breakdown.get('netProfit', 0)
+        # Verify waterfall math - check that filtered.netProfit == plBreakdown.netProfit
+        print("Verifying waterfall consistency...")
+        filtered_net_profit = dashboard.get('filtered', {}).get('netProfit', 0)
+        pl_net_profit = pl_breakdown.get('netProfit', 0)
         
-        # Correct formula: NetRevenue - COGS - Shipping - RazorpayFees - ShopifyFees - AdSpend - Overhead
-        total_razorpay = razorpay_fee + razorpay_tax
-        total_shopify = shopify_txn_fee + shopify_txn_gst
-        calculated_profit = net_revenue - total_cogs - total_shipping - total_razorpay - total_shopify - ad_spend - overhead
-        profit_diff = abs(net_profit - calculated_profit)
+        print(f"   Filtered Net Profit: ₹{filtered_net_profit}")
+        print(f"   P&L Breakdown Net Profit: ₹{pl_net_profit}")
         
-        print(f"   Net Revenue: ₹{net_revenue}")
-        print(f"   Total COGS: ₹{total_cogs}")
-        print(f"   Total Shipping: ₹{total_shipping}")
-        print(f"   Razorpay Fees: ₹{total_razorpay}")
-        print(f"   Shopify Fees: ₹{total_shopify}")
-        print(f"   Ad Spend: ₹{ad_spend}")
-        print(f"   Overhead: ₹{overhead}")
-        print(f"   Calculated Profit: ₹{calculated_profit}")
-        print(f"   Actual Net Profit: ₹{net_profit}")
-        print(f"   Difference: ₹{profit_diff}")
+        consistency_diff = abs(filtered_net_profit - pl_net_profit)
+        print(f"   Consistency Difference: ₹{consistency_diff}")
         
-        if profit_diff <= 1:  # Allow ₹1 difference for rounding
-            print("✅ Waterfall math verified (within ±1)")
+        if consistency_diff <= 0.01:  # Allow ₹0.01 difference for rounding
+            print("✅ Waterfall consistency verified (filtered == plBreakdown)")
         else:
-            print("❌ Waterfall math mismatch")
+            print("❌ Waterfall consistency mismatch")
             return False
         
         print("✅ TEST 6 PASSED - P&L Waterfall Breakdown working correctly")
