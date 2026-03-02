@@ -518,7 +518,8 @@ async function getDashboardData(params = {}) {
   // Get exchange rate for currency conversion
   const exchangeRate = await getExchangeRate('USD', 'INR');
 
-  const metrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, startDate, endDate, 1, adSpendMap, adSpendTaxMultiplier);
+  const calcOptions = { shopifyTxnFeeRate: tenantConfig.shopifyTxnFeeRate || 0 };
+  const metrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, startDate, endDate, 1, adSpendMap, adSpendTaxMultiplier, calcOptions);
 
   // Build daily aggregation for chart — using IST date boundaries
   const dailyData = [];
