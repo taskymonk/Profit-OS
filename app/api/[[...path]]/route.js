@@ -1196,6 +1196,115 @@ async function indiaPostSyncTracking() {
 
 // (Shopify Bills CSV import removed — automated fee calculation via shopifyTxnFeeRate in Settings)
 
+// ==================== FIFO STOCK ENGINE ====================
+
+async function consumeStockForOrder(db, orderId, orderDate, items) {
+  const consumptions = [];
+  for (const item of items) {
+    const { inventoryItemId, inventoryItemName, quantity } = item;
+    let remaining = quantity;
+
+    // FIFO: oldest batch first
+    const batches = await db.collection('stockBatches')
+      .find({ inventoryItemId, remainingQty: { $gt: 0 } })
+      .sort({ date: 1, createdAt: 1 })
+      .toArray();
+
+    for (const batch of batches) {
+      if (remaining <= 0) break;
+      const consume = Math.min(remaining, batch.remainingQty);
+
+      consumptions.push({
+        _id: uuidv4(),
+        orderId,
+        inventoryItemId,
+        inventoryItemName: inventoryItemName || batch.inventoryItemName || '',
+        batchId: batch._id,
+        quantity: consume,
+        costPerUnit: batch.costPerUnit,
+        totalCost: Math.round(consume * batch.costPerUnit * 100) / 100,
+        date: orderDate || new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+
+      await db.collection('stockBatches').updateOne(
+        { _id: batch._id },
+        { $inc: { remainingQty: -consume }, $set: { updatedAt: new Date().toISOString() } }
+      );
+      remaining -= consume;
+    }
+
+    if (remaining > 0) {
+      consumptions.push({
+        _id: uuidv4(),
+        orderId,
+        inventoryItemId,
+        inventoryItemName: inventoryItemName || 'Unknown',
+        batchId: null,
+        quantity: remaining,
+        costPerUnit: 0,
+        totalCost: 0,
+        date: orderDate || new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        insufficientStock: true,
+      });
+    }
+  }
+
+  if (consumptions.length > 0) {
+    await db.collection('stockConsumptions').insertMany(consumptions);
+  }
+  return consumptions;
+}
+
+async function reverseStockConsumption(db, orderId) {
+  const consumptions = await db.collection('stockConsumptions')
+    .find({ orderId })
+    .toArray();
+
+  for (const c of consumptions) {
+    if (c.batchId) {
+      await db.collection('stockBatches').updateOne(
+        { _id: c.batchId },
+        { $inc: { remainingQty: c.quantity }, $set: { updatedAt: new Date().toISOString() } }
+      );
+    }
+  }
+  await db.collection('stockConsumptions').deleteMany({ orderId });
+  return consumptions.length;
+}
+
+async function getInventoryStockSummary(db) {
+  const items = await db.collection('inventoryItems').find({}).sort({ category: 1, name: 1 }).toArray();
+  const batches = await db.collection('stockBatches').find({}).toArray();
+
+  // Group batches by inventoryItemId
+  const batchMap = {};
+  batches.forEach(b => {
+    if (!batchMap[b.inventoryItemId]) batchMap[b.inventoryItemId] = [];
+    batchMap[b.inventoryItemId].push(b);
+  });
+
+  return items.map(item => {
+    const itemBatches = batchMap[item._id] || [];
+    const currentStock = itemBatches.reduce((sum, b) => sum + (b.remainingQty || 0), 0);
+    const totalPurchased = itemBatches.reduce((sum, b) => sum + (b.quantity || 0), 0);
+    const avgCost = totalPurchased > 0
+      ? Math.round(itemBatches.reduce((sum, b) => sum + (b.quantity * b.costPerUnit), 0) / totalPurchased * 100) / 100
+      : item.baseCostPerUnit || 0;
+    const isLowStock = (item.lowStockThreshold || 0) > 0 && currentStock <= item.lowStockThreshold;
+
+    return {
+      ...item,
+      currentStock,
+      totalPurchased,
+      avgCostPerUnit: avgCost,
+      isLowStock,
+      batchCount: itemBatches.filter(b => b.remainingQty > 0).length,
+    };
+  });
+}
+
 // ==================== RAZORPAY INTEGRATION ====================
 
 async function razorpaySyncPayments() {
