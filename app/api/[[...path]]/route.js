@@ -1858,7 +1858,9 @@ export async function GET(request) {
           const stockMap = {};
           stockSummary.forEach(s => { stockMap[s._id] = s.currentStock; });
 
-          const preparable = skuRecipes.map(recipe => {
+          const preparable = skuRecipes
+            .filter(recipe => recipe.ingredients && recipe.ingredients.length > 0)
+            .map(recipe => {
             if (!recipe.ingredients || recipe.ingredients.length === 0) {
               return { sku: recipe.sku, name: recipe.productName || recipe.sku, canPrepare: null, missingItems: [] };
             }
