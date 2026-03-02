@@ -1194,15 +1194,8 @@ async function indiaPostSyncTracking() {
   }
 }
 
-// ==================== SHOPIFY BILLS IMPORT ====================
-
-function parseCSV(csvText) {
-  const lines = csvText.split('\n');
-  if (lines.length < 2) return [];
-  
-  // Parse header
-  const headerLine = lines[0];
-  const headers = [];
+// ==================== RAZORPAY INTEGRATION ====================
+// (Shopify Bills CSV import removed — automated fee calculation via shopifyTxnFeeRate in Settings)
   let current = '';
   let inQuotes = false;
   for (let i = 0; i < headerLine.length; i++) {
