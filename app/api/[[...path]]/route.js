@@ -2514,6 +2514,7 @@ export async function DELETE(request) {
       'employees': 'employees',
       'overhead-expenses': 'overheadExpenses',
       'inventory-items': 'inventoryItems',
+      'stock-batches': 'stockBatches',
     };
 
     const collection = collectionMap[resource];
