@@ -1196,18 +1196,8 @@ async function indiaPostSyncTracking() {
 
 // ==================== RAZORPAY INTEGRATION ====================
 // (Shopify Bills CSV import removed — automated fee calculation via shopifyTxnFeeRate in Settings)
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < headerLine.length; i++) {
-    const char = headerLine[i];
-    if (char === '"') { inQuotes = !inQuotes; }
-    else if (char === ',' && !inQuotes) { headers.push(current.trim()); current = ''; }
-    else { current += char; }
-  }
-  headers.push(current.trim());
 
-  const rows = [];
-  for (let r = 1; r < lines.length; r++) {
+// ==================== RAZORPAY INTEGRATION ====================
     const line = lines[r].trim();
     if (!line) continue;
     const values = [];
