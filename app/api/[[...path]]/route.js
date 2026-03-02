@@ -1895,10 +1895,6 @@ export async function GET(request) {
         return json({ error: 'Unknown Razorpay action' }, 404);
       }
 
-      case 'shopify-bills': {
-        return json(await getShopifyBillsSummary());
-      }
-
       case 'calculate-profit': {
         if (!subResource) return json({ error: 'Order ID required' }, 400);
         const db = await getDb();
