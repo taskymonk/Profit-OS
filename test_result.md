@@ -2537,3 +2537,79 @@ Test these endpoints:
 
 Clean up ALL test data (inventory items, batches, consumptions, expenses) after each test.
 DO NOT test Shopify sync by calling the actual Shopify API."
+    - agent: "testing"
+      message: "✅ PHASE 9F FIFO INVENTORY COSTING BACKEND TESTING COMPLETE - ALL 8/8 TESTS PASSED!
+
+🎯 **INVENTORY ITEMS WITH AUTO-STOCK BATCH**: ✅ PASSED
+- ✅ Created Red Roses inventory item: purchasePrice=₹2500, purchaseQuantity=500, unit='stems', lowStockThreshold=50
+- ✅ baseCostPerUnit correctly calculated: ₹5.00 (2500/500)
+- ✅ Auto-created stock batch verified: qty=500, costPerUnit=₹5.0, remainingQty=500
+- ✅ currentStock from auto-batch: 500 stems
+
+🎯 **MANUAL STOCK BATCH CREATION**: ✅ PASSED  
+- ✅ Manual batch created: date=2026-03-15, qty=300, costPerUnit=₹6, totalCost=₹1800
+- ✅ Updated currentStock: 800 stems (500+300)
+- ✅ Weighted avgCostPerUnit: ₹5.38 ((500×5 + 300×6)/800 = 5.375)
+
+🎯 **FIFO CONSUMPTION (600 from 500@₹5 + 100@₹6)**: ✅ PASSED
+- ✅ FIFO logic working correctly: consumed 600 units = 500@₹5 + 100@₹6
+- ✅ Total COGS calculation: ₹3,100 (500×5 + 100×6 = 2500 + 600)
+- ✅ Consumption entries: 2 (first batch 500@5=₹2500, second batch 100@6=₹600)  
+- ✅ Remaining stock after consumption: 200 stems (800-600)
+
+🎯 **STOCK REVERSAL**: ✅ PASSED
+- ✅ Reversed 2 consumption records for order 'test-fifo-order'
+- ✅ Stock correctly restored to: 800 stems
+- ✅ Batch remainingQty values restored (first batch +500, second batch +100)
+
+🎯 **STOCK MOVEMENTS TIMELINE**: ✅ PASSED
+- ✅ GET /api/stock/movements/{itemId} returns complete timeline
+- ✅ Purchase movements found: 2 (auto-batch + manual batch)
+- ✅ Movement structure validated: type, date, quantity, costPerUnit, totalCost fields
+- ✅ Movement details: Movement 0 (purchase, qty=500, cost=₹5), Movement 1 (purchase, qty=300, cost=₹6)
+
+🎯 **EXPENSE → INVENTORY BRIDGE**: ✅ PASSED
+- ✅ Expense created under 'Raw Material Purchases' category with inventoryItemId
+- ✅ Auto-stock batch created from expense: expenseId linked, _stockBatchCreated field returned
+- ✅ Expense details: ₹4000, purchaseQty=800, gstInclusive=false → costPerUnit=₹5.00 (4000/800)
+- ✅ Total batches increased to 3, new batch verified with expenseId link
+
+🎯 **LOW STOCK ALERTS**: ✅ PASSED  
+- ✅ Current stock after expense batch: 1600 stems (800+800)
+- ✅ Consumed 1550 units to reach threshold: currentStock=50 (exactly at lowStockThreshold=50)
+- ✅ Low stock alert triggered: isLowStock=true
+- ✅ Test consumption successfully reversed for cleanup
+
+🎯 **DASHBOARD INTEGRITY**: ✅ PASSED
+- ✅ Dashboard still returns 200 with FIFO system active  
+- ✅ plBreakdown contains all 17 required keys: grossRevenue, discount, refunds, gstOnRevenue, netRevenue, totalCOGS, totalShipping, totalTxnFees, razorpayFee, razorpayTax, shopifyTxnFee, shopifyTxnGST, totalShopifyFee, adSpend, overhead, overheadCategoryBreakdown, netProfit
+- ✅ overheadCategoryBreakdown is array with 2 categories
+- ✅ Key dashboard metrics present: netProfit, grossOrderProfit, totalOrders, rtoRate, roas, revenue, adSpend, rtoCount, cancelledCount
+
+**FIFO INVENTORY COSTING SYSTEM FEATURES FULLY VERIFIED:**
+✓ Auto-Stock Batches: Inventory items automatically create initial stock batch on creation
+✓ Manual Batches: Support for adding stock batches at different prices/dates
+✓ FIFO Logic: Oldest batches consumed first with accurate COGS calculation  
+✓ Stock Tracking: Real-time currentStock, avgCostPerUnit, and batch-level remainingQty
+✓ Reversal System: Full consumption reversal with batch quantity restoration
+✓ Movement History: Complete timeline of purchases and consumptions per item
+✓ Expense Integration: Raw Material Purchase expenses auto-create stock batches
+✓ Low Stock Alerts: isLowStock flag when currentStock ≤ lowStockThreshold
+✓ Dashboard Integration: Full P&L breakdown compatibility with FIFO COGS
+
+**PHASE 9F FIFO INVENTORY COSTING SYSTEM FULLY FUNCTIONAL AND TESTED!** All 8 critical areas working perfectly with accurate FIFO costing, proper stock tracking, expense integration, and dashboard compatibility. System ready for production use with comprehensive inventory management."
+
+  - task: "Phase 9F: FIFO Inventory Costing System"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Complete FIFO inventory costing system implemented with 8 critical areas: 1) Inventory items with auto-stock batches, 2) Manual stock batch creation, 3) FIFO consumption logic (oldest-first), 4) Stock reversal functionality, 5) Stock movements timeline, 6) Expense→Inventory bridge for Raw Material Purchases, 7) Low stock alerts when currentStock ≤ threshold, 8) Dashboard integration maintaining full P&L breakdown. Collections: inventoryItems, stockBatches, stockConsumptions. APIs: /inventory-items (CRUD + currentStock), /stock-batches (CRUD), /stock/consume (FIFO logic), /stock/reverse, /stock/movements/:id, /overhead-expenses (auto-creates batches for Raw Material Purchases category)."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - FIFO Inventory Costing System fully functional across all 8 critical areas. Auto-stock batches work correctly with inventory item creation (baseCostPerUnit=₹5.00 for 2500/500). Manual batch creation updates weighted average cost (₹5.38). FIFO consumption logic verified: 600 units consumed as 500@₹5 + 100@₹6 = ₹3,100 COGS. Stock reversal restores quantities correctly. Stock movements timeline shows complete purchase/consumption history. Expense→Inventory bridge auto-creates batches for Raw Material Purchases with proper cost calculation (₹4000/800=₹5.00). Low stock alerts trigger when currentStock ≤ threshold. Dashboard maintains all 17 P&L breakdown keys with FIFO integration. System ready for production with comprehensive inventory management."
