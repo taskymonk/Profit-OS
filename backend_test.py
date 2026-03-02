@@ -1,489 +1,699 @@
 #!/usr/bin/env python3
 """
-PHASE 9B - SHOPIFY BILLS IMPORT AND EXPANDED P&L BACKEND TESTING
-Base URL: https://overhead-refactor.preview.emergentagent.com/api
+Phase 9C/9D/9E Backend Testing
+Testing 7 critical areas:
+1. Shopify Txn Fee Rate (Settings)
+2. Shopify Bills Code Removed (source code check)  
+3. Expense Categories API
+4. Enhanced Expense Creation
+5. Recurring Expense Generation
+6. P&L Waterfall Breakdown
+7. Expense Categories Save
 
-Tests the following NEW Shopify Bills Import endpoints and features:
-1. POST /api/shopify-bills/import - Test with sample CSV data
-2. GET /api/shopify-bills - After import, should return imported data summary
-3. GET /api/dashboard?range=30days - Should include shopifyCharges object with orderCommission, appFees, subscriptionFee, total
-4. GET /api/dashboard?range=30days - Should include plBreakdown.razorpayFee and plBreakdown.razorpayTax (already implemented)
-5. GET /api/dashboard?range=30days - Should include revenueSplit.reconciled and revenueSplit.unreconciled
-6. POST /api/shopify-bills/import with empty CSV - Should return error about empty CSV
-7. Cleanup - Clear test data by re-importing with just header row
+Base URL: http://localhost:3000/api
+Real Shopify data (2049+ orders) and Meta Ads data exist
 """
 
 import requests
 import json
-import sys
+import os
+import re
+from datetime import datetime, timedelta
+import pymongo
+from bson import ObjectId
 
-BASE_URL = "https://overhead-refactor.preview.emergentagent.com/api"
+# Configuration
+BASE_URL = "http://localhost:3000/api"
+MONGO_URL = "mongodb://localhost:27017"
+DB_NAME = "profitos"
 
-def print_test_result(test_name, passed, details=""):
-    status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"{status}: {test_name}")
-    if details:
-        print(f"   Details: {details}")
-    return passed
-
-def safe_request(method, url, **kwargs):
+def make_request(method, endpoint, data=None, params=None):
+    """Make HTTP request with error handling"""
     try:
-        response = requests.request(method, url, timeout=30, **kwargs)
+        url = f"{BASE_URL}{endpoint}"
+        headers = {'Content-Type': 'application/json'}
+        
+        if method.upper() == 'GET':
+            response = requests.get(url, params=params, headers=headers)
+        elif method.upper() == 'POST':
+            response = requests.post(url, json=data, headers=headers)
+        elif method.upper() == 'PUT':
+            response = requests.put(url, json=data, headers=headers)
+        elif method.upper() == 'DELETE':
+            response = requests.delete(url, headers=headers)
+        
+        print(f"{method} {url} -> Status: {response.status_code}")
         return response
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Network error for {url}: {e}")
+    except Exception as e:
+        print(f"Request error: {e}")
         return None
 
-def test_shopify_bills_import():
-    """Test POST /api/shopify-bills/import with sample CSV data"""
-    print("\n🎯 TEST 1: SHOPIFY BILLS IMPORT WITH CSV DATA")
-    
-    # Sample CSV data as provided in the review request
-    sample_csv = '''Bill #,Store Name,Shop ID,.myshopify.com URL,Charge category,Description,Amount,Currency,Start of billing cycle,End of billing cycle,Date,Order,Rate,App,Original amount,Original currency,Exchange rate
-501742206,GiftSugar,88773181717,a9608d-ef.myshopify.com,order_commission,Transaction fees,40.2,INR,2026-02-01,2026-02-28,2026-02-15,Orders from 2026-02-15 to 2026-02-15,2.0,,40.2,INR,1.0
-501742206,GiftSugar,88773181717,a9608d-ef.myshopify.com,order_commission,Transaction fees,30.0,INR,2026-02-01,2026-02-28,2026-02-16,Orders from 2026-02-16 to 2026-02-16,2.0,,30.0,INR,1.0
-501742206,GiftSugar,88773181717,a9608d-ef.myshopify.com,application_fee,Application fee,100.0,INR,2026-02-01,2026-02-28,2026-02-15,,,Uploadly - File Upload,100.0,INR,1.0
-501742206,GiftSugar,88773181717,a9608d-ef.myshopify.com,subscription_fee,Subscription,500.0,INR,2026-02-01,2026-02-28,2026-02-01,,,,500.0,INR,1.0'''
+def get_mongo_client():
+    """Get MongoDB client"""
+    try:
+        client = pymongo.MongoClient(MONGO_URL)
+        db = client[DB_NAME]
+        return client, db
+    except Exception as e:
+        print(f"MongoDB connection error: {e}")
+        return None, None
+
+def read_source_file(file_path):
+    """Read source code file for verification"""
+    try:
+        with open(file_path, 'r') as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error reading file {file_path}: {e}")
+        return ""
+
+# Test tracking variables
+created_test_data = []
+original_shopify_rate = None
+
+def cleanup_test_data():
+    """Clean up all test data created during testing"""
+    print("\n🧹 CLEANING UP TEST DATA...")
     
     try:
-        response = safe_request('POST', f"{BASE_URL}/shopify-bills/import",
-                              json={'csvText': sample_csv},
-                              headers={'Content-Type': 'application/json'})
-        if not response:
-            return False
-            
-        if response.status_code not in [200, 201]:
-            return print_test_result("Shopify Bills Import API", False, f"Expected 200/201, got {response.status_code}")
+        # Delete test expenses
+        for item in created_test_data:
+            if item['type'] == 'expense':
+                response = make_request('DELETE', f"/overhead-expenses/{item['id']}")
+                if response and response.status_code in [200, 204]:
+                    print(f"✅ Deleted test expense: {item['name']}")
+                else:
+                    print(f"⚠️ Failed to delete expense: {item['name']}")
         
-        data = response.json()
+        # Restore original Shopify txn fee rate
+        if original_shopify_rate is not None:
+            response = make_request('PUT', '/tenant-config', {"shopifyTxnFeeRate": original_shopify_rate})
+            if response and response.status_code == 200:
+                print(f"✅ Restored original shopifyTxnFeeRate: {original_shopify_rate}")
         
-        # Check structure
-        required_fields = ['message', 'imported', 'summary']
-        missing_fields = [field for field in required_fields if field not in data]
-        if missing_fields:
-            return print_test_result("Response structure", False, f"Missing fields: {missing_fields}")
-        
-        # Check expected values
-        tests_passed = 0
-        total_tests = 4
-        
-        if data.get('imported') == 4:
-            tests_passed += 1
-            print("✓ imported count is 4")
-        else:
-            print(f"✗ imported expected 4, got {data.get('imported')}")
-        
-        if 'order_commission' in data.get('summary', {}):
-            summary_oc = data['summary']['order_commission']
-            if summary_oc.get('count') == 2 and abs(summary_oc.get('total', 0) - 70.2) < 0.01:
-                tests_passed += 1
-                print("✓ order_commission summary correct (count: 2, total: 70.2)")
-            else:
-                print(f"✗ order_commission expected count:2, total:70.2, got {summary_oc}")
-        else:
-            print("✗ order_commission not found in summary")
-        
-        if 'application_fee' in data.get('summary', {}):
-            summary_af = data['summary']['application_fee']
-            if summary_af.get('count') == 1 and abs(summary_af.get('total', 0) - 100.0) < 0.01:
-                tests_passed += 1
-                print("✓ application_fee summary correct (count: 1, total: 100.0)")
-            else:
-                print(f"✗ application_fee expected count:1, total:100.0, got {summary_af}")
-        else:
-            print("✗ application_fee not found in summary")
-        
-        if 'subscription_fee' in data.get('summary', {}):
-            summary_sf = data['summary']['subscription_fee']
-            if summary_sf.get('count') == 1 and abs(summary_sf.get('total', 0) - 500.0) < 0.01:
-                tests_passed += 1
-                print("✓ subscription_fee summary correct (count: 1, total: 500.0)")
-            else:
-                print(f"✗ subscription_fee expected count:1, total:500.0, got {summary_sf}")
-        else:
-            print("✗ subscription_fee not found in summary")
-        
-        print(f"   Message: {data.get('message', 'N/A')}")
-        
-        return print_test_result("Shopify Bills Import with CSV", tests_passed == total_tests, f"{tests_passed}/{total_tests} checks passed")
+        created_test_data.clear()
+        print("✅ Cleanup completed")
         
     except Exception as e:
-        return print_test_result("Shopify Bills Import", False, f"Exception: {e}")
+        print(f"❌ Cleanup error: {e}")
 
-def test_shopify_bills_summary():
-    """Test GET /api/shopify-bills after import"""
-    print("\n🎯 TEST 2: SHOPIFY BILLS SUMMARY AFTER IMPORT")
+def test_1_shopify_txn_fee_rate():
+    """Test 1: Shopify Txn Fee Rate in Settings"""
+    print("\n🎯 TEST 1: SHOPIFY TXN FEE RATE (SETTINGS)")
+    global original_shopify_rate
     
     try:
-        response = safe_request('GET', f"{BASE_URL}/shopify-bills")
-        if not response:
+        # Step 1: Get current tenant config and save original rate
+        print("Step 1: Getting current tenant config...")
+        response = make_request('GET', '/tenant-config')
+        if not response or response.status_code != 200:
+            print("❌ Failed to get tenant config")
             return False
-            
-        if response.status_code != 200:
-            return print_test_result("Shopify Bills Summary API", False, f"Expected 200, got {response.status_code}")
         
-        data = response.json()
+        config = response.json()
+        original_shopify_rate = config.get('shopifyTxnFeeRate', 2)
+        print(f"✅ Current shopifyTxnFeeRate: {original_shopify_rate}")
         
-        # Check structure
-        required_fields = ['imported', 'totalCharges', 'summary']
-        missing_fields = [field for field in required_fields if field not in data]
-        if missing_fields:
-            return print_test_result("Summary response structure", False, f"Missing fields: {missing_fields}")
+        # Step 2: Update shopifyTxnFeeRate to 3%
+        print("Step 2: Updating shopifyTxnFeeRate to 3%...")
+        response = make_request('PUT', '/tenant-config', {"shopifyTxnFeeRate": 3})
+        if not response or response.status_code != 200:
+            print("❌ Failed to update shopifyTxnFeeRate")
+            return False
+        print("✅ shopifyTxnFeeRate updated to 3%")
         
-        # Check expected values
-        tests_passed = 0
-        total_tests = 5
+        # Step 3: Verify dashboard calculates fees correctly
+        print("Step 3: Checking dashboard P&L breakdown...")
+        response = make_request('GET', '/dashboard', {'range': '7days'})
+        if not response or response.status_code != 200:
+            print("❌ Failed to get dashboard data")
+            return False
         
-        if data.get('imported') == True:
-            tests_passed += 1
-            print("✓ imported is true")
+        dashboard = response.json()
+        pl_breakdown = dashboard.get('plBreakdown', {})
+        
+        # Verify Shopify fees are calculated
+        shopify_txn_fee = pl_breakdown.get('shopifyTxnFee', 0)
+        shopify_txn_gst = pl_breakdown.get('shopifyTxnGST', 0)
+        total_revenue = pl_breakdown.get('grossRevenue', 0)
+        
+        print(f"   Total Revenue: ₹{total_revenue}")
+        print(f"   Shopify Txn Fee (3%): ₹{shopify_txn_fee}")
+        print(f"   Shopify GST (18%): ₹{shopify_txn_gst}")
+        
+        # Verify fee calculation: shopifyTxnFee ≈ totalRevenue * 0.03
+        expected_fee = total_revenue * 0.03
+        fee_diff = abs(shopify_txn_fee - expected_fee)
+        
+        if fee_diff < 1:  # Allow ₹1 difference for rounding
+            print("✅ Shopify txn fee calculation correct")
         else:
-            print(f"✗ imported expected true, got {data.get('imported')}")
+            print(f"❌ Fee calculation mismatch. Expected: ₹{expected_fee}, Got: ₹{shopify_txn_fee}")
+            return False
         
-        if data.get('totalCharges') == 4:
-            tests_passed += 1
-            print("✓ totalCharges is 4")
+        # Verify GST: shopifyTxnGST ≈ shopifyTxnFee * 0.18
+        expected_gst = shopify_txn_fee * 0.18
+        gst_diff = abs(shopify_txn_gst - expected_gst)
+        
+        if gst_diff < 0.5:  # Allow ₹0.50 difference for rounding
+            print("✅ Shopify GST calculation correct")
         else:
-            print(f"✗ totalCharges expected 4, got {data.get('totalCharges')}")
+            print(f"❌ GST calculation mismatch. Expected: ₹{expected_gst}, Got: ₹{shopify_txn_gst}")
+            return False
         
-        summary = data.get('summary', {})
+        # Step 4: Restore original rate (will be done in cleanup)
+        print("✅ TEST 1 PASSED - Shopify Txn Fee Rate working correctly")
+        return True
         
-        if 'order_commission' in summary:
-            oc = summary['order_commission']
-            if oc.get('count') == 2 and abs(oc.get('total', 0) - 70.2) < 0.01:
-                tests_passed += 1
-                print("✓ order_commission in summary correct")
+    except Exception as e:
+        print(f"❌ TEST 1 FAILED: {e}")
+        return False
+
+def test_2_shopify_bills_code_removed():
+    """Test 2: Shopify Bills Code Removed (source code check)"""
+    print("\n🎯 TEST 2: SHOPIFY BILLS CODE REMOVED (SOURCE CODE CHECK)")
+    
+    try:
+        # Read the route.js file
+        route_file_path = "/app/app/api/[[...path]]/route.js"
+        source_code = read_source_file(route_file_path)
+        
+        if not source_code:
+            print("❌ Could not read route.js file")
+            return False
+        
+        # List of functions that should be removed
+        removed_functions = [
+            'importShopifyBills',
+            'getShopifyBillsSummary', 
+            'parseCSV',
+            'shopifyCharges',
+            'getShopifyChargesForDateRange'
+        ]
+        
+        all_removed = True
+        
+        for func_name in removed_functions:
+            if func_name in source_code:
+                print(f"❌ Found {func_name} in source code - should be removed")
+                all_removed = False
             else:
-                print(f"✗ order_commission in summary incorrect: {oc}")
-        else:
-            print("✗ order_commission not in summary")
+                print(f"✅ {func_name} not found - correctly removed")
         
-        if 'application_fee' in summary:
-            af = summary['application_fee']
-            if af.get('count') == 1 and abs(af.get('total', 0) - 100.0) < 0.01:
-                tests_passed += 1
-                print("✓ application_fee in summary correct")
-            else:
-                print(f"✗ application_fee in summary incorrect: {af}")
-        else:
-            print("✗ application_fee not in summary")
-        
-        if 'subscription_fee' in summary:
-            sf = summary['subscription_fee']
-            if sf.get('count') == 1 and abs(sf.get('total', 0) - 500.0) < 0.01:
-                tests_passed += 1
-                print("✓ subscription_fee in summary correct")
-            else:
-                print(f"✗ subscription_fee in summary incorrect: {sf}")
-        else:
-            print("✗ subscription_fee not in summary")
-        
-        return print_test_result("Shopify Bills Summary", tests_passed == total_tests, f"{tests_passed}/{total_tests} checks passed")
-        
-    except Exception as e:
-        return print_test_result("Shopify Bills Summary", False, f"Exception: {e}")
-
-def test_dashboard_shopify_charges():
-    """Test GET /api/dashboard?range=30days includes shopifyCharges object"""
-    print("\n🎯 TEST 3: DASHBOARD SHOPIFY CHARGES OBJECT")
-    
-    try:
-        response = safe_request('GET', f"{BASE_URL}/dashboard", 
-                              params={'range': '30days'})
-        if not response:
-            return False
-            
-        if response.status_code != 200:
-            return print_test_result("Dashboard API", False, f"Expected 200, got {response.status_code}")
-        
-        data = response.json()
-        
-        # Check shopifyCharges exists
-        if 'shopifyCharges' not in data:
-            return print_test_result("Shopify charges object", False, "Missing shopifyCharges in dashboard response")
-        
-        shopify_charges = data['shopifyCharges']
-        
-        if shopify_charges is None:
-            return print_test_result("Shopify charges data", False, "shopifyCharges is null (no data imported)")
-        
-        # Check required structure for the imported data
-        # Note: Since we imported data for Feb 2026, we need to test with a range that includes that date
-        # Let's check if orderCommission > 0 (it should be since we imported Feb 2026 data)
-        required_keys = ['orderCommission', 'appFees', 'subscriptionFee', 'total']
-        missing_keys = [key for key in required_keys if key not in shopify_charges]
-        if missing_keys:
-            return print_test_result("Shopify charges structure", False, f"Missing keys: {missing_keys}")
-        
-        # Check values - the data we imported was for Feb 2026, so for a 30-day range, we might not see it
-        # Let's just validate the structure and that it's working
-        tests_passed = 0
-        total_tests = 4
-        
-        if isinstance(shopify_charges.get('orderCommission'), (int, float)) and shopify_charges['orderCommission'] >= 0:
-            tests_passed += 1
-            print(f"✓ orderCommission is numeric: {shopify_charges['orderCommission']}")
-        else:
-            print(f"✗ orderCommission expected numeric >= 0, got {shopify_charges.get('orderCommission')}")
-        
-        if isinstance(shopify_charges.get('appFees'), (int, float)) and shopify_charges['appFees'] >= 0:
-            tests_passed += 1
-            print(f"✓ appFees is numeric: {shopify_charges['appFees']}")
-        else:
-            print(f"✗ appFees expected numeric >= 0, got {shopify_charges.get('appFees')}")
-        
-        if isinstance(shopify_charges.get('subscriptionFee'), (int, float)) and shopify_charges['subscriptionFee'] >= 0:
-            tests_passed += 1
-            print(f"✓ subscriptionFee is numeric: {shopify_charges['subscriptionFee']}")
-        else:
-            print(f"✗ subscriptionFee expected numeric >= 0, got {shopify_charges.get('subscriptionFee')}")
-        
-        if isinstance(shopify_charges.get('total'), (int, float)) and shopify_charges['total'] >= 0:
-            tests_passed += 1
-            print(f"✓ total is numeric: {shopify_charges['total']}")
-        else:
-            print(f"✗ total expected numeric >= 0, got {shopify_charges.get('total')}")
-        
-        return print_test_result("Dashboard Shopify charges", tests_passed == total_tests, f"{tests_passed}/{total_tests} checks passed")
-        
-    except Exception as e:
-        return print_test_result("Dashboard Shopify charges", False, f"Exception: {e}")
-
-def test_dashboard_pl_breakdown():
-    """Test GET /api/dashboard?range=30days includes plBreakdown with razorpayFee and razorpayTax"""
-    print("\n🎯 TEST 4: DASHBOARD P&L BREAKDOWN WITH RAZORPAY FIELDS")
-    
-    try:
-        response = safe_request('GET', f"{BASE_URL}/dashboard", 
-                              params={'range': '30days'})
-        if not response:
-            return False
-            
-        if response.status_code != 200:
-            return print_test_result("Dashboard API", False, f"Expected 200, got {response.status_code}")
-        
-        data = response.json()
-        
-        # Check plBreakdown exists
-        if 'plBreakdown' not in data:
-            return print_test_result("P&L breakdown object", False, "Missing plBreakdown in dashboard response")
-        
-        pl_breakdown = data['plBreakdown']
-        
-        # Check required Razorpay fields
-        required_fields = ['razorpayFee', 'razorpayTax']
-        missing_fields = [field for field in required_fields if field not in pl_breakdown]
-        if missing_fields:
-            return print_test_result("P&L breakdown Razorpay fields", False, f"Missing fields: {missing_fields}")
-        
-        tests_passed = 0
-        total_tests = 2
-        
-        if isinstance(pl_breakdown.get('razorpayFee'), (int, float)) and pl_breakdown['razorpayFee'] >= 0:
-            tests_passed += 1
-            print(f"✓ razorpayFee is numeric: {pl_breakdown['razorpayFee']}")
-        else:
-            print(f"✗ razorpayFee expected numeric >= 0, got {pl_breakdown.get('razorpayFee')}")
-        
-        if isinstance(pl_breakdown.get('razorpayTax'), (int, float)) and pl_breakdown['razorpayTax'] >= 0:
-            tests_passed += 1
-            print(f"✓ razorpayTax is numeric: {pl_breakdown['razorpayTax']}")
-        else:
-            print(f"✗ razorpayTax expected numeric >= 0, got {pl_breakdown.get('razorpayTax')}")
-        
-        return print_test_result("Dashboard P&L breakdown Razorpay fields", tests_passed == total_tests, f"{tests_passed}/{total_tests} checks passed")
-        
-    except Exception as e:
-        return print_test_result("Dashboard P&L breakdown", False, f"Exception: {e}")
-
-def test_dashboard_revenue_split():
-    """Test GET /api/dashboard?range=30days includes revenueSplit with reconciled/unreconciled"""
-    print("\n🎯 TEST 5: DASHBOARD REVENUE SPLIT WITH RECONCILED/UNRECONCILED")
-    
-    try:
-        response = safe_request('GET', f"{BASE_URL}/dashboard", 
-                              params={'range': '30days'})
-        if not response:
-            return False
-            
-        if response.status_code != 200:
-            return print_test_result("Dashboard API", False, f"Expected 200, got {response.status_code}")
-        
-        data = response.json()
-        
-        # Check revenueSplit exists
-        if 'revenueSplit' not in data:
-            return print_test_result("Revenue split object", False, "Missing revenueSplit in dashboard response")
-        
-        revenue_split = data['revenueSplit']
-        
-        # Check required fields
-        required_fields = ['reconciled', 'unreconciled']
-        missing_fields = [field for field in required_fields if field not in revenue_split]
-        if missing_fields:
-            return print_test_result("Revenue split structure", False, f"Missing fields: {missing_fields}")
-        
-        tests_passed = 0
-        total_tests = 6
-        
-        # Check reconciled structure
-        reconciled = revenue_split.get('reconciled', {})
-        reconciled_fields = ['revenue', 'count', 'percent']
-        missing_reconciled = [field for field in reconciled_fields if field not in reconciled]
-        if not missing_reconciled:
-            tests_passed += 1
-            print("✓ reconciled has all required fields")
-        else:
-            print(f"✗ reconciled missing fields: {missing_reconciled}")
-        
-        if isinstance(reconciled.get('revenue'), (int, float)) and reconciled['revenue'] >= 0:
-            tests_passed += 1
-            print(f"✓ reconciled.revenue is numeric: {reconciled['revenue']}")
-        else:
-            print(f"✗ reconciled.revenue expected numeric >= 0, got {reconciled.get('revenue')}")
-        
-        if isinstance(reconciled.get('count'), (int)) and reconciled['count'] >= 0:
-            tests_passed += 1
-            print(f"✓ reconciled.count is numeric: {reconciled['count']}")
-        else:
-            print(f"✗ reconciled.count expected numeric >= 0, got {reconciled.get('count')}")
-        
-        # Check unreconciled structure
-        unreconciled = revenue_split.get('unreconciled', {})
-        unreconciled_fields = ['revenue', 'count', 'percent']
-        missing_unreconciled = [field for field in unreconciled_fields if field not in unreconciled]
-        if not missing_unreconciled:
-            tests_passed += 1
-            print("✓ unreconciled has all required fields")
-        else:
-            print(f"✗ unreconciled missing fields: {missing_unreconciled}")
-        
-        if isinstance(unreconciled.get('revenue'), (int, float)) and unreconciled['revenue'] >= 0:
-            tests_passed += 1
-            print(f"✓ unreconciled.revenue is numeric: {unreconciled['revenue']}")
-        else:
-            print(f"✗ unreconciled.revenue expected numeric >= 0, got {unreconciled.get('revenue')}")
-        
-        if isinstance(unreconciled.get('count'), (int)) and unreconciled['count'] >= 0:
-            tests_passed += 1
-            print(f"✓ unreconciled.count is numeric: {unreconciled['count']}")
-        else:
-            print(f"✗ unreconciled.count expected numeric >= 0, got {unreconciled.get('count')}")
-        
-        return print_test_result("Dashboard revenue split reconciled/unreconciled", tests_passed == total_tests, f"{tests_passed}/{total_tests} checks passed")
-        
-    except Exception as e:
-        return print_test_result("Dashboard revenue split", False, f"Exception: {e}")
-
-def test_shopify_bills_import_empty_csv():
-    """Test POST /api/shopify-bills/import with empty CSV - should return error"""
-    print("\n🎯 TEST 6: SHOPIFY BILLS IMPORT WITH EMPTY CSV")
-    
-    try:
-        # Test with just header row (empty data)
-        empty_csv = '''Bill #,Store Name,Shop ID,.myshopify.com URL,Charge category,Description,Amount,Currency,Start of billing cycle,End of billing cycle,Date,Order,Rate,App,Original amount,Original currency,Exchange rate'''
-        
-        response = safe_request('POST', f"{BASE_URL}/shopify-bills/import",
-                              json={'csvText': empty_csv},
-                              headers={'Content-Type': 'application/json'})
-        if not response:
-            return False
-        
-        data = response.json()
-        
-        # Should return error about empty CSV
-        if 'error' in data and 'empty' in data['error'].lower():
-            return print_test_result("Empty CSV error handling", True, f"Proper error: {data['error']}")
-        elif data.get('imported', -1) == 0:
-            # Alternative: it might import 0 records successfully
-            return print_test_result("Empty CSV handling", True, f"Imported 0 records correctly: {data}")
-        else:
-            return print_test_result("Empty CSV error handling", False, f"Expected error or 0 imports, got: {data}")
-        
-    except Exception as e:
-        return print_test_result("Empty CSV error handling", False, f"Exception: {e}")
-
-def test_cleanup_shopify_bills():
-    """Cleanup: Clear test data by re-importing with empty CSV"""
-    print("\n🧹 CLEANUP: CLEAR SHOPIFY BILLS TEST DATA")
-    
-    try:
-        # Import with just the header row to clear previous test data  
-        header_only_csv = '''Bill #,Store Name,Shop ID,.myshopify.com URL,Charge category,Description,Amount,Currency,Start of billing cycle,End of billing cycle,Date,Order,Rate,App,Original amount,Original currency,Exchange rate'''
-        
-        response = safe_request('POST', f"{BASE_URL}/shopify-bills/import",
-                              json={'csvText': header_only_csv},
-                              headers={'Content-Type': 'application/json'})
-        if not response:
-            return False
-        
-        data = response.json()
-        
-        # Should import 0 charges and clear previous data
-        if data.get('imported', -1) == 0:
-            print("✅ Shopify bills test data cleared successfully")
+        if all_removed:
+            print("✅ TEST 2 PASSED - All Shopify bills functions removed")
             return True
         else:
-            print(f"⚠️ Expected 0 imports for cleanup, got: {data}")
+            print("❌ TEST 2 FAILED - Some functions still exist")
+            return False
+            
+    except Exception as e:
+        print(f"❌ TEST 2 FAILED: {e}")
+        return False
+
+def test_3_expense_categories_api():
+    """Test 3: Expense Categories API"""
+    print("\n🎯 TEST 3: EXPENSE CATEGORIES API")
+    
+    try:
+        # Get expense categories
+        print("Getting expense categories...")
+        response = make_request('GET', '/expense-categories')
+        if not response or response.status_code != 200:
+            print("❌ Failed to get expense categories")
             return False
         
+        categories = response.json()
+        print(f"✅ Got {len(categories)} categories")
+        
+        # Verify structure
+        if not isinstance(categories, list):
+            print("❌ Categories should be an array")
+            return False
+        
+        # Check required categories exist
+        required_categories = [
+            'Platform Fees', 'Salary', 'Raw Material Purchases', 
+            'Operations', 'Utilities'
+        ]
+        
+        category_names = [cat.get('name', '') for cat in categories]
+        
+        for req_cat in required_categories:
+            if req_cat in category_names:
+                print(f"✅ Required category '{req_cat}' exists")
+            else:
+                print(f"❌ Required category '{req_cat}' missing")
+                return False
+        
+        # Verify Platform Fees has required subcategories
+        platform_fees = next((cat for cat in categories if cat.get('name') == 'Platform Fees'), None)
+        if platform_fees:
+            sub_categories = platform_fees.get('subCategories', [])
+            required_subs = ['Shopify Subscription', 'Shopify App Fees']
+            
+            for req_sub in required_subs:
+                if req_sub in sub_categories:
+                    print(f"✅ Platform Fees has subcategory '{req_sub}'")
+                else:
+                    print(f"❌ Platform Fees missing subcategory '{req_sub}'")
+                    return False
+        else:
+            print("❌ Platform Fees category not found")
+            return False
+        
+        print("✅ TEST 3 PASSED - Expense Categories API working correctly")
+        return True
+        
     except Exception as e:
-        print(f"⚠️ Cleanup exception: {e}")
+        print(f"❌ TEST 3 FAILED: {e}")
+        return False
+
+def test_4_enhanced_expense_creation():
+    """Test 4: Enhanced Expense Creation"""
+    print("\n🎯 TEST 4: ENHANCED EXPENSE CREATION")
+    
+    try:
+        # Test 1: Create monthly recurring expense
+        print("Test 4a: Creating monthly recurring expense...")
+        expense_1_data = {
+            "expenseName": "Shopify Plan",
+            "category": "Platform Fees",
+            "subCategory": "Shopify Subscription", 
+            "amount": 2999,
+            "gstInclusive": True,
+            "frequency": "monthly",
+            "totalCycles": 12,
+            "infiniteCycles": False,
+            "date": "2026-03-01"
+        }
+        
+        response = make_request('POST', '/overhead-expenses', expense_1_data)
+        if not response or response.status_code != 201:
+            print("❌ Failed to create monthly expense")
+            return False
+        
+        expense_1 = response.json()
+        created_test_data.append({
+            'type': 'expense', 
+            'id': expense_1.get('_id'), 
+            'name': expense_1_data['expenseName']
+        })
+        
+        # Verify fields
+        required_fields = [
+            'category', 'subCategory', 'gstInclusive', 'frequency', 
+            'totalCycles', 'infiniteCycles', 'currentCycle', 
+            'nextGenerationDate', 'autoGenerated', 'stopped'
+        ]
+        
+        for field in required_fields:
+            if field in expense_1:
+                print(f"✅ Field '{field}' present: {expense_1.get(field)}")
+            else:
+                print(f"❌ Field '{field}' missing")
+                return False
+        
+        # Verify nextGenerationDate is approximately 2026-04-01
+        next_gen_date = expense_1.get('nextGenerationDate', '')
+        if next_gen_date.startswith('2026-04'):
+            print("✅ nextGenerationDate correctly set for next month")
+        else:
+            print(f"❌ nextGenerationDate incorrect: {next_gen_date}")
+            return False
+        
+        # Test 2: Create yearly infinite expense
+        print("Test 4b: Creating yearly infinite expense...")
+        expense_2_data = {
+            "expenseName": "Yearly Insurance",
+            "category": "Operations",
+            "amount": 24000,
+            "frequency": "yearly",
+            "infiniteCycles": True,
+            "date": "2026-01-01"
+        }
+        
+        response = make_request('POST', '/overhead-expenses', expense_2_data)
+        if not response or response.status_code != 201:
+            print("❌ Failed to create yearly expense")
+            return False
+        
+        expense_2 = response.json()
+        created_test_data.append({
+            'type': 'expense', 
+            'id': expense_2.get('_id'), 
+            'name': expense_2_data['expenseName']
+        })
+        
+        # Verify infiniteCycles is true
+        if expense_2.get('infiniteCycles') == True:
+            print("✅ infiniteCycles correctly set to true")
+        else:
+            print(f"❌ infiniteCycles incorrect: {expense_2.get('infiniteCycles')}")
+            return False
+        
+        print("✅ TEST 4 PASSED - Enhanced Expense Creation working correctly")
+        return True
+        
+    except Exception as e:
+        print(f"❌ TEST 4 FAILED: {e}")
+        return False
+
+def test_5_recurring_expense_generation():
+    """Test 5: Recurring Expense Generation"""
+    print("\n🎯 TEST 5: RECURRING EXPENSE GENERATION")
+    
+    try:
+        # Step 1: Create a monthly recurring expense with past start date
+        print("Step 1: Creating past-dated monthly expense...")
+        parent_expense_data = {
+            "expenseName": "Test Monthly",
+            "category": "Utilities", 
+            "amount": 500,
+            "frequency": "monthly",
+            "totalCycles": 3,
+            "date": "2026-01-01"  # Past date
+        }
+        
+        response = make_request('POST', '/overhead-expenses', parent_expense_data)
+        if not response or response.status_code != 201:
+            print("❌ Failed to create parent expense")
+            return False
+        
+        parent_expense = response.json()
+        parent_id = parent_expense.get('_id')
+        created_test_data.append({
+            'type': 'expense', 
+            'id': parent_id, 
+            'name': parent_expense_data['expenseName']
+        })
+        
+        print(f"✅ Created parent expense with ID: {parent_id}")
+        
+        # Step 2: Trigger recurring expense generation
+        print("Step 2: Triggering recurring generation...")
+        response = make_request('POST', '/expense-recurring/generate', {})
+        if not response or response.status_code != 200:
+            print("❌ Failed to trigger generation")
+            return False
+        
+        generation_result = response.json()
+        print(f"✅ Generation result: {generation_result}")
+        
+        # Step 3: Verify child expenses were created
+        print("Step 3: Checking for child expenses...")
+        response = make_request('GET', '/overhead-expenses')
+        if not response or response.status_code != 200:
+            print("❌ Failed to get expenses")
+            return False
+        
+        all_expenses = response.json()
+        
+        # Find child expenses (autoGenerated=true, parentExpenseId matches)
+        child_expenses = [
+            exp for exp in all_expenses 
+            if exp.get('autoGenerated') == True and exp.get('parentExpenseId') == parent_id
+        ]
+        
+        if len(child_expenses) > 0:
+            print(f"✅ Found {len(child_expenses)} child expenses")
+            
+            # Add child expenses to cleanup list
+            for child in child_expenses:
+                created_test_data.append({
+                    'type': 'expense', 
+                    'id': child.get('_id'), 
+                    'name': child.get('expenseName', 'Child Expense')
+                })
+        else:
+            print("❌ No child expenses found")
+            return False
+        
+        # Step 4: Stop the recurring series
+        print("Step 4: Stopping recurring series...")
+        response = make_request('POST', '/expense-recurring/stop', {"expenseId": parent_id})
+        if not response or response.status_code != 200:
+            print("❌ Failed to stop recurring series")
+            return False
+        
+        print("✅ Stopped recurring series")
+        
+        # Step 5: Verify parent expense is marked as stopped
+        print("Step 5: Verifying stopped status...")
+        response = make_request('GET', f'/overhead-expenses/{parent_id}')
+        if not response or response.status_code != 200:
+            print("❌ Failed to get parent expense")
+            return False
+        
+        updated_parent = response.json()
+        if updated_parent.get('stopped') == True:
+            print("✅ Parent expense correctly marked as stopped")
+        else:
+            print(f"❌ Parent expense not stopped: {updated_parent.get('stopped')}")
+            return False
+        
+        print("✅ TEST 5 PASSED - Recurring Expense Generation working correctly")
+        return True
+        
+    except Exception as e:
+        print(f"❌ TEST 5 FAILED: {e}")
+        return False
+
+def test_6_pl_waterfall_breakdown():
+    """Test 6: P&L Waterfall Breakdown"""
+    print("\n🎯 TEST 6: P&L WATERFALL BREAKDOWN")
+    
+    try:
+        # Get dashboard data with P&L breakdown
+        print("Getting dashboard P&L breakdown...")
+        response = make_request('GET', '/dashboard', {'range': '7days'})
+        if not response or response.status_code != 200:
+            print("❌ Failed to get dashboard data")
+            return False
+        
+        dashboard = response.json()
+        pl_breakdown = dashboard.get('plBreakdown', {})
+        
+        # Check all required 17 keys
+        required_keys = [
+            'grossRevenue', 'discount', 'refunds', 'gstOnRevenue', 'netRevenue',
+            'totalCOGS', 'totalShipping', 'totalTxnFees', 'razorpayFee', 'razorpayTax',
+            'shopifyTxnFee', 'shopifyTxnGST', 'totalShopifyFee', 'adSpend', 
+            'overhead', 'overheadCategoryBreakdown', 'netProfit'
+        ]
+        
+        missing_keys = []
+        for key in required_keys:
+            if key in pl_breakdown:
+                print(f"✅ Key '{key}' present: {pl_breakdown.get(key)}")
+            else:
+                print(f"❌ Key '{key}' missing")
+                missing_keys.append(key)
+        
+        if missing_keys:
+            print(f"❌ Missing keys: {missing_keys}")
+            return False
+        
+        # Verify overheadCategoryBreakdown is an array
+        category_breakdown = pl_breakdown.get('overheadCategoryBreakdown', [])
+        if isinstance(category_breakdown, list):
+            print(f"✅ overheadCategoryBreakdown is array with {len(category_breakdown)} categories")
+            
+            # Check structure of first category if exists
+            if len(category_breakdown) > 0:
+                first_cat = category_breakdown[0]
+                required_cat_fields = ['category', 'total', 'items']
+                
+                for field in required_cat_fields:
+                    if field in first_cat:
+                        print(f"✅ Category has field '{field}': {first_cat.get(field)}")
+                    else:
+                        print(f"❌ Category missing field '{field}'")
+                        return False
+        else:
+            print("❌ overheadCategoryBreakdown is not an array")
+            return False
+        
+        # Verify waterfall math
+        print("Verifying waterfall math...")
+        net_revenue = pl_breakdown.get('netRevenue', 0)
+        total_cogs = pl_breakdown.get('totalCOGS', 0)
+        total_shipping = pl_breakdown.get('totalShipping', 0)
+        total_txn_fees = pl_breakdown.get('totalTxnFees', 0)
+        total_shopify_fee = pl_breakdown.get('totalShopifyFee', 0)
+        ad_spend = pl_breakdown.get('adSpend', 0)
+        overhead = pl_breakdown.get('overhead', 0)
+        net_profit = pl_breakdown.get('netProfit', 0)
+        
+        calculated_profit = net_revenue - total_cogs - total_shipping - total_txn_fees - total_shopify_fee - ad_spend - overhead
+        profit_diff = abs(net_profit - calculated_profit)
+        
+        print(f"   Net Revenue: ₹{net_revenue}")
+        print(f"   Total COGS: ₹{total_cogs}")
+        print(f"   Total Shipping: ₹{total_shipping}")
+        print(f"   Total Txn Fees: ₹{total_txn_fees}")
+        print(f"   Total Shopify Fee: ₹{total_shopify_fee}")
+        print(f"   Ad Spend: ₹{ad_spend}")
+        print(f"   Overhead: ₹{overhead}")
+        print(f"   Calculated Profit: ₹{calculated_profit}")
+        print(f"   Actual Net Profit: ₹{net_profit}")
+        print(f"   Difference: ₹{profit_diff}")
+        
+        if profit_diff <= 1:  # Allow ₹1 difference for rounding
+            print("✅ Waterfall math verified (within ±1)")
+        else:
+            print("❌ Waterfall math mismatch")
+            return False
+        
+        print("✅ TEST 6 PASSED - P&L Waterfall Breakdown working correctly")
+        return True
+        
+    except Exception as e:
+        print(f"❌ TEST 6 FAILED: {e}")
+        return False
+
+def test_7_expense_categories_save():
+    """Test 7: Expense Categories Save"""
+    print("\n🎯 TEST 7: EXPENSE CATEGORIES SAVE")
+    
+    try:
+        # Step 1: Save custom category
+        print("Step 1: Saving custom category...")
+        custom_categories = {
+            "categories": [
+                {
+                    "name": "TestCat",
+                    "subCategories": ["Sub1", "Sub2"]
+                }
+            ]
+        }
+        
+        response = make_request('POST', '/expense-categories/save', custom_categories)
+        if not response or response.status_code != 200:
+            print("❌ Failed to save custom categories")
+            return False
+        
+        print("✅ Custom categories saved")
+        
+        # Step 2: Verify custom category exists
+        print("Step 2: Verifying custom category...")
+        response = make_request('GET', '/expense-categories')
+        if not response or response.status_code != 200:
+            print("❌ Failed to get categories")
+            return False
+        
+        categories = response.json()
+        test_cat = next((cat for cat in categories if cat.get('name') == 'TestCat'), None)
+        
+        if test_cat:
+            print("✅ TestCat category found")
+            
+            sub_categories = test_cat.get('subCategories', [])
+            if 'Sub1' in sub_categories and 'Sub2' in sub_categories:
+                print("✅ Sub1 and Sub2 subcategories found")
+            else:
+                print(f"❌ Subcategories incorrect: {sub_categories}")
+                return False
+        else:
+            print("❌ TestCat category not found")
+            return False
+        
+        # Step 3: Restore original categories (if seed endpoint exists)
+        print("Step 3: Attempting to restore original categories...")
+        
+        # Try seeding endpoint first
+        seed_response = make_request('POST', '/expense-categories', {"action": "seed"})
+        if seed_response and seed_response.status_code == 200:
+            print("✅ Restored via seed endpoint")
+        else:
+            # Fallback: save the original required categories
+            print("Falling back to manual restoration...")
+            original_categories = {
+                "categories": [
+                    {
+                        "name": "Platform Fees",
+                        "subCategories": ["Shopify Subscription", "Shopify App Fees", "Payment Gateway", "Third Party Tools"]
+                    },
+                    {
+                        "name": "Salary", 
+                        "subCategories": ["Production Staff", "Management", "Contractors", "Freelancers"]
+                    },
+                    {
+                        "name": "Raw Material Purchases",
+                        "subCategories": ["Primary Ingredients", "Secondary Ingredients", "Packaging Materials", "Consumables"]
+                    },
+                    {
+                        "name": "Operations",
+                        "subCategories": ["Rent", "Insurance", "Legal & Compliance", "Equipment"]
+                    },
+                    {
+                        "name": "Utilities",
+                        "subCategories": ["Electricity", "Water", "Internet", "Phone"]
+                    }
+                ]
+            }
+            
+            restore_response = make_request('POST', '/expense-categories/save', original_categories)
+            if restore_response and restore_response.status_code == 200:
+                print("✅ Restored original categories manually")
+            else:
+                print("⚠️ Could not restore original categories - manual cleanup may be needed")
+        
+        print("✅ TEST 7 PASSED - Expense Categories Save working correctly")
+        return True
+        
+    except Exception as e:
+        print(f"❌ TEST 7 FAILED: {e}")
         return False
 
 def main():
-    print("🚀 PHASE 9B - SHOPIFY BILLS IMPORT AND EXPANDED P&L TESTING")
-    print("=" * 70)
-    print(f"Base URL: {BASE_URL}")
-    print("Testing Shopify Bills Import and expanded P&L features...")
+    """Run all Phase 9C/9D/9E tests"""
+    print("🚀 STARTING PHASE 9C/9D/9E BACKEND TESTING")
+    print("=" * 60)
     
-    all_tests = []
+    # Test results tracking
+    test_results = {}
     
-    # Test 1: Shopify Bills Import with CSV data
-    all_tests.append(test_shopify_bills_import())
+    try:
+        # Run all tests
+        test_results['test_1_shopify_txn_fee'] = test_1_shopify_txn_fee_rate()
+        test_results['test_2_bills_code_removed'] = test_2_shopify_bills_code_removed()
+        test_results['test_3_expense_categories'] = test_3_expense_categories_api()
+        test_results['test_4_enhanced_expenses'] = test_4_enhanced_expense_creation()
+        test_results['test_5_recurring_generation'] = test_5_recurring_expense_generation()
+        test_results['test_6_pl_waterfall'] = test_6_pl_waterfall_breakdown()
+        test_results['test_7_categories_save'] = test_7_expense_categories_save()
+        
+    except KeyboardInterrupt:
+        print("\n⚠️ Testing interrupted by user")
+    except Exception as e:
+        print(f"\n❌ Unexpected error during testing: {e}")
+    finally:
+        # Always run cleanup
+        cleanup_test_data()
     
-    # Test 2: Shopify Bills Summary after import
-    all_tests.append(test_shopify_bills_summary())
+    # Print final results
+    print("\n" + "=" * 60)
+    print("📊 FINAL TEST RESULTS")
+    print("=" * 60)
     
-    # Test 3: Dashboard shopifyCharges object 
-    all_tests.append(test_dashboard_shopify_charges())
+    passed_tests = sum(1 for result in test_results.values() if result)
+    total_tests = len(test_results)
     
-    # Test 4: Dashboard P&L breakdown with Razorpay fields
-    all_tests.append(test_dashboard_pl_breakdown())
+    for test_name, result in test_results.items():
+        status = "✅ PASSED" if result else "❌ FAILED"
+        print(f"{test_name}: {status}")
     
-    # Test 5: Dashboard revenue split with reconciled/unreconciled
-    all_tests.append(test_dashboard_revenue_split())
-    
-    # Test 6: Shopify Bills Import error handling (empty CSV)
-    all_tests.append(test_shopify_bills_import_empty_csv())
-    
-    # Cleanup
-    cleanup_success = test_cleanup_shopify_bills()
-    
-    # Summary
-    passed_tests = sum(all_tests)
-    total_tests = len(all_tests)
-    
-    print("\n" + "=" * 70)
-    print("📊 SHOPIFY BILLS IMPORT & P&L TEST RESULTS")
-    print("=" * 70)
-    print(f"✅ Passed: {passed_tests}/{total_tests} tests")
+    print("-" * 60)
+    print(f"SUMMARY: {passed_tests}/{total_tests} tests passed")
     
     if passed_tests == total_tests:
-        print("🎉 ALL SHOPIFY BILLS IMPORT & P&L TESTS PASSED!")
-        if cleanup_success:
-            print("🧹 Cleanup completed successfully")
-        else:
-            print("⚠️ Cleanup had issues but tests passed")
+        print("🎉 ALL TESTS PASSED - Phase 9C/9D/9E backend is fully functional!")
+        return True
     else:
-        print("❌ Some tests failed - check details above")
-        failed_tests = total_tests - passed_tests
-        print(f"🔍 {failed_tests} test(s) need attention")
-    
-    print("=" * 70)
-    
-    return passed_tests == total_tests
+        print("⚠️ Some tests failed - review the output above for details")
+        return False
 
 if __name__ == "__main__":
     success = main()
-    sys.exit(0 if success else 1)
+    exit(0 if success else 1)
