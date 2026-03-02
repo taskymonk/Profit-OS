@@ -33,12 +33,14 @@ export default function ExpensesView() {
     expenseName: '', category: '', subCategory: '', amount: '',
     gstInclusive: false, frequency: 'monthly', totalCycles: '12',
     infiniteCycles: false, date: new Date().toISOString().split('T')[0],
+    inventoryItemId: '', inventoryItemName: '', purchaseQty: '',
   });
 
   // Category manager state
   const [catEditing, setCatEditing] = useState([]);
   const [newCatName, setNewCatName] = useState('');
   const [newSubCat, setNewSubCat] = useState({});
+  const [inventoryItems, setInventoryItems] = useState([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
