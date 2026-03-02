@@ -1857,6 +1857,27 @@ export async function GET(request) {
         if (subResource) return json(await getDoc('overheadExpenses', subResource));
         return json(await listDocs('overheadExpenses'));
 
+      case 'expense-categories': {
+        const db = await getDb();
+        let categories = await db.collection('expenseCategories').find({}).sort({ name: 1 }).toArray();
+        
+        // If empty, seed with defaults
+        if (categories.length === 0) {
+          const defaults = [
+            { _id: uuidv4(), name: 'Platform Fees', subCategories: ['Shopify Subscription', 'Shopify App Fees', 'Other Platform Fees'], updatedAt: new Date().toISOString() },
+            { _id: uuidv4(), name: 'Salary', subCategories: ['Packing Staff', 'Admin', 'Delivery'], updatedAt: new Date().toISOString() },
+            { _id: uuidv4(), name: 'Raw Material Purchases', subCategories: [], updatedAt: new Date().toISOString() },
+            { _id: uuidv4(), name: 'Operations', subCategories: ['Packaging Supplies', 'Office Supplies'], updatedAt: new Date().toISOString() },
+            { _id: uuidv4(), name: 'Utilities', subCategories: ['Internet', 'Electricity', 'Rent'], updatedAt: new Date().toISOString() },
+            { _id: uuidv4(), name: 'Marketing', subCategories: ['Influencer Marketing', 'Offline Ads'], updatedAt: new Date().toISOString() },
+          ];
+          await db.collection('expenseCategories').insertMany(defaults);
+          categories = defaults;
+        }
+        return json(categories);
+      }
+
+
       case 'inventory-items': {
         if (subResource) return json(await getDoc('inventoryItems', subResource));
         const db = await getDb();
