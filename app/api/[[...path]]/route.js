@@ -129,6 +129,7 @@ async function seedData() {
       supportedCurrencies: ['INR', 'USD'],
       timezone: 'Asia/Kolkata',
       gstRate: 18,
+      shopifyTxnFeeRate: 2,
       integrations: { shopifyActive: false, indiaPostActive: false, metaAdsActive: false },
       maxOrdersPerMonth: 5000,
       allowEmployeeTracking: true,
