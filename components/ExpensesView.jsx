@@ -341,6 +341,46 @@ export default function ExpensesView() {
                 <Label className="text-sm">Amount includes GST (18%)</Label>
               </div>
             </div>
+            {/* Inventory Bridge: Show when category is Raw Material Purchases */}
+            {form.category === 'Raw Material Purchases' && inventoryItems.length > 0 && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3 space-y-3">
+                <p className="text-sm font-medium text-blue-700 flex items-center gap-1.5">
+                  <Package className="h-3.5 w-3.5" /> Link to Inventory Item (creates stock batch)
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Inventory Item</Label>
+                    <Select value={form.inventoryItemId || 'none'} onValueChange={v => {
+                      const item = inventoryItems.find(i => i._id === v);
+                      setForm({ ...form, inventoryItemId: v === 'none' ? '' : v, inventoryItemName: item?.name || '' });
+                    }}>
+                      <SelectTrigger className="bg-white"><SelectValue placeholder="Select item" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— No link —</SelectItem>
+                        {inventoryItems.map(item => (
+                          <SelectItem key={item._id} value={item._id}>
+                            {item.name} ({item.unit}) — Stock: {item.currentStock || 0}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.inventoryItemId && (
+                    <div>
+                      <Label className="text-xs">Purchase Quantity</Label>
+                      <Input type="number" className="bg-white" value={form.purchaseQty}
+                        onChange={e => setForm({ ...form, purchaseQty: e.target.value })}
+                        placeholder="e.g. 500" />
+                      {form.purchaseQty && form.amount && (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Cost/unit: ₹{(parseFloat(form.amount) / parseFloat(form.purchaseQty)).toFixed(2)}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             <Separator />
             <div className="grid grid-cols-3 gap-3">
               <div>
