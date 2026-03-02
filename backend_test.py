@@ -437,7 +437,7 @@ def test_7_low_stock_alert():
     print(f"    ✅ Consumed 1550 units")
     
     # Check stock summary for low stock flag
-    inventory_summary = test_api_call('GET', '/stock/summary')
+    inventory_summary = test_api_call('GET', '/inventory-items')
     if not inventory_summary:
         return False
         
