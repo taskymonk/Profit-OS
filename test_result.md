@@ -697,7 +697,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -745,7 +745,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -784,7 +784,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -1739,7 +1739,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -1787,7 +1787,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -1826,7 +1826,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -2487,6 +2487,25 @@ Test these endpoints:
 
 **PHASE 9F FIFO INVENTORY + RECIPE TEMPLATES UI TESTING COMPLETE - ALL SYSTEMS FULLY FUNCTIONAL!** Frontend perfectly integrated with backend FIFO system, ready for production use."
     - agent: "main"
+      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
+    - agent: "testing"
+      message: "🎉 ICON UPLOAD & BRANDING SETTINGS TESTING COMPLETE - BOTH FEATURES FULLY FUNCTIONAL!
+
+🎯 **ICON UPLOAD API** (POST /api/upload-icon): ✅ ALL TESTS PASSED
+- ✅ Valid icon upload: Returns 200 with proper {message, icon} structure
+- ✅ Icon data matches: Sent data exactly matches returned icon field
+- ✅ Persistence verified: Icon correctly saved to tenantConfig.icon field via GET /api/tenant-config
+- ✅ Error handling: Empty payload returns 400 with proper error message
+- ✅ Cleanup successful: Test icon cleared via PUT /api/tenant-config
+
+🎯 **BRANDING SETTINGS PERSISTENCE** (PUT /api/tenant-config): ✅ ALL TESTS PASSED  
+- ✅ Original values retrieved: primaryColor=#1cc1ff, themePreference=system
+- ✅ Settings update successful: PUT request returns 200 status
+- ✅ Persistence verified: primaryColor=#FF0000 and themePreference=dark correctly saved and retrieved
+- ✅ Restoration working: Original values successfully restored after testing
+
+**BOTH BACKEND FEATURES PRODUCTION-READY!** Icon upload API handles base64 data URLs with proper validation and persistence. Branding settings (primaryColor, themePreference) save correctly via tenant-config endpoint. All test data cleaned up successfully."
+    - agent: "main"
       message: "PHASE 9F: FIFO INVENTORY COSTING TESTING NEEDED. Base URL: http://localhost:3000/api. Test these 8 areas:
 
 1. **INVENTORY ITEMS WITH STOCK**:
@@ -2713,7 +2732,7 @@ Clean up: Reset the 3 test recipes back to needsCostInput=true, ingredients=[] u
 **MINOR ISSUE IDENTIFIED:**
 The GET /api/recipe-templates/{id} endpoint returns 200 with null for missing templates instead of 404. This is a minor API implementation issue - the deletion functionality works correctly (template is removed from database), but the HTTP status code should be 404 for missing resources.
 
-**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api"
+**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://settings-overhaul-5.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 9G COMPREHENSIVE UX OPTIMIZATION TESTING COMPLETE - ALL 7 BACKEND FEATURES FULLY TESTED!
 
@@ -2858,8 +2877,38 @@ backend:
         agent: "testing"
         comment: "✅ TESTED - Recipe unlink endpoint fully functional. Comprehensive test flow: created template with ingredients → applied to recipe → verified templateId and ingredients set → called unlink endpoint → verified templateId cleared to null and ingredients array cleared to empty. Template cleanup successful."
 
+  - task: "Icon Upload API - POST /api/upload-icon"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New POST /api/upload-icon endpoint. Accepts {imageData: base64DataUrl, fileName: string}. Saves icon to tenantConfig.icon field. Returns {message, icon}."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Icon Upload API fully functional. Successfully tested: (1) Valid upload with base64 PNG data - returns 200 with correct {message, icon} structure, icon data matches sent data, (2) Persistence verification - icon correctly saved to tenantConfig.icon field via GET /api/tenant-config, (3) Error handling - empty payload returns 400 with proper error message, (4) Cleanup successful - test icon cleared via PUT /api/tenant-config. All 4 test steps passed."
+
+  - task: "Branding Settings Persistence (primaryColor, themePreference, icon via tenant-config)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "PUT /api/tenant-config already supports saving any field via $set. Verified primaryColor and themePreference are in seed data. Frontend now sends icon, primaryColor, themePreference as part of config save."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Branding Settings Persistence fully functional. Successfully tested: (1) Retrieved original config values (primaryColor: #00a7d1, themePreference: system), (2) Updated settings to primaryColor: #FF0000 and themePreference: dark via PUT /api/tenant-config - returned 200, (3) Verified persistence via GET /api/tenant-config - settings correctly saved and retrieved, (4) Restored original values successfully. All 4 test steps passed with proper save/restore functionality."
+
 test_instructions: |
-  Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api
+  Base URL: https://settings-overhaul-5.preview.emergentagent.com/api
   Test each new endpoint:
   1. GET /api/reports/monthly-pl - should return array of monthly P&L objects
   2. GET /api/reports/customer-repeat?startDate=2024-01-01&endDate=2026-12-31 - should return summary + topRepeatCustomers

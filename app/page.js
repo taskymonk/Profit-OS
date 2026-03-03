@@ -40,7 +40,70 @@ export default function App() {
   const [tenantConfig, setTenantConfig] = useState(null);
   const [dataReady, setDataReady] = useState(false);
 
-  // Load tenant config on mount — NO auto-seeding (live mode)
+  // Hex to HSL converter for CSS variables
+  const hexToHSL = useCallback((hex) => {
+    if (!hex) return null;
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    let h = 0, s = 0, l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max) {
+        case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+        case g: h = ((b - r) / d + 2) / 6; break;
+        case b: h = ((r - g) / d + 4) / 6; break;
+      }
+    }
+    return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+  }, []);
+
+  // Apply primary color to CSS variables
+  const applyPrimaryColor = useCallback((hex) => {
+    if (!hex) return;
+    const hsl = hexToHSL(hex);
+    if (hsl) {
+      document.documentElement.style.setProperty('--primary', hsl);
+      // Generate foreground (white for dark colors, dark for light ones)
+      const l = parseInt(hsl.split('%')[0].split(' ').pop());
+      document.documentElement.style.setProperty('--primary-foreground', l > 55 ? '0 0% 10%' : '0 0% 100%');
+    }
+  }, [hexToHSL]);
+
+  // Apply theme preference
+  const applyTheme = useCallback((preference) => {
+    if (preference === 'dark') {
+      setDarkMode(true);
+      document.documentElement.classList.add('dark');
+    } else if (preference === 'light') {
+      setDarkMode(false);
+      document.documentElement.classList.remove('dark');
+    } else {
+      // system
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setDarkMode(prefersDark);
+      if (prefersDark) document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  // Set favicon from icon
+  const setFavicon = useCallback((iconDataUrl) => {
+    if (!iconDataUrl) return;
+    let link = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = iconDataUrl;
+  }, []);
+
+  // Load tenant config on mount
   useEffect(() => {
     async function init() {
       try {
@@ -48,10 +111,11 @@ export default function App() {
         const config = await configRes.json();
         if (config && config.tenantName) {
           setTenantConfig(config);
-          if (config.themePreference === 'dark') {
-            setDarkMode(true);
-            document.documentElement.classList.add('dark');
-          }
+          if (config.primaryColor) applyPrimaryColor(config.primaryColor);
+          applyTheme(config.themePreference || 'system');
+          // Set favicon from icon (or logo fallback)
+          if (config.icon) setFavicon(config.icon);
+          else if (config.logo) setFavicon(config.logo);
         }
         setDataReady(true);
       } catch (err) {
@@ -60,7 +124,7 @@ export default function App() {
       }
     }
     init();
-  }, []);
+  }, [applyPrimaryColor, applyTheme, setFavicon]);
 
   const toggleDarkMode = useCallback(() => {
     setDarkMode(prev => {
@@ -70,6 +134,12 @@ export default function App() {
       } else {
         document.documentElement.classList.remove('dark');
       }
+      // Save preference to backend
+      fetch('/api/tenant-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themePreference: next ? 'dark' : 'light' }),
+      }).catch(() => {});
       return next;
     });
   }, []);
@@ -115,26 +185,35 @@ export default function App() {
         ${sidebarOpen ? 'w-64' : 'w-[70px]'}
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        {/* Logo */}
-        <div className="flex items-center h-16 px-4 border-b border-sidebar-border">
-          <div className={`flex items-center gap-3 overflow-hidden ${!sidebarOpen && 'justify-center'}`}>
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0 overflow-hidden">
+        {/* Logo Area */}
+        <div className={`flex items-center border-b border-sidebar-border ${sidebarOpen ? 'h-16 px-4' : 'h-16 px-2 justify-center'}`}>
+          {sidebarOpen ? (
+            <div className="flex flex-col justify-center w-full overflow-hidden">
               {tenantConfig?.logo ? (
-                <img src={tenantConfig.logo} alt="" className="w-full h-full object-contain"
-                  onError={(e) => { e.target.style.display = 'none'; }} />
+                <>
+                  <img src={tenantConfig.logo} alt={tenantConfig?.tenantName || ''} className="max-h-8 w-auto object-contain object-left"
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling && (e.target.nextElementSibling.style.display = 'block'); }} />
+                  <span className="hidden font-bold text-sidebar-foreground text-sm truncate">{tenantConfig?.tenantName || 'Profit OS'}</span>
+                  <p className="text-[9px] text-muted-foreground mt-0.5 tracking-wide">True Profit OS</p>
+                </>
               ) : (
-                <TrendingUp className="w-5 h-5 text-primary-foreground" />
+                <>
+                  <h1 className="font-bold text-sidebar-foreground text-sm truncate">{tenantConfig?.tenantName || 'Profit OS'}</h1>
+                  <p className="text-[9px] text-muted-foreground tracking-wide">True Profit OS</p>
+                </>
               )}
             </div>
-            {sidebarOpen && (
-              <div className="min-w-0">
-                <h1 className="font-bold text-sidebar-foreground text-sm truncate">
-                  {tenantConfig?.tenantName || 'Profit OS'}
-                </h1>
-                <p className="text-[10px] text-muted-foreground">True Profit Engine</p>
-              </div>
-            )}
-          </div>
+          ) : (
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+              {tenantConfig?.icon ? (
+                <img src={tenantConfig.icon} alt="" className="w-full h-full object-contain" />
+              ) : tenantConfig?.logo ? (
+                <img src={tenantConfig.logo} alt="" className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-lg font-bold text-primary">{(tenantConfig?.tenantName || 'P')[0]}</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Nav Items */}

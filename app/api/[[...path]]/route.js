@@ -2432,6 +2432,15 @@ export async function POST(request) {
         return json({ message: 'Logo uploaded successfully', logo: imageData });
       }
 
+      case 'upload-icon': {
+        // Handle icon upload as base64 (for collapsed sidebar & favicon)
+        const db = await getDb();
+        const { imageData, fileName } = body;
+        if (!imageData) return json({ error: 'No image data provided' }, 400);
+        await db.collection('tenantConfig').updateOne({}, { $set: { icon: imageData, updatedAt: new Date().toISOString() } });
+        return json({ message: 'Icon uploaded successfully', icon: imageData });
+      }
+
       case 'purge': {
         // Selective purge or full purge
         const db = await getDb();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,13 +9,88 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle, Globe, DollarSign, Settings2, ToggleLeft } from 'lucide-react';
+import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle, Globe, DollarSign, Settings2, ToggleLeft, Upload, Image, Check, Sun, Moon, Monitor } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
+// Preset brand color swatches
+const COLOR_PRESETS = [
+  { hex: '#059669', name: 'Emerald' },
+  { hex: '#2563EB', name: 'Blue' },
+  { hex: '#4F46E5', name: 'Indigo' },
+  { hex: '#7C3AED', name: 'Violet' },
+  { hex: '#DB2777', name: 'Pink' },
+  { hex: '#DC2626', name: 'Red' },
+  { hex: '#EA580C', name: 'Orange' },
+  { hex: '#D97706', name: 'Amber' },
+  { hex: '#0D9488', name: 'Teal' },
+  { hex: '#475569', name: 'Slate' },
+];
+
+// Helper: Hex to HSL for CSS variable application
+function hexToHSL(hex) {
+  if (!hex) return null;
+  hex = hex.replace('#', '');
+  if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+  const r = parseInt(hex.substring(0, 2), 16) / 255;
+  const g = parseInt(hex.substring(2, 4), 16) / 255;
+  const b = parseInt(hex.substring(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+}
+
+// Helper: Extract dominant colors from an image using canvas pixel sampling
+function extractColorsFromImage(imgSrc) {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 50; // sample at small size
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+      const colorMap = {};
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+        if (a < 128) continue; // skip transparent pixels
+        // Quantize to reduce noise (group similar colors)
+        const qr = Math.round(r / 32) * 32;
+        const qg = Math.round(g / 32) * 32;
+        const qb = Math.round(b / 32) * 32;
+        // Skip near-white (bg) and near-black
+        const brightness = (qr + qg + qb) / 3;
+        if (brightness > 230 || brightness < 25) continue;
+        const key = `${qr},${qg},${qb}`;
+        colorMap[key] = (colorMap[key] || 0) + 1;
+      }
+      const sorted = Object.entries(colorMap).sort((a, b) => b[1] - a[1]);
+      const topColors = sorted.slice(0, 3).map(([rgb]) => {
+        const [r, g, b] = rgb.split(',').map(Number);
+        return '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
+      });
+      resolve(topColors);
+    };
+    img.onerror = () => resolve([]);
+    img.src = imgSrc;
+  });
+}
+
 export default function SettingsView() {
   const [config, setConfig] = useState({
-    tenantName: '', logo: '', primaryColor: '#059669', themePreference: 'system',
+    tenantName: '', logo: '', icon: '', primaryColor: '#059669', themePreference: 'system',
     baseCurrency: 'INR', supportedCurrencies: ['INR', 'USD'], timezone: 'Asia/Kolkata',
     gstRate: 18, shopifyTxnFeeRate: 2, adSpendTaxRate: 18, allowEmployeeTracking: true,
     integrations: { shopifyActive: false, indiaPostActive: false, metaAdsActive: false },
@@ -25,24 +100,76 @@ export default function SettingsView() {
   const [purging, setPurging] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [purgeType, setPurgeType] = useState('all');
+  const [suggestedColors, setSuggestedColors] = useState([]);
+  const [liveColor, setLiveColor] = useState('#059669');
+  const colorInputRef = useRef(null);
 
   useEffect(() => {
     async function load() {
       try {
         const res = await fetch('/api/tenant-config');
         const data = await res.json();
-        if (data && data.tenantName) setConfig(prev => ({ ...prev, ...data }));
+        if (data && data.tenantName) {
+          setConfig(prev => ({ ...prev, ...data }));
+          setLiveColor(data.primaryColor || '#059669');
+        }
       } catch (err) { console.error(err); }
     }
     load();
   }, []);
 
+  // Extract colors from logo when logo changes
+  useEffect(() => {
+    if (config.logo && config.logo.startsWith('data:')) {
+      extractColorsFromImage(config.logo).then(colors => {
+        setSuggestedColors(colors);
+      });
+    } else {
+      setSuggestedColors([]);
+    }
+  }, [config.logo]);
+
+  // Live preview: apply color to CSS variables in real-time
+  const applyColorLive = useCallback((hex) => {
+    setLiveColor(hex);
+    const hsl = hexToHSL(hex);
+    if (hsl) {
+      document.documentElement.style.setProperty('--primary', hsl);
+      const l = parseInt(hsl.split('%')[0].split(' ').pop());
+      document.documentElement.style.setProperty('--primary-foreground', l > 55 ? '0 0% 10%' : '0 0% 100%');
+    }
+  }, []);
+
+  // Apply theme live
+  const applyThemeLive = useCallback((preference) => {
+    if (preference === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else if (preference === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const selectColor = (hex) => {
+    setConfig(prev => ({ ...prev, primaryColor: hex }));
+    applyColorLive(hex);
+  };
+
+  const selectTheme = (pref) => {
+    setConfig(prev => ({ ...prev, themePreference: pref }));
+    applyThemeLive(pref);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Remove maxOrdersPerMonth from config before saving
       const saveData = { ...config };
       delete saveData.maxOrdersPerMonth;
+      delete saveData._id;
+      delete saveData.createdAt;
       await fetch('/api/tenant-config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -51,6 +178,36 @@ export default function SettingsView() {
       toast.success('Settings saved!');
     } catch (err) { toast.error('Failed to save'); }
     setSaving(false);
+  };
+
+  const handleFileUpload = async (file, type) => {
+    if (!file) return;
+    const maxSize = type === 'logo' ? 500 * 1024 : 200 * 1024;
+    const label = type === 'logo' ? 'Logo' : 'Icon';
+    if (file.size > maxSize) {
+      toast.error(`${label} must be under ${maxSize / 1024}KB`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target.result;
+      try {
+        const endpoint = type === 'logo' ? '/api/upload-logo' : '/api/upload-icon';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageData: base64, fileName: file.name }),
+        });
+        const data = await res.json();
+        if (data[type]) {
+          setConfig(prev => ({ ...prev, [type]: data[type] }));
+          toast.success(`${label} uploaded!`);
+        } else {
+          toast.error(data.error || 'Upload failed');
+        }
+      } catch (err) { toast.error('Upload failed'); }
+    };
+    reader.readAsDataURL(file);
   };
 
   const purgeOptions = [
@@ -76,7 +233,7 @@ export default function SettingsView() {
           { label: 'Ad Spend Tax', done: (config.adSpendTaxRate || 0) > 0, value: `${config.adSpendTaxRate || 0}%` },
           { label: 'Business Name', done: config.tenantName && config.tenantName !== 'My Business', value: config.tenantName || 'Not set' },
         ].map((item, i) => (
-          <div key={i} className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${item.done ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+          <div key={i} className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${item.done ? 'border-green-200 bg-green-50 dark:bg-green-950/30 dark:border-green-800' : 'border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800'}`}>
             {item.done ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
             <div>
               <p className="font-medium">{item.label}</p>
@@ -94,89 +251,215 @@ export default function SettingsView() {
             <div><CardTitle className="text-base">Brand & Identity</CardTitle><CardDescription>Customize your dashboard branding</CardDescription></div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div><Label>Business Name</Label><Input value={config.tenantName} onChange={e => setConfig({...config, tenantName: e.target.value})} /></div>
+        <CardContent className="space-y-5">
+          {/* Business Name */}
           <div>
-            <Label>Logo</Label>
+            <Label>Business Name</Label>
+            <Input value={config.tenantName} onChange={e => setConfig({...config, tenantName: e.target.value})} className="mt-1" />
+          </div>
+
+          {/* Logo Upload */}
+          <div>
+            <Label className="flex items-center gap-1.5">
+              <Image className="w-3.5 h-3.5" /> Logo
+              <span className="text-[10px] text-muted-foreground font-normal ml-1">Displayed in expanded sidebar</span>
+            </Label>
             <div className="flex items-start gap-4 mt-1.5">
-              {/* Logo Preview */}
-              <div className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden shrink-0">
+              <div className="w-48 h-14 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden shrink-0">
                 {config.logo ? (
-                  <img src={config.logo} alt="Logo" className="w-full h-full object-contain"
-                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                  />
-                ) : null}
-                <div className={`w-full h-full flex items-center justify-center text-muted-foreground ${config.logo ? 'hidden' : ''}`}>
-                  <Building2 className="w-8 h-8" />
-                </div>
+                  <img src={config.logo} alt="Logo" className="max-h-full max-w-full object-contain" />
+                ) : (
+                  <span className="text-xs text-muted-foreground">No logo</span>
+                )}
               </div>
               <div className="flex-1 space-y-2">
-                {/* Upload Button */}
-                <div>
-                  <input type="file" accept="image/*" className="hidden" id="logo-upload"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      if (file.size > 500 * 1024) { toast.error('Logo must be under 500KB'); return; }
-                      const reader = new FileReader();
-                      reader.onload = async (ev) => {
-                        const base64 = ev.target.result;
-                        try {
-                          const res = await fetch('/api/upload-logo', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ imageData: base64, fileName: file.name }),
-                          });
-                          const data = await res.json();
-                          if (data.logo) {
-                            setConfig(prev => ({ ...prev, logo: data.logo }));
-                            toast.success('Logo uploaded!');
-                          } else {
-                            toast.error(data.error || 'Upload failed');
-                          }
-                        } catch (err) { toast.error('Upload failed'); }
-                      };
-                      reader.readAsDataURL(file);
-                      e.target.value = '';
-                    }}
-                  />
+                <input type="file" accept="image/*" className="hidden" id="logo-upload"
+                  onChange={(e) => {
+                    handleFileUpload(e.target.files?.[0], 'logo');
+                    e.target.value = '';
+                  }}
+                />
+                <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => document.getElementById('logo-upload').click()}>
-                    <Building2 className="w-3.5 h-3.5 mr-1.5" /> Upload Logo
+                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Upload Logo
                   </Button>
-                  <span className="text-[10px] text-muted-foreground ml-2">Max 500KB, PNG/JPG/SVG</span>
-                </div>
-                {/* Or paste URL */}
-                <div>
-                  <Input value={config.logo?.startsWith('data:') ? '' : (config.logo || '')} placeholder="Or paste logo URL..."
-                    onChange={e => setConfig({...config, logo: e.target.value})}
-                    className="h-8 text-xs" />
+                  <span className="text-[10px] text-muted-foreground">Max 500KB, PNG/JPG/SVG. Horizontal recommended.</span>
                 </div>
                 {config.logo && (
-                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => setConfig({...config, logo: ''})}>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => setConfig({...config, logo: ''})}>
                     Remove logo
                   </Button>
                 )}
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Primary Color</Label>
-              <div className="flex gap-2 items-center">
-                <input type="color" value={config.primaryColor} onChange={e => setConfig({...config, primaryColor: e.target.value})} className="w-10 h-10 rounded cursor-pointer border" />
-                <Input value={config.primaryColor} onChange={e => setConfig({...config, primaryColor: e.target.value})} className="flex-1" />
+
+          <Separator />
+
+          {/* Icon Upload */}
+          <div>
+            <Label className="flex items-center gap-1.5">
+              <Image className="w-3.5 h-3.5" /> Icon
+              <span className="text-[10px] text-muted-foreground font-normal ml-1">Displayed in collapsed sidebar & browser tab</span>
+            </Label>
+            <div className="flex items-start gap-4 mt-1.5">
+              <div className="w-14 h-14 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden shrink-0">
+                {config.icon ? (
+                  <img src={config.icon} alt="Icon" className="w-full h-full object-contain" />
+                ) : config.logo ? (
+                  <img src={config.logo} alt="Logo fallback" className="w-full h-full object-contain opacity-40" />
+                ) : (
+                  <span className="text-lg font-bold text-muted-foreground">{(config.tenantName || 'P')[0]}</span>
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                <input type="file" accept="image/*" className="hidden" id="icon-upload"
+                  onChange={(e) => {
+                    handleFileUpload(e.target.files?.[0], 'icon');
+                    e.target.value = '';
+                  }}
+                />
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => document.getElementById('icon-upload').click()}>
+                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Upload Icon
+                  </Button>
+                  <span className="text-[10px] text-muted-foreground">Max 200KB, square PNG/SVG recommended.</span>
+                </div>
+                {!config.icon && (
+                  <p className="text-[10px] text-muted-foreground italic">
+                    {config.logo ? 'No icon set — using logo as fallback. Upload a square icon for best results.' : 'No icon set — showing first letter of business name.'}
+                  </p>
+                )}
+                {config.icon && (
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => setConfig({...config, icon: ''})}>
+                    Remove icon
+                  </Button>
+                )}
               </div>
             </div>
-            <div>
-              <Label>Theme Preference</Label>
-              <Select value={config.themePreference} onValueChange={v => setConfig({...config, themePreference: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="light">Light</SelectItem>
-                  <SelectItem value="dark">Dark</SelectItem>
-                  <SelectItem value="system">System</SelectItem>
-                </SelectContent>
-              </Select>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Appearance */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/30"><Palette className="w-4 h-4 text-violet-700 dark:text-violet-300" /></div>
+            <div><CardTitle className="text-base">Appearance</CardTitle><CardDescription>Primary color and theme preference</CardDescription></div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Primary Color */}
+          <div>
+            <Label className="mb-2 block">Primary Color</Label>
+            <p className="text-[11px] text-muted-foreground mb-3">This color is applied to buttons, active states, and accents across the entire app. Changes preview live.</p>
+
+            {/* Suggested from logo */}
+            {suggestedColors.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Suggested from your logo:</p>
+                <div className="flex gap-2">
+                  {suggestedColors.map((c, i) => (
+                    <button key={i}
+                      onClick={() => selectColor(c)}
+                      className={`w-8 h-8 rounded-lg border-2 transition-all ${liveColor === c ? 'border-foreground scale-110 ring-2 ring-offset-2 ring-foreground/20' : 'border-border hover:scale-105'}`}
+                      style={{ backgroundColor: c }}
+                      title={`Suggested: ${c}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Preset Swatches */}
+            <div className="mb-3">
+              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Presets:</p>
+              <div className="flex flex-wrap gap-2">
+                {COLOR_PRESETS.map((preset) => (
+                  <button key={preset.hex}
+                    onClick={() => selectColor(preset.hex)}
+                    className={`group relative w-8 h-8 rounded-lg border-2 transition-all ${liveColor === preset.hex ? 'border-foreground scale-110 ring-2 ring-offset-2 ring-foreground/20' : 'border-border hover:scale-105'}`}
+                    style={{ backgroundColor: preset.hex }}
+                    title={preset.name}
+                  >
+                    {liveColor === preset.hex && (
+                      <Check className="w-4 h-4 text-white absolute inset-0 m-auto drop-shadow-sm" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Color */}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div
+                  className="w-10 h-10 rounded-lg border-2 border-border cursor-pointer overflow-hidden"
+                  style={{ backgroundColor: liveColor }}
+                  onClick={() => colorInputRef.current?.click()}
+                >
+                  <input
+                    ref={colorInputRef}
+                    type="color"
+                    value={liveColor}
+                    onChange={e => selectColor(e.target.value)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                </div>
+              </div>
+              <Input
+                value={config.primaryColor}
+                onChange={e => {
+                  const val = e.target.value;
+                  setConfig(prev => ({ ...prev, primaryColor: val }));
+                  if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                    applyColorLive(val);
+                  }
+                }}
+                placeholder="#059669"
+                className="w-32 font-mono text-sm"
+              />
+              <span className="text-[11px] text-muted-foreground">Custom hex — type or pick</span>
+            </div>
+
+            {/* Live preview button */}
+            <div className="mt-3 p-3 rounded-lg border bg-muted/30">
+              <p className="text-[11px] text-muted-foreground mb-2">Live preview:</p>
+              <div className="flex items-center gap-3">
+                <Button size="sm" className="h-8">Primary Button</Button>
+                <Button size="sm" variant="outline" className="h-8 border-primary text-primary">Outline</Button>
+                <Badge>Active Badge</Badge>
+                <div className="w-3 h-3 rounded-full bg-primary" />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Theme Preference */}
+          <div>
+            <Label className="mb-2 block">Theme</Label>
+            <p className="text-[11px] text-muted-foreground mb-3">Choose between light, dark, or automatic system theme. Changes apply instantly.</p>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { value: 'light', label: 'Light', icon: Sun, desc: 'Always light' },
+                { value: 'dark', label: 'Dark', icon: Moon, desc: 'Always dark' },
+                { value: 'system', label: 'System', icon: Monitor, desc: 'Match OS' },
+              ].map(t => {
+                const Icon = t.icon;
+                const isActive = config.themePreference === t.value;
+                return (
+                  <button key={t.value}
+                    onClick={() => selectTheme(t.value)}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border-2 transition-all ${isActive ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/50 hover:bg-muted/50'}`}
+                  >
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <span className={`text-sm font-medium ${isActive ? 'text-primary' : 'text-foreground'}`}>{t.label}</span>
+                    <span className="text-[10px] text-muted-foreground">{t.desc}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </CardContent>
@@ -186,7 +469,7 @@ export default function SettingsView() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-100"><DollarSign className="w-4 h-4 text-emerald-700" /></div>
+            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30"><DollarSign className="w-4 h-4 text-emerald-700 dark:text-emerald-300" /></div>
             <div><CardTitle className="text-base">Tax & Fees</CardTitle><CardDescription>Configure tax rates and transaction fee percentages</CardDescription></div>
           </div>
         </CardHeader>
@@ -215,7 +498,7 @@ export default function SettingsView() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100"><Globe className="w-4 h-4 text-blue-700" /></div>
+            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30"><Globe className="w-4 h-4 text-blue-700 dark:text-blue-300" /></div>
             <div><CardTitle className="text-base">Localization</CardTitle><CardDescription>Currency, timezone, and regional settings</CardDescription></div>
           </div>
         </CardHeader>
@@ -250,7 +533,7 @@ export default function SettingsView() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100"><ToggleLeft className="w-4 h-4 text-purple-700" /></div>
+            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30"><ToggleLeft className="w-4 h-4 text-purple-700 dark:text-purple-300" /></div>
             <div><CardTitle className="text-base">Feature Toggles</CardTitle><CardDescription>Enable or disable optional features</CardDescription></div>
           </div>
         </CardHeader>
