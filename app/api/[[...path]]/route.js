@@ -1757,10 +1757,9 @@ export async function GET(request) {
         const db = await getDb();
         if (subResource) {
           const tpl = await db.collection('recipeTemplates').findOne({ _id: subResource });
-          if (tpl) {
-            // Include linked recipe count
-            tpl.linkedRecipeCount = await db.collection('skuRecipes').countDocuments({ templateId: subResource });
-          }
+          if (!tpl) return json({ error: 'Template not found' }, 404);
+          // Include linked recipe count
+          tpl.linkedRecipeCount = await db.collection('skuRecipes').countDocuments({ templateId: subResource });
           return json(tpl);
         }
         const templates = await db.collection('recipeTemplates').find({}).sort({ createdAt: -1 }).toArray();
