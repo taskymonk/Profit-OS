@@ -8,8 +8,25 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { ShoppingBag, Truck, Megaphone, RefreshCw, Save, Eye, EyeOff, Globe, Loader2, CheckCircle, AlertCircle, CreditCard } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ShoppingBag, Truck, Megaphone, RefreshCw, Save, Eye, EyeOff, Globe, Loader2, CheckCircle, AlertCircle, CreditCard, Clock, History } from 'lucide-react';
 import { toast } from 'sonner';
+
+const fmtTime = (ts) => {
+  if (!ts) return null;
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return null;
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHrs = Math.floor(diffMins / 60);
+    if (diffHrs < 24) return `${diffHrs}h ago`;
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return null; }
+};
 
 export default function IntegrationsView() {
   const [config, setConfig] = useState(null);
@@ -24,12 +41,19 @@ export default function IntegrationsView() {
   const [exchangeRate, setExchangeRate] = useState({ apiKey: '', active: false });
   const [syncing, setSyncing] = useState({});
   const [syncResults, setSyncResults] = useState({});
+  const [syncHistory, setSyncHistory] = useState([]);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyFilter, setHistoryFilter] = useState('all');
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/integrations');
-        const data = await res.json();
+        const [intRes, histRes] = await Promise.all([
+          fetch('/api/integrations'),
+          fetch('/api/sync-history'),
+        ]);
+        const data = await intRes.json();
+        const histData = await histRes.json();
         if (data) {
           setConfig(data);
           if (data.shopify) setShopify(prev => ({ ...prev, ...data.shopify }));
@@ -38,6 +62,7 @@ export default function IntegrationsView() {
           if (data.razorpay) setRazorpay(prev => ({ ...prev, ...data.razorpay }));
           if (data.exchangeRate) setExchangeRate(prev => ({ ...prev, ...data.exchangeRate }));
         }
+        setSyncHistory(Array.isArray(histData) ? histData : []);
       } catch (err) { console.error(err); }
       setLoading(false);
     }
@@ -71,11 +96,21 @@ export default function IntegrationsView() {
       } else {
         toast.success(data.message || 'Sync completed!');
       }
+      // Reload sync history after each sync
+      const histRes = await fetch('/api/sync-history');
+      const histData = await histRes.json();
+      setSyncHistory(Array.isArray(histData) ? histData : []);
     } catch (err) {
       toast.error(`Sync failed: ${err.message}`);
       setSyncResults(prev => ({ ...prev, [type]: { error: err.message } }));
     }
     setSyncing(prev => ({ ...prev, [type]: false }));
+  };
+
+  // Helper: get last sync time for an integration
+  const getLastSync = (integration) => {
+    const events = syncHistory.filter(h => h.integration === integration);
+    return events.length > 0 ? events[0] : null;
   };
 
   if (loading) return <div className="space-y-4">{[1,2,3].map(i => <div key={i} className="h-48 bg-muted animate-pulse rounded-xl" />)}</div>;
@@ -95,20 +130,37 @@ export default function IntegrationsView() {
       {/* Connection Status Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { name: 'Shopify', active: shopify.active && shopify.storeUrl, desc: shopify.active ? 'Orders & products synced' : 'Connect to sync orders' },
-          { name: 'Razorpay', active: razorpay.active && razorpay.keyId, desc: razorpay.active ? 'Payment fees reconciled' : 'Connect for exact gateway fees' },
-          { name: 'Meta Ads', active: metaAds.active && metaAds.token, desc: metaAds.active ? 'Ad spend tracked' : 'Connect for ad spend tracking' },
-          { name: 'India Post', active: indiaPost.active, desc: indiaPost.active ? 'RTO tracking enabled' : 'Connect for shipment tracking' },
-        ].map(i => (
-          <div key={i.name} className={`flex items-center gap-2.5 p-3 rounded-lg border ${i.active ? 'border-green-200 bg-green-50' : 'border-muted bg-muted/30'}`}>
-            {i.active ? <CheckCircle className="w-4 h-4 text-green-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0" />}
-            <div>
-              <p className={`text-sm font-medium ${i.active ? 'text-green-700' : 'text-muted-foreground'}`}>{i.name}</p>
-              <p className="text-[10px] text-muted-foreground">{i.desc}</p>
+          { name: 'Shopify', key: 'shopify', active: shopify.active && shopify.storeUrl, desc: shopify.active ? 'Orders & products synced' : 'Connect to sync orders' },
+          { name: 'Razorpay', key: 'razorpay', active: razorpay.active && razorpay.keyId, desc: razorpay.active ? 'Payment fees reconciled' : 'Connect for exact gateway fees' },
+          { name: 'Meta Ads', key: 'metaAds', active: metaAds.active && metaAds.token, desc: metaAds.active ? 'Ad spend tracked' : 'Connect for ad spend tracking' },
+          { name: 'India Post', key: 'indiaPost', active: indiaPost.active, desc: indiaPost.active ? 'RTO tracking enabled' : 'Connect for shipment tracking' },
+        ].map(i => {
+          const lastSync = getLastSync(i.key);
+          return (
+            <div key={i.name} className={`flex items-center gap-2.5 p-3 rounded-lg border ${i.active ? 'border-green-200 bg-green-50' : 'border-muted bg-muted/30'}`}>
+              {i.active ? <CheckCircle className="w-4 h-4 text-green-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-medium ${i.active ? 'text-green-700' : 'text-muted-foreground'}`}>{i.name}</p>
+                <p className="text-[10px] text-muted-foreground">{i.desc}</p>
+                {lastSync && (
+                  <p className="text-[10px] text-blue-600 mt-0.5 flex items-center gap-0.5">
+                    <Clock className="w-2.5 h-2.5" /> Last sync: {fmtTime(lastSync.timestamp)}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
+
+      {/* Sync History Button */}
+      {syncHistory.length > 0 && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={() => { setHistoryDialogOpen(true); setHistoryFilter('all'); }}>
+            <History className="w-3.5 h-3.5" /> Sync History ({syncHistory.length})
+          </Button>
+        </div>
+      )}
 
       {/* Shopify */}
       <Card>
@@ -326,6 +378,55 @@ export default function IntegrationsView() {
       </Card>
 
       {/* Exchange Rate */}
+
+      {/* Sync History Dialog */}
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><History className="w-5 h-5" /> Sync History</DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-1.5 flex-wrap mb-3">
+            {['all', 'shopify', 'razorpay', 'metaAds', 'indiaPost'].map(f => (
+              <Button key={f} size="sm" variant={historyFilter === f ? 'default' : 'outline'} className="h-7 text-xs"
+                onClick={() => setHistoryFilter(f)}>
+                {f === 'all' ? 'All' : f === 'metaAds' ? 'Meta Ads' : f === 'indiaPost' ? 'India Post' : f.charAt(0).toUpperCase() + f.slice(1)}
+              </Button>
+            ))}
+          </div>
+          <div className="overflow-y-auto max-h-[400px] space-y-2">
+            {syncHistory
+              .filter(h => historyFilter === 'all' || h.integration === historyFilter)
+              .map(h => (
+              <div key={h._id} className={`flex items-start gap-3 p-3 rounded-lg border ${h.status === 'success' ? 'border-green-100 bg-green-50/50' : h.status === 'error' ? 'border-red-100 bg-red-50/50' : 'border-amber-100 bg-amber-50/50'}`}>
+                {h.status === 'success' ? <CheckCircle className="w-4 h-4 text-green-600 shrink-0 mt-0.5" /> :
+                 h.status === 'error' ? <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" /> :
+                 <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] h-5">
+                      {h.integration === 'metaAds' ? 'Meta Ads' : h.integration === 'indiaPost' ? 'India Post' : h.integration?.charAt(0).toUpperCase() + h.integration?.slice(1)}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">{h.action}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {h.details?.error || (
+                      h.integration === 'shopify' ? `${h.details?.synced ?? 0} synced, ${h.details?.updated ?? 0} updated` :
+                      h.integration === 'razorpay' ? `${h.details?.matched ?? 0} orders reconciled` :
+                      h.integration === 'metaAds' ? `${h.details?.synced ?? 0} days synced` :
+                      h.integration === 'indiaPost' ? `${h.details?.tracked ?? 0} tracked, ${h.details?.delivered ?? 0} delivered` :
+                      JSON.stringify(h.details || {}).slice(0, 100)
+                    )}
+                  </p>
+                </div>
+                <span className="text-[10px] text-muted-foreground whitespace-nowrap">{fmtTime(h.timestamp)}</span>
+              </div>
+            ))}
+            {syncHistory.filter(h => historyFilter === 'all' || h.integration === historyFilter).length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-8">No sync history yet. Run a sync to get started.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

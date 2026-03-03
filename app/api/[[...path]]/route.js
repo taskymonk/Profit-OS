@@ -26,6 +26,30 @@ function getSearchParams(request) {
   return Object.fromEntries(url.searchParams.entries());
 }
 
+// ==================== SYNC HISTORY LOGGING ====================
+async function logSyncEvent(db, integration, action, status, details = {}) {
+  try {
+    await db.collection('syncHistory').insertOne({
+      _id: uuidv4(),
+      integration,
+      action,
+      status, // 'success' | 'error' | 'partial'
+      details,
+      timestamp: new Date().toISOString(),
+    });
+    // Keep only last 100 entries per integration
+    const count = await db.collection('syncHistory').countDocuments({ integration });
+    if (count > 100) {
+      const oldest = await db.collection('syncHistory').find({ integration }).sort({ timestamp: 1 }).limit(count - 100).toArray();
+      if (oldest.length) {
+        await db.collection('syncHistory').deleteMany({ _id: { $in: oldest.map(o => o._id) } });
+      }
+    }
+  } catch (err) {
+    console.error('Failed to log sync event:', err.message);
+  }
+}
+
 // ==================== STRICT IST DATE CONVERSION ====================
 // Converts any date string to an ISO string anchored at Asia/Kolkata (+05:30)
 // Prevents date drift where a UTC midnight order shows as the wrong calendar day in IST
@@ -441,6 +465,8 @@ async function metaAdsSyncSpend() {
       }
     );
 
+    await logSyncEvent(db, 'metaAds', 'sync-spend', 'success', { synced, totalSpendINR: Math.round(totalSpendINR), currency: adCurrency });
+
     return {
       message: `Synced ${synced} days of ad spend. Total: \u20B9${Math.round(totalSpendINR).toLocaleString('en-IN')}${adCurrency !== 'INR' ? ` (converted from ${adCurrency} at ${exchangeRate.toFixed(2)})` : ''}`,
       synced,
@@ -449,6 +475,8 @@ async function metaAdsSyncSpend() {
       exchangeRate: adCurrency !== 'INR' ? exchangeRate : 1,
     };
   } catch (err) {
+    const db2 = await getDb();
+    await logSyncEvent(db2, 'metaAds', 'sync-spend', 'error', { error: err.message });
     return { error: `Meta Ads sync failed: ${err.message}`, synced: 0 };
   }
 }
@@ -1055,8 +1083,11 @@ async function shopifySyncProducts() {
       }
     }
 
+    await logSyncEvent(db, 'shopify', 'sync-products', 'success', { synced, totalProducts: allProducts.length });
     return { message: `Synced ${synced} new SKUs from ${allProducts.length} products`, synced, totalProducts: allProducts.length };
   } catch (err) {
+    const db2 = await getDb();
+    await logSyncEvent(db2, 'shopify', 'sync-products', 'error', { error: err.message });
     return { error: `Shopify sync failed: ${err.message}`, synced: 0 };
   }
 }
@@ -1248,11 +1279,16 @@ async function shopifySyncOrders() {
       }
     }
 
+    await db.collection('integrations').updateOne({ _id: 'integrations-config' }, { $set: { 'shopify.lastSyncAt': new Date().toISOString() } });
+    await logSyncEvent(db, 'shopify', 'sync-orders', 'success', { synced, updated, recipeStubsCreated, totalShopifyOrders: allShopifyOrders.length });
+
     return {
       message: `Synced ${synced} new orders, updated ${updated} existing. Created ${recipeStubsCreated} recipe stubs. Total Shopify orders: ${allShopifyOrders.length}`,
       synced, updated, recipeStubsCreated, totalShopifyOrders: allShopifyOrders.length
     };
   } catch (err) {
+    const db2 = await getDb();
+    await logSyncEvent(db2, 'shopify', 'sync-orders', 'error', { error: err.message });
     return { error: `Shopify order sync failed: ${err.message}`, synced: 0 };
   }
 }
@@ -1409,6 +1445,8 @@ async function indiaPostSyncTracking() {
       { $set: { 'indiaPost.active': true, 'indiaPost.lastSyncAt': new Date().toISOString() } }
     );
 
+    await logSyncEvent(db, 'indiaPost', 'sync-tracking', 'success', { scanned: pendingOrders.length, tracked: totalTracked, delivered: totalDelivered, rto: totalRTO });
+
     return {
       message: `Scanned ${pendingOrders.length} shipments. Updated: ${totalTracked} (${totalDelivered} delivered, ${totalRTO} RTO)${totalErrors > 0 ? `. ${totalErrors} errors.` : ''}`,
       scanned: pendingOrders.length,
@@ -1418,6 +1456,8 @@ async function indiaPostSyncTracking() {
       errors: totalErrors,
     };
   } catch (err) {
+    const db2 = await getDb();
+    await logSyncEvent(db2, 'indiaPost', 'sync-tracking', 'error', { error: err.message });
     return { error: `India Post tracking failed: ${err.message}`, tracked: 0 };
   }
 }
@@ -1739,6 +1779,8 @@ async function razorpaySyncPayments() {
       }
     );
 
+    await logSyncEvent(db, 'razorpay', 'sync-payments', 'success', { totalPayments: allPayments.length, matched, unmatched });
+
     return {
       message: `Razorpay sync complete. ${matched} orders reconciled with exact fees. ${unmatched} payments unmatched. All orders marked as prepaid.`,
       totalPaymentsFetched: allPayments.length,
@@ -1749,6 +1791,8 @@ async function razorpaySyncPayments() {
       prepaidMarked: prepaidResult.modifiedCount,
     };
   } catch (err) {
+    const db2 = await getDb();
+    await logSyncEvent(db2, 'razorpay', 'sync-payments', 'error', { error: err.message });
     return { error: `Razorpay sync failed: ${err.message}`, synced: 0 };
   }
 }
@@ -2134,12 +2178,16 @@ export async function GET(request) {
           const stockMap = {};
           stockSummary.forEach(s => { stockMap[s._id] = s.currentStock; });
 
+          // Enrich with order stats (same as sku-recipes endpoint)
+          const orderStats = await db.collection('orders').aggregate([
+            { $group: { _id: '$sku', orderCount: { $sum: 1 }, totalRevenue: { $sum: '$salePrice' } } }
+          ]).toArray();
+          const statsMap = {};
+          orderStats.forEach(s => { statsMap[s._id] = s; });
+
           const preparable = skuRecipes
             .filter(recipe => recipe.ingredients && recipe.ingredients.length > 0)
             .map(recipe => {
-            if (!recipe.ingredients || recipe.ingredients.length === 0) {
-              return { sku: recipe.sku, name: recipe.productName || recipe.sku, canPrepare: null, missingItems: [] };
-            }
             let minPrepare = Infinity;
             const missingItems = [];
             recipe.ingredients.forEach(ing => {
@@ -2154,6 +2202,8 @@ export async function GET(request) {
               name: recipe.productName || recipe.sku,
               canPrepare: minPrepare === Infinity ? 0 : minPrepare,
               missingItems,
+              orderCount: statsMap[recipe.sku]?.orderCount || 0,
+              revenue: statsMap[recipe.sku]?.totalRevenue || 0,
             };
           });
           return json({ items: stockSummary, preparable });
@@ -2175,6 +2225,14 @@ export async function GET(request) {
         const db = await getDb();
         const spends = await db.collection('dailyMarketingSpend').find({}).sort({ date: -1 }).toArray();
         return json(spends);
+      }
+
+      case 'sync-history': {
+        const db = await getDb();
+        const integration = params.integration;
+        const query = integration ? { integration } : {};
+        const history = await db.collection('syncHistory').find(query).sort({ timestamp: -1 }).limit(50).toArray();
+        return json(history);
       }
 
       case 'integrations': {

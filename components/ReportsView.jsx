@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format } from 'date-fns';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie
@@ -47,6 +49,7 @@ const DATE_PRESETS = [
   { label: 'Last 90 Days', days: 90 },
   { label: 'This Month', value: 'thisMonth' },
   { label: 'All Time', value: 'allTime' },
+  { label: 'Custom Range', value: 'custom' },
 ];
 
 export default function ReportsView() {
@@ -56,7 +59,8 @@ export default function ReportsView() {
     const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [customOpen, setCustomOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [pendingRange, setPendingRange] = useState({ from: undefined, to: undefined });
 
   const [skuData, setSkuData] = useState([]);
   const [rtoData, setRtoData] = useState([]);
@@ -80,13 +84,15 @@ export default function ReportsView() {
     } else if (preset.value === 'thisMonth') {
       setStartDate(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]);
       setEndDate(now.toISOString().split('T')[0]);
+    } else if (preset.value === 'custom') {
+      setDatePreset('Custom Range');
+      setCalendarOpen(true);
     } else {
       const d = new Date();
       d.setDate(d.getDate() - preset.days);
       setStartDate(d.toISOString().split('T')[0]);
       setEndDate(now.toISOString().split('T')[0]);
     }
-    setCustomOpen(false);
   };
 
   const fetchReports = async () => {
@@ -121,32 +127,74 @@ export default function ReportsView() {
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
-      {/* Date Filter - Dashboard Style */}
+      {/* Date Filter - Dashboard Style with Calendar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
+          <CalendarDays className="w-4 h-4 text-muted-foreground" />
           {DATE_PRESETS.map(p => (
             <Button key={p.label} size="sm" variant={datePreset === p.label ? 'default' : 'outline'} className="h-8 text-xs"
               onClick={() => applyPreset(p)}>
               {p.label}
             </Button>
           ))}
-          <Popover open={customOpen} onOpenChange={setCustomOpen}>
+          {/* Show active date range */}
+          {startDate && endDate && datePreset !== 'All Time' && datePreset !== 'Custom Range' && (
+            <span className="text-sm font-medium text-muted-foreground ml-1 bg-muted px-3 py-1.5 rounded-md border border-border">
+              {format(new Date(startDate + 'T00:00:00'), 'dd MMM yyyy')}
+              {startDate !== endDate && (
+                <> — {format(new Date(endDate + 'T00:00:00'), 'dd MMM yyyy')}</>
+              )}
+            </span>
+          )}
+        </div>
+        {datePreset === 'Custom Range' && (
+          <Popover open={calendarOpen} onOpenChange={(open) => {
+            if (open) setCalendarOpen(true);
+          }}>
             <PopoverTrigger asChild>
-              <Button size="sm" variant={datePreset === 'Custom' ? 'default' : 'outline'} className="h-8 text-xs">
-                <CalendarDays className="w-3.5 h-3.5 mr-1" />
-                {datePreset === 'Custom' ? `${startDate} – ${endDate}` : 'Custom'}
+              <Button variant="outline" className="h-9 px-3 gap-2 text-sm font-normal" onClick={() => setCalendarOpen(true)}>
+                <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                {startDate && endDate
+                  ? `${format(new Date(startDate + 'T00:00:00'), 'dd MMM yyyy')} — ${format(new Date(endDate + 'T00:00:00'), 'dd MMM yyyy')}`
+                  : 'Pick date range'}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-3" align="start">
-              <div className="flex items-center gap-2">
-                <Input type="date" value={startDate} onChange={e => { setStartDate(e.target.value); setDatePreset('Custom'); }} className="w-36 h-8 text-xs" />
-                <span className="text-xs text-muted-foreground">to</span>
-                <Input type="date" value={endDate} onChange={e => { setEndDate(e.target.value); setDatePreset('Custom'); }} className="w-36 h-8 text-xs" />
-                <Button size="sm" className="h-8 text-xs" onClick={() => setCustomOpen(false)}>Apply</Button>
+            <PopoverContent className="w-auto p-0" align="start" sideOffset={8} onInteractOutside={(e) => {
+              e.preventDefault();
+            }}>
+              <Calendar
+                mode="range"
+                selected={pendingRange}
+                onSelect={(range) => {
+                  setPendingRange({ from: range?.from, to: range?.to });
+                }}
+                numberOfMonths={2}
+                disabled={{ after: new Date() }}
+              />
+              <div className="flex items-center justify-between p-3 border-t border-border bg-muted/30">
+                <p className="text-xs text-muted-foreground">
+                  {pendingRange.from && !pendingRange.to && 'Now select an end date'}
+                  {pendingRange.from && pendingRange.to && (
+                    <>{format(pendingRange.from, 'dd MMM yyyy')} — {format(pendingRange.to, 'dd MMM yyyy')}</>
+                  )}
+                  {!pendingRange.from && 'Select a start date'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => {
+                    setPendingRange({ from: undefined, to: undefined });
+                    setCalendarOpen(false);
+                  }}>Cancel</Button>
+                  <Button size="sm" className="h-7 text-xs" disabled={!pendingRange.from || !pendingRange.to} onClick={() => {
+                    setStartDate(format(pendingRange.from, 'yyyy-MM-dd'));
+                    setEndDate(format(pendingRange.to, 'yyyy-MM-dd'));
+                    setPendingRange({ from: undefined, to: undefined });
+                    setCalendarOpen(false);
+                  }}>Apply</Button>
+                </div>
               </div>
             </PopoverContent>
           </Popover>
-        </div>
+        )}
         {loading && <Badge variant="outline" className="animate-pulse"><CalendarDays className="w-3 h-3 mr-1" /> Loading...</Badge>}
       </div>
 
