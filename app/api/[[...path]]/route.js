@@ -821,50 +821,62 @@ async function getReportMonthlyPL(params) {
   const taxMul = 1 + ((tenantConfig.adSpendTaxRate ?? 18) / 100);
   const shopifyTxnRate = (tenantConfig.shopifyTxnFeeRate || 2) / 100;
 
-  // Build monthly buckets
+  // Date range filter
+  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 180));
+  const endDate = params.endDate ? new Date(params.endDate) : new Date();
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  const filteredOrders = orders.filter(o => {
+    const d = new Date(o.orderDate);
+    return d >= startDate && d <= endDate;
+  });
+
+  // Build monthly buckets from filtered orders only
   const months = {};
-  orders.forEach(o => {
+  filteredOrders.forEach(o => {
     const d = new Date(o.orderDate);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     if (!months[key]) months[key] = { month: key, revenue: 0, cogs: 0, shopifyFees: 0, razorpayFees: 0, adSpend: 0, overhead: 0, netProfit: 0, orderCount: 0, rtoCount: 0 };
     months[key].orderCount++;
     months[key].revenue += o.salePrice || 0;
     if (o.status === 'RTO') months[key].rtoCount++;
-    // COGS
     const recipe = skuMap[o.sku];
     if (recipe?.ingredients?.length) {
       const cogs = recipe.ingredients.reduce((s, ing) => s + ((ing.costPerUnit || 0) * (ing.quantityUsed || 0)), 0);
       months[key].cogs += cogs;
     }
-    // Shopify fee
     months[key].shopifyFees += (o.salePrice || 0) * shopifyTxnRate;
-    // Razorpay fee
     months[key].razorpayFees += o.gatewayFee || 0;
   });
 
-  // Add ad spend per month
+  // Add ad spend per month (filtered by date range)
   dailySpends.forEach(s => {
     const d = new Date(s.date + 'T00:00:00+05:30');
+    if (d < startDate || d > endDate) return;
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     if (months[key]) months[key].adSpend += (s.spendAmount || 0) * taxMul;
   });
 
-  // Add overhead expenses per month (pro-rata)
+  // Add overhead expenses per month (pro-rata, only for months in range)
+  const monthKeys = Object.keys(months);
   expenses.forEach(exp => {
     const amt = exp.amount || 0;
     const freq = exp.frequency || 'monthly';
     let monthlyAmt = amt;
     if (freq === 'yearly') monthlyAmt = amt / 12;
-    else if (freq === 'one-time') monthlyAmt = 0; // attributed only to purchase month
+    else if (freq === 'one-time') monthlyAmt = 0;
     else if (freq === 'weekly') monthlyAmt = amt * 4.33;
     else if (freq === 'daily') monthlyAmt = amt * 30;
 
     if (freq === 'one-time' && exp.date) {
       const d = new Date(exp.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (months[key]) months[key].overhead += amt;
+      if (d >= startDate && d <= endDate) {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (months[key]) months[key].overhead += amt;
+      }
     } else {
-      Object.keys(months).forEach(key => { months[key].overhead += monthlyAmt; });
+      monthKeys.forEach(key => { months[key].overhead += monthlyAmt; });
     }
   });
 
@@ -872,7 +884,6 @@ async function getReportMonthlyPL(params) {
   Object.values(months).forEach(m => {
     m.netProfit = m.revenue - m.cogs - m.shopifyFees - m.razorpayFees - m.adSpend - m.overhead;
     m.margin = m.revenue > 0 ? Math.round((m.netProfit / m.revenue) * 10000) / 100 : 0;
-    // Round everything
     ['revenue', 'cogs', 'shopifyFees', 'razorpayFees', 'adSpend', 'overhead', 'netProfit'].forEach(k => { m[k] = Math.round(m[k]); });
   });
 
@@ -958,8 +969,25 @@ async function getReportExpenseTrend(params) {
   const categories = await db.collection('expenseCategories').find({}).toArray();
   const catNames = categories.map(c => c.name);
 
+  // Date range
+  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setMonth(new Date().getMonth() - 6));
+  const endDate = params.endDate ? new Date(params.endDate) : new Date();
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  // Generate month keys within the date range
+  const rangeMonths = [];
+  const cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+  while (cur <= endMonth) {
+    rangeMonths.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`);
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
   // Build monthly expense by category
   const months = {};
+  rangeMonths.forEach(key => { months[key] = { month: key, total: 0 }; });
+
   expenses.forEach(exp => {
     const cat = exp.category || 'Uncategorized';
     const amt = exp.amount || 0;
@@ -967,26 +995,25 @@ async function getReportExpenseTrend(params) {
 
     if (freq === 'one-time' && exp.date) {
       const d = new Date(exp.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (!months[key]) months[key] = { month: key, total: 0 };
-      if (!months[key][cat]) months[key][cat] = 0;
-      months[key][cat] += amt;
-      months[key].total += amt;
+      if (d >= startDate && d <= endDate) {
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (months[key]) {
+          if (!months[key][cat]) months[key][cat] = 0;
+          months[key][cat] += amt;
+          months[key].total += amt;
+        }
+      }
     } else {
       let monthlyAmt = amt;
       if (freq === 'yearly') monthlyAmt = amt / 12;
       else if (freq === 'weekly') monthlyAmt = amt * 4.33;
       else if (freq === 'daily') monthlyAmt = amt * 30;
-      // Distribute to all recent months (last 6 months)
-      for (let i = 0; i < 6; i++) {
-        const d = new Date();
-        d.setMonth(d.getMonth() - i);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        if (!months[key]) months[key] = { month: key, total: 0 };
+      // Distribute to all months in range
+      rangeMonths.forEach(key => {
         if (!months[key][cat]) months[key][cat] = 0;
         months[key][cat] += monthlyAmt;
         months[key].total += monthlyAmt;
-      }
+      });
     }
   });
 
