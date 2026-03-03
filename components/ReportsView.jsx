@@ -18,7 +18,7 @@ import {
 import {
   TrendingUp, TrendingDown, MapPin, Users, CalendarDays, AlertTriangle,
   Package, Crown, ShieldAlert, DollarSign, ChevronLeft, ChevronRight,
-  Repeat, UserCheck, BarChart3, PieChart as PieChartIcon
+  Repeat, UserCheck, BarChart3, PieChart as PieChartIcon, CreditCard, Landmark, CheckCircle2, XCircle, Eye, EyeOff, Clock
 } from 'lucide-react';
 
 const fmt = (val) => `\u20B9${Math.abs(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -77,6 +77,18 @@ export default function ReportsView() {
   const [adSpendTaxRate, setAdSpendTaxRate] = useState(18);
   const LEDGER_PAGE_SIZE = 15;
 
+  // Payments & Settlements state
+  const [paymentsData, setPaymentsData] = useState({
+    reconciliation: null,
+    settlements: [],
+    unmatchedPayments: [],
+    settlementsActive: false,
+  });
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [unmatchedFilter, setUnmatchedFilter] = useState('unresolved'); // 'unresolved' | 'ignored' | 'all'
+  const [settlementPage, setSettlementPage] = useState(1);
+  const SETTLEMENT_PAGE_SIZE = 10;
+
   const applyPreset = (preset) => {
     setDatePreset(preset.label);
     const now = new Date();
@@ -125,6 +137,71 @@ export default function ReportsView() {
   };
 
   useEffect(() => { fetchReports(); }, [startDate, endDate]);
+
+  // Fetch payments data when the tab is 'payments'
+  const fetchPaymentsData = async () => {
+    setPaymentsLoading(true);
+    try {
+      const [recon, sett, unmatched] = await Promise.all([
+        fetch('/api/razorpay/reconciliation-summary').then(r => r.json()),
+        fetch('/api/razorpay/settlements').then(r => r.json()),
+        fetch('/api/razorpay/unmatched').then(r => r.json()),
+      ]);
+      setPaymentsData({
+        reconciliation: recon || null,
+        settlements: sett?.settlements || [],
+        unmatchedPayments: unmatched?.payments || [],
+        settlementsActive: sett?.active || false,
+      });
+    } catch (err) { console.error('Payments fetch error:', err); }
+    setPaymentsLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'payments') fetchPaymentsData();
+  }, [activeTab]);
+
+  // Resolve unmatched payment
+  const resolvePayment = async (paymentId, status) => {
+    try {
+      await fetch(`/api/razorpay/unmatched/${paymentId}/resolve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      setPaymentsData(prev => ({
+        ...prev,
+        unmatchedPayments: prev.unmatchedPayments.map(p =>
+          p._id === paymentId ? { ...p, status, resolvedAt: new Date().toISOString() } : p
+        ),
+      }));
+    } catch (err) { console.error(err); }
+  };
+
+  // Bulk resolve unmatched
+  const bulkResolve = async (status) => {
+    const ids = filteredUnmatched.filter(p => p.status === 'unresolved').map(p => p._id);
+    if (ids.length === 0) return;
+    try {
+      await fetch('/api/razorpay/unmatched/bulk-resolve', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentIds: ids, status }),
+      });
+      setPaymentsData(prev => ({
+        ...prev,
+        unmatchedPayments: prev.unmatchedPayments.map(p =>
+          ids.includes(p._id) ? { ...p, status, resolvedAt: new Date().toISOString() } : p
+        ),
+      }));
+    } catch (err) { console.error(err); }
+  };
+
+  // Filtered unmatched payments
+  const filteredUnmatched = useMemo(() => {
+    if (unmatchedFilter === 'all') return paymentsData.unmatchedPayments;
+    return paymentsData.unmatchedPayments.filter(p => p.status === unmatchedFilter);
+  }, [paymentsData.unmatchedPayments, unmatchedFilter]);
 
   const CHART_COLORS = ['#059669', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'];
 
@@ -202,12 +279,13 @@ export default function ReportsView() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 max-w-3xl">
+        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-9 max-w-4xl">
           <TabsTrigger value="skus" className="gap-1 text-xs"><Crown className="w-3.5 h-3.5" /> SKU Profit</TabsTrigger>
           <TabsTrigger value="monthly-pl" className="gap-1 text-xs"><BarChart3 className="w-3.5 h-3.5" /> Monthly P&L</TabsTrigger>
           <TabsTrigger value="cogs" className="gap-1 text-xs"><Package className="w-3.5 h-3.5" /> COGS</TabsTrigger>
           <TabsTrigger value="customers" className="gap-1 text-xs"><Repeat className="w-3.5 h-3.5" /> Customers</TabsTrigger>
           <TabsTrigger value="expenses" className="gap-1 text-xs"><DollarSign className="w-3.5 h-3.5" /> Expenses</TabsTrigger>
+          <TabsTrigger value="payments" className="gap-1 text-xs"><CreditCard className="w-3.5 h-3.5" /> Payments</TabsTrigger>
           <TabsTrigger value="rto" className="gap-1 text-xs"><MapPin className="w-3.5 h-3.5" /> RTO Map</TabsTrigger>
           <TabsTrigger value="employees" className="gap-1 text-xs"><Users className="w-3.5 h-3.5" /> Team</TabsTrigger>
           <TabsTrigger value="ledger" className="gap-1 text-xs"><DollarSign className="w-3.5 h-3.5" /> Ad Ledger</TabsTrigger>
@@ -683,6 +761,255 @@ export default function ReportsView() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Payments & Settlements */}
+        <TabsContent value="payments" className="space-y-4 mt-4">
+          {paymentsLoading ? <Skeleton className="h-80 rounded-xl" /> : (
+            <>
+              {/* Reconciliation Summary Cards */}
+              {paymentsData.reconciliation && (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Match Rate</p>
+                    <p className="text-2xl font-bold">{paymentsData.reconciliation.matchRate}%</p>
+                    <p className="text-[11px] text-muted-foreground">{paymentsData.reconciliation.reconciledCount} / {paymentsData.reconciliation.totalOrders} orders</p>
+                  </Card>
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Gateway Fees</p>
+                    <p className="text-2xl font-bold">{fmt(paymentsData.reconciliation.totalFees)}</p>
+                    <p className="text-[11px] text-muted-foreground">from reconciled orders</p>
+                  </Card>
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Gateway Tax</p>
+                    <p className="text-2xl font-bold">{fmt(paymentsData.reconciliation.totalTax)}</p>
+                    <p className="text-[11px] text-muted-foreground">GST on fees</p>
+                  </Card>
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Effective Fee Rate</p>
+                    <p className="text-2xl font-bold">{paymentsData.reconciliation.effectiveFeeRate}%</p>
+                    <p className="text-[11px] text-muted-foreground">fees / revenue</p>
+                  </Card>
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Unmatched Payments</p>
+                    <p className={`text-2xl font-bold ${paymentsData.reconciliation.unmatchedPayments > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {paymentsData.reconciliation.unmatchedPayments}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">need attention</p>
+                  </Card>
+                </div>
+              )}
+
+              {/* Reconciliation Progress Bar */}
+              {paymentsData.reconciliation && paymentsData.reconciliation.totalOrders > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="w-4 h-4 text-emerald-600" /> Reconciliation Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="h-4 rounded-full bg-muted overflow-hidden flex">
+                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${paymentsData.reconciliation.matchRate}%` }} />
+                        <div className="h-full bg-amber-400 transition-all" style={{ width: `${100 - paymentsData.reconciliation.matchRate}%` }} />
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-sm bg-emerald-500" />
+                          <span>Matched: {fmt(paymentsData.reconciliation.reconciledRevenue)} ({paymentsData.reconciliation.reconciledCount} orders)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-sm bg-amber-400" />
+                          <span>Unmatched: {fmt(paymentsData.reconciliation.unreconciledRevenue)} ({paymentsData.reconciliation.unreconciledCount} orders)</span>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Settlement History */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2"><Landmark className="w-4 h-4" /> Settlement History</CardTitle>
+                    <Badge variant="outline">{paymentsData.settlements.length} settlements</Badge>
+                  </div>
+                  <CardDescription>Complete history of Razorpay bank deposits with dates, UTR, and fees</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {paymentsData.settlements.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">No settlements found. Connect Razorpay in Integrations.</p>
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto rounded-lg border">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="bg-muted/50 border-b">
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground">Date</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground">Settlement ID</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground">UTR</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-right">Amount</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-right">Fees</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-right">Tax</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paymentsData.settlements
+                              .slice((settlementPage - 1) * SETTLEMENT_PAGE_SIZE, settlementPage * SETTLEMENT_PAGE_SIZE)
+                              .map((s, i) => (
+                              <tr key={s.id || i} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                                <td className="py-2.5 px-3 text-xs">
+                                  {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                                  <span className="block text-[10px] text-muted-foreground">
+                                    {s.createdAt ? new Date(s.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-[11px] font-mono text-muted-foreground">{s.id ? s.id.slice(-12) : '—'}</td>
+                                <td className="py-2.5 px-3 text-[11px] font-mono text-muted-foreground">{s.utr || '—'}</td>
+                                <td className="py-2.5 px-3 text-sm font-bold text-right">{fmt(s.amount)}</td>
+                                <td className="py-2.5 px-3 text-xs text-right text-muted-foreground">{s.fees ? fmt(s.fees) : '—'}</td>
+                                <td className="py-2.5 px-3 text-xs text-right text-muted-foreground">{s.tax ? fmt(s.tax) : '—'}</td>
+                                <td className="py-2.5 px-3 text-center">
+                                  <Badge variant={s.status === 'processed' ? 'default' : s.status === 'failed' ? 'destructive' : 'outline'} className="text-[10px]">
+                                    {s.status === 'processed' ? 'Settled' : s.status === 'created' ? 'Pending' : s.status === 'initiated' ? 'Initiated' : s.status || 'Unknown'}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {paymentsData.settlements.length > SETTLEMENT_PAGE_SIZE && (
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="text-xs text-muted-foreground">Page {settlementPage} of {Math.ceil(paymentsData.settlements.length / SETTLEMENT_PAGE_SIZE)}</span>
+                          <div className="flex gap-1">
+                            <Button size="icon" variant="outline" className="h-8 w-8" disabled={settlementPage <= 1} onClick={() => setSettlementPage(p => p - 1)}><ChevronLeft className="w-4 h-4" /></Button>
+                            <Button size="icon" variant="outline" className="h-8 w-8" disabled={settlementPage >= Math.ceil(paymentsData.settlements.length / SETTLEMENT_PAGE_SIZE)} onClick={() => setSettlementPage(p => p + 1)}><ChevronRight className="w-4 h-4" /></Button>
+                          </div>
+                        </div>
+                      )}
+                      {/* Summary row */}
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                        <span className="text-xs text-muted-foreground">
+                          Total settled: {paymentsData.settlements.filter(s => s.status === 'processed').length} deposits
+                        </span>
+                        <span className="text-sm font-bold">
+                          {fmt(paymentsData.settlements.filter(s => s.status === 'processed').reduce((sum, s) => sum + (s.amount || 0), 0))}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Unmatched Payments */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-500" /> Unmatched Payments
+                      </CardTitle>
+                      <CardDescription>Razorpay payments that didn't match any Shopify order. Review and resolve.</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex rounded-md border overflow-hidden">
+                        {[
+                          { value: 'unresolved', label: 'Unresolved' },
+                          { value: 'ignored', label: 'Ignored' },
+                          { value: 'all', label: 'All' },
+                        ].map(f => (
+                          <button key={f.value}
+                            onClick={() => setUnmatchedFilter(f.value)}
+                            className={`px-3 py-1.5 text-[11px] font-medium transition-colors ${unmatchedFilter === f.value ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted text-muted-foreground'}`}
+                          >{f.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {filteredUnmatched.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-500 opacity-50" />
+                      <p className="text-sm">
+                        {unmatchedFilter === 'unresolved' ? 'No unresolved payments — all clear!' : `No ${unmatchedFilter} payments found.`}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Bulk actions */}
+                      {unmatchedFilter === 'unresolved' && filteredUnmatched.length > 0 && (
+                        <div className="flex items-center justify-between mb-3 p-2.5 rounded-lg bg-muted/50 border">
+                          <span className="text-xs text-muted-foreground">{filteredUnmatched.filter(p => p.status === 'unresolved').length} unresolved payments</span>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => bulkResolve('ignored')}>
+                            <EyeOff className="w-3 h-3 mr-1" /> Ignore All
+                          </Button>
+                        </div>
+                      )}
+                      <div className="overflow-x-auto rounded-lg border">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="bg-muted/50 border-b">
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground">Date</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground">Payment ID</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-right">Amount</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground">Method</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground">Contact</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-right">Fee</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-center">Status</th>
+                              <th className="py-2.5 px-3 text-[11px] font-semibold text-muted-foreground text-center">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredUnmatched.map((p, i) => (
+                              <tr key={p._id || i} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                                <td className="py-2.5 px-3 text-xs">
+                                  {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                                  <span className="block text-[10px] text-muted-foreground">
+                                    {p.createdAt ? new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-[11px] font-mono text-muted-foreground">{(p.paymentId || p._id || '').slice(-14)}</td>
+                                <td className="py-2.5 px-3 text-sm font-bold text-right">{fmt(p.amount)}</td>
+                                <td className="py-2.5 px-3 text-xs capitalize">{p.method || '—'}</td>
+                                <td className="py-2.5 px-3 text-[11px]">
+                                  {p.email ? <span className="block truncate max-w-[140px]" title={p.email}>{p.email}</span> : null}
+                                  {p.contact ? <span className="block text-[10px] text-muted-foreground">{p.contact}</span> : null}
+                                </td>
+                                <td className="py-2.5 px-3 text-xs text-right text-muted-foreground">{p.fee ? fmt(p.fee) : '—'}</td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {p.status === 'unresolved' ? (
+                                    <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-300">Unresolved</Badge>
+                                  ) : p.status === 'ignored' ? (
+                                    <Badge variant="secondary" className="text-[10px]">Ignored</Badge>
+                                  ) : (
+                                    <Badge className="text-[10px]">{p.status}</Badge>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-center">
+                                  {p.status === 'unresolved' ? (
+                                    <Button size="sm" variant="ghost" className="h-7 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => resolvePayment(p._id, 'ignored')}>
+                                      <EyeOff className="w-3 h-3 mr-1" /> Ignore
+                                    </Button>
+                                  ) : p.status === 'ignored' ? (
+                                    <Button size="sm" variant="ghost" className="h-7 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => resolvePayment(p._id, 'unresolved')}>
+                                      <Eye className="w-3 h-3 mr-1" /> Undo
+                                    </Button>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

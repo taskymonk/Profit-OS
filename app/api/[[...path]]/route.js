@@ -642,6 +642,7 @@ async function getDashboardData(params = {}) {
       );
       let prepaidRevenue = 0, prepaidCount = 0;
       let reconciledRevenue = 0, unreconciledRevenue = 0, reconciledCount = 0, unreconciledCount = 0;
+      let totalRazorpayFees = 0, totalRazorpayTax = 0;
       acctOrders.forEach(o => {
         const rev = o.salePrice || 0;
         prepaidRevenue += rev;
@@ -649,17 +650,25 @@ async function getDashboardData(params = {}) {
         if (o.razorpayReconciled === true) {
           reconciledRevenue += rev;
           reconciledCount++;
+          totalRazorpayFees += o.razorpayFee || 0;
+          totalRazorpayTax += o.razorpayTax || 0;
         } else {
           unreconciledRevenue += rev;
           unreconciledCount++;
         }
       });
       const totalRev = prepaidRevenue;
+      const matchRate = prepaidCount > 0 ? Math.round((reconciledCount / prepaidCount) * 10000) / 100 : 0;
+      const effectiveFeeRate = reconciledRevenue > 0 ? Math.round((totalRazorpayFees / reconciledRevenue) * 10000) / 100 : 0;
       return {
         totalRevenue: Math.round(totalRev * 100) / 100,
         totalOrders: prepaidCount,
         reconciled: { revenue: Math.round(reconciledRevenue * 100) / 100, count: reconciledCount, percent: totalRev > 0 ? Math.round((reconciledRevenue / totalRev) * 10000) / 100 : 0 },
         unreconciled: { revenue: Math.round(unreconciledRevenue * 100) / 100, count: unreconciledCount, percent: totalRev > 0 ? Math.round((unreconciledRevenue / totalRev) * 10000) / 100 : 0 },
+        totalFees: Math.round(totalRazorpayFees * 100) / 100,
+        totalTax: Math.round(totalRazorpayTax * 100) / 100,
+        matchRate,
+        effectiveFeeRate,
       };
     })(),
     allTime: {
@@ -1715,6 +1724,7 @@ async function razorpaySyncPayments() {
     let unmatched = 0;
     let skippedNonCaptured = 0;
     const matchedShopifyIds = new Set(); // Track already-matched orders to avoid double-matching
+    const unmatchedPaymentsList = []; // Track unmatched payments for storage
 
     for (const payment of allPayments) {
       // Only process captured payments
@@ -1780,7 +1790,31 @@ async function razorpaySyncPayments() {
         matched++;
       } else {
         unmatched++;
+        // Store unmatched payment for review
+        if (payment.status === 'captured') {
+          unmatchedPaymentsList.push({
+            _id: payment.id,
+            paymentId: payment.id,
+            amount: (payment.amount || 0) / 100,
+            contact: payment.contact || '',
+            email: payment.email || '',
+            method: payment.method || 'unknown',
+            description: payment.description || '',
+            createdAt: payment.created_at ? new Date(payment.created_at * 1000).toISOString() : new Date().toISOString(),
+            fee: (payment.fee || 0) / 100,
+            tax: (payment.tax || 0) / 100,
+            settlementId: payment.settlement_id || null,
+            status: 'unresolved', // unresolved / ignored / manually_matched
+            syncedAt: new Date().toISOString(),
+          });
+        }
       }
+    }
+
+    // Store unmatched payments — clear old ones and insert new
+    await db.collection('razorpayUnmatchedPayments').deleteMany({ status: 'unresolved' });
+    if (unmatchedPaymentsList.length > 0) {
+      await db.collection('razorpayUnmatchedPayments').insertMany(unmatchedPaymentsList, { ordered: false }).catch(() => {});
     }
 
     // All orders are prepaid (no COD concept) — mark remaining unmatched orders as prepaid too
@@ -2285,6 +2319,65 @@ export async function GET(request) {
         }
         if (subResource === 'debug') {
           return json(await razorpayDebugPayments());
+        }
+        if (subResource === 'unmatched') {
+          // GET /api/razorpay/unmatched — list all unmatched payments
+          const db = await getDb();
+          const payments = await db.collection('razorpayUnmatchedPayments')
+            .find({})
+            .sort({ createdAt: -1 })
+            .toArray();
+          return json({ payments, total: payments.length });
+        }
+        if (subResource === 'reconciliation-summary') {
+          // GET /api/razorpay/reconciliation-summary — aggregate reconciliation stats
+          const db = await getDb();
+          const orders = await db.collection('orders').find({ shopifyOrderId: { $exists: true } }).toArray();
+          const EXCL_STATUS = ['Cancelled', 'Voided', 'Pending'];
+          const EXCL_FIN = ['pending', 'voided', 'refunded'];
+          const activeOrders = orders.filter(o => !EXCL_STATUS.includes(o.status) && !EXCL_FIN.includes(o.financialStatus));
+
+          let totalFees = 0, totalTax = 0, reconciledCount = 0, unreconciledCount = 0;
+          let reconciledRevenue = 0, unreconciledRevenue = 0;
+          activeOrders.forEach(o => {
+            const rev = o.salePrice || 0;
+            if (o.razorpayReconciled === true) {
+              reconciledCount++;
+              reconciledRevenue += rev;
+              totalFees += o.razorpayFee || 0;
+              totalTax += o.razorpayTax || 0;
+            } else {
+              unreconciledCount++;
+              unreconciledRevenue += rev;
+            }
+          });
+
+          const totalRevenue = reconciledRevenue + unreconciledRevenue;
+          const totalOrders = reconciledCount + unreconciledCount;
+          const matchRate = totalOrders > 0 ? Math.round((reconciledCount / totalOrders) * 10000) / 100 : 0;
+          const effectiveFeeRate = reconciledRevenue > 0 ? Math.round((totalFees / reconciledRevenue) * 10000) / 100 : 0;
+
+          // Get unmatched payment count
+          const unmatchedPayments = await db.collection('razorpayUnmatchedPayments').countDocuments({ status: 'unresolved' });
+
+          // Settlement summary
+          const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+          const lastSync = integrations?.razorpay?.lastSyncAt || null;
+
+          return json({
+            totalOrders,
+            reconciledCount,
+            unreconciledCount,
+            reconciledRevenue: Math.round(reconciledRevenue * 100) / 100,
+            unreconciledRevenue: Math.round(unreconciledRevenue * 100) / 100,
+            totalRevenue: Math.round(totalRevenue * 100) / 100,
+            totalFees: Math.round(totalFees * 100) / 100,
+            totalTax: Math.round(totalTax * 100) / 100,
+            matchRate,
+            effectiveFeeRate,
+            unmatchedPayments,
+            lastSync,
+          });
         }
         return json({ error: 'Unknown Razorpay action' }, 404);
       }
@@ -3035,6 +3128,38 @@ export async function PUT(request) {
       case 'inventory-items':
         if (!id) return json({ error: 'ID required' }, 400);
         return json(await updateDoc('inventoryItems', id, body));
+
+      case 'razorpay': {
+        // PUT /api/razorpay/unmatched/{paymentId}/resolve
+        if (id === 'unmatched' && action) {
+          const paymentId = action;
+          const resolution = segments[3]; // 'resolve'
+          if (resolution === 'resolve') {
+            const db = await getDb();
+            const newStatus = body.status || 'ignored'; // 'ignored' or 'manually_matched'
+            const note = body.note || '';
+            const result = await db.collection('razorpayUnmatchedPayments').updateOne(
+              { _id: paymentId },
+              { $set: { status: newStatus, resolvedNote: note, resolvedAt: new Date().toISOString() } }
+            );
+            if (result.matchedCount === 0) return json({ error: 'Payment not found' }, 404);
+            return json({ message: `Payment marked as ${newStatus}`, paymentId });
+          }
+          // PUT /api/razorpay/unmatched/bulk-resolve
+          if (paymentId === 'bulk-resolve') {
+            const db = await getDb();
+            const { paymentIds, status: bulkStatus } = body;
+            const newStatus = bulkStatus || 'ignored';
+            if (!paymentIds || !Array.isArray(paymentIds)) return json({ error: 'paymentIds array required' }, 400);
+            const result = await db.collection('razorpayUnmatchedPayments').updateMany(
+              { _id: { $in: paymentIds } },
+              { $set: { status: newStatus, resolvedNote: 'Bulk resolved', resolvedAt: new Date().toISOString() } }
+            );
+            return json({ message: `${result.modifiedCount} payments marked as ${newStatus}` });
+          }
+        }
+        return json({ error: 'Unknown Razorpay action' }, 404);
+      }
 
       default:
         return json({ error: 'Not found' }, 404);

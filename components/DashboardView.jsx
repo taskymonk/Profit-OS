@@ -414,150 +414,196 @@ export default function DashboardView() {
         />
       </div>
 
-      {/* COD vs Prepaid Split + Cashflow Forecast */}
+      {/* Payment Reconciliation + Bank Settlements */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Gateway Fee Reconciliation Status */}
+        {/* Payment Reconciliation */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-muted-foreground" />
               <div>
-                <CardTitle className="text-base">Gateway Fee Reconciliation</CardTitle>
-                <CardDescription>Exact Razorpay fees vs. estimated 2%+GST</CardDescription>
+                <CardTitle className="text-base">Payment Reconciliation</CardTitle>
+                <CardDescription>Razorpay match rate & gateway fees</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            {revenueSplit && revenueSplit.totalRevenue > 0 ? (
+            {revenueSplit && revenueSplit.totalOrders > 0 && revenueSplit.reconciled.count > 0 ? (
               <div className="space-y-4">
-                {/* Split Progress Bar */}
-                <div className="relative h-6 rounded-full overflow-hidden bg-muted">
-                  <div
-                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-l-full transition-all duration-500"
-                    style={{ width: `${revenueSplit.reconciled.percent}%` }}
-                  />
-                  <div
-                    className="absolute inset-y-0 right-0 bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 rounded-r-full transition-all duration-500"
-                    style={{ width: `${revenueSplit.unreconciled.percent}%` }}
-                  />
-                  {revenueSplit.reconciled.percent > 12 && (
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.reconciled.percent}%</span>
-                  )}
-                  {revenueSplit.unreconciled.percent > 12 && (
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-white">{revenueSplit.unreconciled.percent}%</span>
-                  )}
-                </div>
-                {/* Labels */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
-                    <div className="p-1.5 rounded-md bg-emerald-100 dark:bg-emerald-900/50">
-                      <CreditCard className="w-4 h-4 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-muted-foreground">Exact Fees ({revenueSplit.reconciled.count} orders)</p>
-                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{fmt(revenueSplit.reconciled.revenue)}</p>
-                    </div>
+                {/* Match Rate */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-3xl font-bold text-foreground">{revenueSplit.matchRate}%</p>
+                    <p className="text-[11px] text-muted-foreground">Orders reconciled</p>
                   </div>
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border border-border">
-                    <div className="p-1.5 rounded-md bg-muted">
-                      <CreditCard className="w-4 h-4 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-[11px] text-muted-foreground">Estimated ({revenueSplit.unreconciled.count} orders)</p>
-                      <p className="text-sm font-bold text-muted-foreground">{fmt(revenueSplit.unreconciled.revenue)}</p>
-                    </div>
+                  <div className="text-right space-y-0.5">
+                    <p className="text-sm font-semibold">{revenueSplit.reconciled.count} <span className="text-muted-foreground font-normal">/ {revenueSplit.totalOrders}</span></p>
+                    <p className="text-[11px] text-muted-foreground">matched orders</p>
                   </div>
                 </div>
-                {revenueSplit.unreconciled.count > 0 && revenueSplit.reconciled.count > 0 && (
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    {revenueSplit.unreconciled.count} orders still using estimated 2%+GST — re-sync Razorpay to reconcile
-                  </p>
+                {/* Progress bar */}
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${revenueSplit.matchRate}%` }} />
+                </div>
+                {/* Fee summary */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50">
+                    <p className="text-[10px] text-muted-foreground">Gateway Fees</p>
+                    <p className="text-sm font-bold">{fmt(revenueSplit.totalFees)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50">
+                    <p className="text-[10px] text-muted-foreground">Gateway Tax</p>
+                    <p className="text-sm font-bold">{fmt(revenueSplit.totalTax)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50">
+                    <p className="text-[10px] text-muted-foreground">Effective Rate</p>
+                    <p className="text-sm font-bold">{revenueSplit.effectiveFeeRate}%</p>
+                  </div>
+                </div>
+                {/* Unmatched warning */}
+                {revenueSplit.unreconciled.count > 0 && (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                      <span className="text-xs text-amber-700 dark:text-amber-300">{revenueSplit.unreconciled.count} unmatched payments</span>
+                    </div>
+                    <button onClick={() => {/* Navigate to reports */}} className="text-[11px] text-primary font-medium hover:underline">View in Reports →</button>
+                  </div>
                 )}
               </div>
             ) : (
               <div className="text-center py-6 text-muted-foreground">
                 <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No revenue data for selected period</p>
-                <p className="text-xs mt-1">Sync Razorpay in Integrations to get exact gateway fees</p>
+                <p className="text-sm">No reconciliation data yet</p>
+                <p className="text-xs mt-1">Sync Razorpay in Integrations to match payments with exact fees</p>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Cashflow Forecast — Bank Settlements */}
+        {/* Bank Settlements — Redesigned */}
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <Landmark className="w-4 h-4 text-muted-foreground" />
               <div>
-                <CardTitle className="text-base">Cashflow Forecast</CardTitle>
-                <CardDescription>Upcoming Razorpay bank settlements</CardDescription>
+                <CardTitle className="text-base">Bank Settlements</CardTitle>
+                <CardDescription>Razorpay payouts to your bank account</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            {settlements?.active && settlements.settlements?.length > 0 ? (
-              <div className="space-y-3">
-                {/* Next Settlement (first one) */}
-                {(() => {
-                  const next = settlements.settlements[0];
-                  return (
-                    <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300 uppercase tracking-wide">
-                            {next.status === 'processed' ? 'Latest Settlement' : 'Next Settlement'}
-                          </p>
-                          <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-0.5">{fmt(next.amount)}</p>
+            {settlements?.active && settlements.settlements?.length > 0 ? (() => {
+              // Separate pending/upcoming from processed
+              const pending = settlements.settlements.filter(s => s.status === 'created' || s.status === 'initiated');
+              const processed = settlements.settlements.filter(s => s.status === 'processed');
+              const failed = settlements.settlements.filter(s => s.status === 'failed');
+              const totalSettled = processed.reduce((sum, s) => sum + (s.amount || 0), 0);
+
+              return (
+                <div className="space-y-3">
+                  {/* Pending / Upcoming Settlements */}
+                  {pending.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Upcoming</p>
+                      {pending.map(s => (
+                        <div key={s.id} className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{fmt(s.amount)}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date pending'}
+                                {' · Expected T+2 days'}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-300">
+                              {s.status === 'created' ? 'Pending' : 'Initiated'}
+                            </Badge>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <Badge variant={next.status === 'processed' ? 'default' : 'outline'} className="text-[10px]">
-                            {next.status === 'processed' ? 'Settled' : next.status === 'created' ? 'Pending' : next.status}
-                          </Badge>
-                          {next.createdAt && (
-                            <p className="text-[11px] text-muted-foreground mt-1">
-                              {new Date(next.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      {next.utr && <p className="text-[10px] text-muted-foreground mt-2">UTR: {next.utr}</p>}
+                      ))}
                     </div>
-                  );
-                })()}
-                {/* Upcoming settlements list */}
-                {settlements.settlements.length > 1 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Recent Settlements</p>
-                    {settlements.settlements.slice(1, 4).map((s) => (
-                      <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 border border-border/50">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-sm">
-                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'N/A'}
+                  )}
+
+                  {/* Failed Settlements */}
+                  {failed.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">Failed</p>
+                      {failed.map(s => (
+                        <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                            <span className="text-sm font-semibold text-red-700 dark:text-red-300">{fmt(s.amount)}</span>
+                          </div>
+                          <span className="text-[11px] text-muted-foreground">
+                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
                           </span>
-                          <Badge variant={s.status === 'processed' ? 'default' : 'secondary'} className="text-[9px] h-4">
-                            {s.status}
-                          </Badge>
                         </div>
-                        <span className="text-sm font-semibold">{fmt(s.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {settlements.settlements.length > 4 && (
-                  <p className="text-[11px] text-center text-muted-foreground">
-                    +{settlements.settlements.length - 4} more settlements
-                  </p>
-                )}
-              </div>
-            ) : (
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Recent Processed Settlements */}
+                  {processed.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                        Recent Deposits
+                      </p>
+                      {/* Latest settlement highlighted */}
+                      {(() => {
+                        const latest = processed[0];
+                        return (
+                          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{fmt(latest.amount)}</p>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                  {latest.createdAt ? new Date(latest.createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <Badge className="text-[10px]">Settled</Badge>
+                                {latest.utr && <p className="text-[9px] text-muted-foreground mt-1">UTR: {latest.utr}</p>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {/* Remaining processed */}
+                      {processed.length > 1 && processed.slice(1, 5).map(s => (
+                        <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 border border-border/50">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-16">
+                              {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                            </span>
+                            <Badge variant="secondary" className="text-[9px] h-4">Settled</Badge>
+                            {s.utr && <span className="text-[9px] text-muted-foreground hidden sm:inline">UTR: {s.utr}</span>}
+                          </div>
+                          <span className="text-sm font-semibold">{fmt(s.amount)}</span>
+                        </div>
+                      ))}
+                      {processed.length > 5 && (
+                        <p className="text-[11px] text-center text-muted-foreground">+{processed.length - 5} more in Reports</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Total settled summary */}
+                  {processed.length > 0 && (
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <span className="text-[11px] text-muted-foreground">Total settled ({processed.length} deposits)</span>
+                      <span className="text-sm font-bold">{fmt(totalSettled)}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })() : (
               <div className="text-center py-6 text-muted-foreground">
                 <Landmark className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No pending bank settlements</p>
+                <p className="text-sm">No bank settlements</p>
                 <p className="text-xs mt-1">
                   {settlements?.active
-                    ? 'All settlements have been processed.'
+                    ? 'No settlements found for this period.'
                     : 'Connect Razorpay in Integrations to track bank settlements'}
                 </p>
               </div>
