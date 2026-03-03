@@ -118,8 +118,13 @@ export default function App() {
         {/* Logo */}
         <div className="flex items-center h-16 px-4 border-b border-sidebar-border">
           <div className={`flex items-center gap-3 overflow-hidden ${!sidebarOpen && 'justify-center'}`}>
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {tenantConfig?.logo ? (
+                <img src={tenantConfig.logo} alt="" className="w-full h-full object-contain"
+                  onError={(e) => { e.target.style.display = 'none'; }} />
+              ) : (
+                <TrendingUp className="w-5 h-5 text-primary-foreground" />
+              )}
             </div>
             {sidebarOpen && (
               <div className="min-w-0">

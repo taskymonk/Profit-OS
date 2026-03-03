@@ -517,9 +517,10 @@ async function getDashboardData(params = {}) {
       endDate = todayIST;
       break;
     case '7days': {
-      const d7 = new Date(now.getTime() - 6 * 86400000);
+      const d7 = new Date(now.getTime() - 7 * 86400000);
+      const yesterday = new Date(now.getTime() - 1 * 86400000);
       startDate = d7.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      endDate = todayIST;
+      endDate = yesterday.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       break;
     }
     case 'month': {
@@ -537,9 +538,10 @@ async function getDashboardData(params = {}) {
       endDate = params.endDate || todayIST;
       break;
     default: {
-      const d7d = new Date(now.getTime() - 6 * 86400000);
+      const d7d = new Date(now.getTime() - 7 * 86400000);
+      const yd = new Date(now.getTime() - 1 * 86400000);
       startDate = d7d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      endDate = todayIST;
+      endDate = yd.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     }
   }
 
@@ -2418,6 +2420,16 @@ export async function POST(request) {
           notFound: results.notFound,
           employee: employee.name,
         });
+      }
+
+      case 'upload-logo': {
+        // Handle logo upload as base64
+        const db = await getDb();
+        const { imageData, fileName } = body;
+        if (!imageData) return json({ error: 'No image data provided' }, 400);
+        // imageData is a base64 data URL like "data:image/png;base64,..."
+        await db.collection('tenantConfig').updateOne({}, { $set: { logo: imageData, updatedAt: new Date().toISOString() } });
+        return json({ message: 'Logo uploaded successfully', logo: imageData });
       }
 
       case 'purge': {

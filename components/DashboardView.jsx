@@ -731,14 +731,20 @@ export default function DashboardView() {
                   </div>
                 </>
               )}
-              {/* Ad Spend */}
+              {/* Ad Spend - Split into raw + tax */}
               <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
                 <div className="flex items-center gap-2">
                   <Megaphone className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Ad Spend (incl. Tax)</span>
+                  <span className="text-sm text-muted-foreground">Ad Spend</span>
                 </div>
-                <span className="text-sm font-medium text-pink-500">-{fmt(plBreakdown.adSpend)}</span>
+                <span className="text-sm font-medium text-pink-500">-{fmt(plBreakdown.adSpendRaw || 0)}</span>
               </div>
+              {(plBreakdown.adSpendTax || 0) > 0 && (
+                <div className="flex items-center justify-between py-1.5 pl-10 border-b border-dashed border-border/40">
+                  <span className="text-xs text-muted-foreground">Ad Spend Tax ({data?.tenant?.adSpendTaxRate || 18}%)</span>
+                  <span className="text-xs font-medium text-pink-400">-{fmt(plBreakdown.adSpendTax || 0)}</span>
+                </div>
+              )}
               {/* Pro-Rata Overhead with Category Breakdown */}
               <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
                 <div className="flex items-center gap-2">

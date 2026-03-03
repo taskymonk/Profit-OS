@@ -56,9 +56,11 @@ export default function ReportsView() {
   const [activeTab, setActiveTab] = useState('skus');
   const [datePreset, setDatePreset] = useState('Last 30 Days');
   const [startDate, setStartDate] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0];
+    const d = new Date(); d.setDate(d.getDate() - 31); return d.toISOString().split('T')[0];
   });
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0];
+  });
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [pendingRange, setPendingRange] = useState({ from: undefined, to: undefined });
 
@@ -78,6 +80,7 @@ export default function ReportsView() {
   const applyPreset = (preset) => {
     setDatePreset(preset.label);
     const now = new Date();
+    const yesterday = new Date(now.getTime() - 86400000);
     if (preset.value === 'allTime') {
       setStartDate('2020-01-01');
       setEndDate(now.toISOString().split('T')[0]);
@@ -88,10 +91,10 @@ export default function ReportsView() {
       setDatePreset('Custom Range');
       setCalendarOpen(true);
     } else {
-      const d = new Date();
-      d.setDate(d.getDate() - preset.days);
+      // "Last X Days" = X complete days before today (excluding today)
+      const d = new Date(yesterday.getTime() - (preset.days - 1) * 86400000);
       setStartDate(d.toISOString().split('T')[0]);
-      setEndDate(now.toISOString().split('T')[0]);
+      setEndDate(yesterday.toISOString().split('T')[0]);
     }
   };
 

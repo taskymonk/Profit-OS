@@ -96,7 +96,69 @@ export default function SettingsView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div><Label>Business Name</Label><Input value={config.tenantName} onChange={e => setConfig({...config, tenantName: e.target.value})} /></div>
-          <div><Label>Logo URL</Label><Input value={config.logo} onChange={e => setConfig({...config, logo: e.target.value})} placeholder="https://..." /></div>
+          <div>
+            <Label>Logo</Label>
+            <div className="flex items-start gap-4 mt-1.5">
+              {/* Logo Preview */}
+              <div className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-muted/30 overflow-hidden shrink-0">
+                {config.logo ? (
+                  <img src={config.logo} alt="Logo" className="w-full h-full object-contain"
+                    onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                  />
+                ) : null}
+                <div className={`w-full h-full flex items-center justify-center text-muted-foreground ${config.logo ? 'hidden' : ''}`}>
+                  <Building2 className="w-8 h-8" />
+                </div>
+              </div>
+              <div className="flex-1 space-y-2">
+                {/* Upload Button */}
+                <div>
+                  <input type="file" accept="image/*" className="hidden" id="logo-upload"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 500 * 1024) { toast.error('Logo must be under 500KB'); return; }
+                      const reader = new FileReader();
+                      reader.onload = async (ev) => {
+                        const base64 = ev.target.result;
+                        try {
+                          const res = await fetch('/api/upload-logo', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ imageData: base64, fileName: file.name }),
+                          });
+                          const data = await res.json();
+                          if (data.logo) {
+                            setConfig(prev => ({ ...prev, logo: data.logo }));
+                            toast.success('Logo uploaded!');
+                          } else {
+                            toast.error(data.error || 'Upload failed');
+                          }
+                        } catch (err) { toast.error('Upload failed'); }
+                      };
+                      reader.readAsDataURL(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => document.getElementById('logo-upload').click()}>
+                    <Building2 className="w-3.5 h-3.5 mr-1.5" /> Upload Logo
+                  </Button>
+                  <span className="text-[10px] text-muted-foreground ml-2">Max 500KB, PNG/JPG/SVG</span>
+                </div>
+                {/* Or paste URL */}
+                <div>
+                  <Input value={config.logo?.startsWith('data:') ? '' : (config.logo || '')} placeholder="Or paste logo URL..."
+                    onChange={e => setConfig({...config, logo: e.target.value})}
+                    className="h-8 text-xs" />
+                </div>
+                {config.logo && (
+                  <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => setConfig({...config, logo: ''})}>
+                    Remove logo
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Primary Color</Label>
