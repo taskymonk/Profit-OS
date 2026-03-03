@@ -1865,30 +1865,29 @@ async function getRazorpaySettlements() {
   const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
 
   if (!integrations?.razorpay?.keyId || !integrations?.razorpay?.keySecret) {
-    return { settlements: [], error: null, active: false };
+    return { settlements: [], error: null, active: false, estimated: null, accuracy: null };
   }
 
   if (!integrations?.razorpay?.active) {
-    return { settlements: [], error: null, active: false };
+    return { settlements: [], error: null, active: false, estimated: null, accuracy: null };
   }
 
   const { keyId, keySecret } = integrations.razorpay;
   const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
 
   try {
-    const res = await fetch('https://api.razorpay.com/v1/settlements?count=10&skip=0', {
+    const res = await fetch('https://api.razorpay.com/v1/settlements?count=20&skip=0', {
       headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
     });
 
     if (!res.ok) {
-      const errText = await res.text();
-      return { settlements: [], error: `Razorpay API error: ${res.status}`, active: true };
+      return { settlements: [], error: `Razorpay API error: ${res.status}`, active: true, estimated: null, accuracy: null };
     }
 
     const data = await res.json();
     const items = (data.items || []).map(s => ({
       id: s.id,
-      amount: (s.amount || 0) / 100, // Convert paise to rupees
+      amount: (s.amount || 0) / 100,
       status: s.status,
       fees: (s.fees || 0) / 100,
       tax: (s.tax || 0) / 100,
@@ -1896,9 +1895,133 @@ async function getRazorpaySettlements() {
       createdAt: s.created_at ? new Date(s.created_at * 1000).toISOString() : null,
     }));
 
-    return { settlements: items, error: null, active: true };
+    // --- Compute Estimated Available Balance ---
+    // Find orders reconciled with Razorpay but not yet settled (no settlementId)
+    const unsettledOrders = await db.collection('orders').find({
+      razorpayReconciled: true,
+      $or: [
+        { razorpaySettlementId: null },
+        { razorpaySettlementId: { $exists: false } },
+        { razorpaySettlementId: '' },
+      ]
+    }).toArray();
+
+    let estGross = 0, estFees = 0, estTax = 0;
+    unsettledOrders.forEach(o => {
+      estGross += o.salePrice || 0;
+      estFees += o.razorpayFee || 0;
+      estTax += o.razorpayTax || 0;
+    });
+    const estNet = estGross - estFees - estTax;
+
+    // Determine expected settlement date (T+2 business days from now)
+    const now = new Date();
+    let estDate = new Date(now);
+    let bizDays = 0;
+    while (bizDays < 2) {
+      estDate.setDate(estDate.getDate() + 1);
+      const dow = estDate.getDay();
+      if (dow !== 0 && dow !== 6) bizDays++; // skip weekends
+    }
+    // Settlement typically before 9 PM IST
+    estDate.setHours(21, 0, 0, 0);
+
+    const estimated = {
+      availableBalance: Math.round(estGross * 100) / 100,
+      estimatedSettlement: Math.round(estNet * 100) / 100,
+      estimatedFees: Math.round(estFees * 100) / 100,
+      estimatedTax: Math.round(estTax * 100) / 100,
+      unsettledOrderCount: unsettledOrders.length,
+      expectedDate: estDate.toISOString(),
+      computedAt: now.toISOString(),
+    };
+
+    // --- Save estimate for accuracy tracking ---
+    const todayKey = now.toISOString().split('T')[0]; // e.g. "2026-03-03"
+    if (estNet > 0) {
+      await db.collection('settlementEstimates').updateOne(
+        { _id: todayKey },
+        {
+          $set: {
+            date: todayKey,
+            estimatedNet: estimated.estimatedSettlement,
+            estimatedGross: estimated.availableBalance,
+            estimatedFees: estimated.estimatedFees,
+            estimatedTax: estimated.estimatedTax,
+            orderCount: unsettledOrders.length,
+            computedAt: now.toISOString(),
+          }
+        },
+        { upsert: true }
+      );
+    }
+
+    // --- Accuracy tracking: compare past estimates with actual settlements ---
+    const pastEstimates = await db.collection('settlementEstimates')
+      .find({ actualAmount: { $exists: true } })
+      .sort({ date: -1 })
+      .limit(20)
+      .toArray();
+
+    // Try to match processed settlements with stored estimates
+    const processedSettlements = items.filter(s => s.status === 'processed');
+    for (const s of processedSettlements) {
+      if (!s.createdAt) continue;
+      const settDate = new Date(s.createdAt).toISOString().split('T')[0];
+      // Check if we have an estimate for the day before this settlement (T-2 estimate)
+      const estDocs = await db.collection('settlementEstimates').find({
+        date: { $lte: settDate },
+        actualAmount: { $exists: false },
+      }).sort({ date: -1 }).limit(1).toArray();
+
+      if (estDocs.length > 0) {
+        const est = estDocs[0];
+        const accuracyPct = est.estimatedNet > 0
+          ? Math.round((1 - Math.abs(s.amount - est.estimatedNet) / est.estimatedNet) * 10000) / 100
+          : null;
+        await db.collection('settlementEstimates').updateOne(
+          { _id: est._id },
+          {
+            $set: {
+              actualAmount: s.amount,
+              actualDate: settDate,
+              settlementId: s.id,
+              accuracyPercent: accuracyPct,
+              matchedAt: now.toISOString(),
+            }
+          }
+        );
+      }
+    }
+
+    // Compute overall accuracy stats
+    const allMatched = await db.collection('settlementEstimates')
+      .find({ accuracyPercent: { $exists: true, $ne: null } })
+      .sort({ date: -1 })
+      .limit(20)
+      .toArray();
+
+    let accuracy = null;
+    if (allMatched.length > 0) {
+      const avgAcc = allMatched.reduce((sum, e) => sum + (e.accuracyPercent || 0), 0) / allMatched.length;
+      const recent = allMatched.slice(0, 5);
+      const recentAcc = recent.length > 0 ? recent.reduce((sum, e) => sum + (e.accuracyPercent || 0), 0) / recent.length : null;
+      accuracy = {
+        samples: allMatched.length,
+        avgAccuracy: Math.round(avgAcc * 100) / 100,
+        recentAccuracy: recentAcc !== null ? Math.round(recentAcc * 100) / 100 : null,
+        history: allMatched.slice(0, 5).map(e => ({
+          date: e.date,
+          estimated: e.estimatedNet,
+          actual: e.actualAmount,
+          accuracy: e.accuracyPercent,
+        })),
+      };
+    }
+
+    return { settlements: items, error: null, active: true, estimated, accuracy };
   } catch (err) {
-    return { settlements: [], error: err.message, active: true };
+    return { settlements: [], error: err.message, active: true, estimated: null, accuracy: null };
   }
 }
 

@@ -152,6 +152,8 @@ export default function ReportsView() {
         settlements: sett?.settlements || [],
         unmatchedPayments: unmatched?.payments || [],
         settlementsActive: sett?.active || false,
+        estimated: sett?.estimated || null,
+        accuracy: sett?.accuracy || null,
       });
     } catch (err) { console.error('Payments fetch error:', err); }
     setPaymentsLoading(false);
@@ -825,6 +827,127 @@ export default function ReportsView() {
                     </div>
                   </CardContent>
                 </Card>
+              )}
+
+              {/* Estimated Balance & Accuracy */}
+              {paymentsData.settlementsActive && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Estimated Balance */}
+                  {paymentsData.estimated && paymentsData.estimated.estimatedSettlement > 0 && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-blue-500" /> Expected Next Settlement
+                          <Badge variant="outline" className="text-[10px] ml-1">Calculated</Badge>
+                        </CardTitle>
+                        <CardDescription>Computed from unsettled order data in your database</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                            <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{fmt(paymentsData.estimated.estimatedSettlement)}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Expected by {paymentsData.estimated.expectedDate
+                                ? new Date(paymentsData.estimated.expectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })
+                                : 'next business day'} before 9 PM IST
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="p-2 rounded bg-muted/50 border border-border/50">
+                              <p className="text-[10px] text-muted-foreground">Gross Amount</p>
+                              <p className="text-sm font-bold">{fmt(paymentsData.estimated.availableBalance)}</p>
+                            </div>
+                            <div className="p-2 rounded bg-muted/50 border border-border/50">
+                              <p className="text-[10px] text-muted-foreground">Fees + Tax</p>
+                              <p className="text-sm font-bold">-{fmt(paymentsData.estimated.estimatedFees + paymentsData.estimated.estimatedTax)}</p>
+                            </div>
+                            <div className="p-2 rounded bg-muted/50 border border-border/50">
+                              <p className="text-[10px] text-muted-foreground">Unsettled Orders</p>
+                              <p className="text-sm font-bold">{paymentsData.estimated.unsettledOrderCount}</p>
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground italic">
+                            Final amount may vary due to refunds, chargebacks, and adjustments by Razorpay.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Accuracy History */}
+                  {paymentsData.accuracy && paymentsData.accuracy.samples > 0 ? (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-emerald-500" /> Estimation Accuracy
+                        </CardTitle>
+                        <CardDescription>How close our estimates are to actual settlements</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
+                              <p className="text-[10px] text-muted-foreground">Average Accuracy</p>
+                              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{paymentsData.accuracy.avgAccuracy}%</p>
+                              <p className="text-[10px] text-muted-foreground">{paymentsData.accuracy.samples} samples</p>
+                            </div>
+                            {paymentsData.accuracy.recentAccuracy && (
+                              <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                                <p className="text-[10px] text-muted-foreground">Recent (Last 5)</p>
+                                <p className="text-2xl font-bold">{paymentsData.accuracy.recentAccuracy}%</p>
+                                <p className="text-[10px] text-muted-foreground">last 5 settlements</p>
+                              </div>
+                            )}
+                          </div>
+                          {paymentsData.accuracy.history && paymentsData.accuracy.history.length > 0 && (
+                            <div className="overflow-x-auto rounded border">
+                              <table className="w-full text-left">
+                                <thead>
+                                  <tr className="bg-muted/50 border-b">
+                                    <th className="py-2 px-3 text-[10px] font-semibold text-muted-foreground">Date</th>
+                                    <th className="py-2 px-3 text-[10px] font-semibold text-muted-foreground text-right">Estimated</th>
+                                    <th className="py-2 px-3 text-[10px] font-semibold text-muted-foreground text-right">Actual</th>
+                                    <th className="py-2 px-3 text-[10px] font-semibold text-muted-foreground text-right">Accuracy</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {paymentsData.accuracy.history.map((h, i) => (
+                                    <tr key={i} className="border-b last:border-b-0">
+                                      <td className="py-2 px-3 text-xs">{h.date}</td>
+                                      <td className="py-2 px-3 text-xs text-right">{fmt(h.estimated)}</td>
+                                      <td className="py-2 px-3 text-xs text-right font-medium">{fmt(h.actual)}</td>
+                                      <td className="py-2 px-3 text-xs text-right">
+                                        <Badge variant={h.accuracy >= 95 ? 'default' : h.accuracy >= 85 ? 'secondary' : 'outline'} className="text-[10px]">
+                                          {h.accuracy}%
+                                        </Badge>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4 text-muted-foreground" /> Estimation Accuracy
+                        </CardTitle>
+                        <CardDescription>Tracks how close estimates are to actual settlements</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-center py-6 text-muted-foreground">
+                          <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">No accuracy data yet</p>
+                          <p className="text-xs mt-1">Accuracy tracking starts once estimates are matched with actual settlements over time.</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               )}
 
               {/* Settlement History */}

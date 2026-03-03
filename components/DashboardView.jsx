@@ -493,17 +493,55 @@ export default function DashboardView() {
             </div>
           </CardHeader>
           <CardContent>
-            {settlements?.active && settlements.settlements?.length > 0 ? (() => {
-              // Separate pending/upcoming from processed
-              const pending = settlements.settlements.filter(s => s.status === 'created' || s.status === 'initiated');
-              const processed = settlements.settlements.filter(s => s.status === 'processed');
-              const failed = settlements.settlements.filter(s => s.status === 'failed');
-              const totalSettled = processed.reduce((sum, s) => sum + (s.amount || 0), 0);
+            {settlements?.active ? (
+              <div className="space-y-3">
+                {/* Estimated Available Balance + Expected Settlement */}
+                {settlements.estimated && settlements.estimated.estimatedSettlement > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Expected Settlement
+                      <span className="text-[9px] font-normal text-muted-foreground ml-1">(calculated)</span>
+                    </p>
+                    <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(settlements.estimated.estimatedSettlement)}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {settlements.estimated.expectedDate
+                              ? `Expected by ${new Date(settlements.estimated.expectedDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} before 9 PM`
+                              : 'Pending settlement cycle'}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground mt-0.5">
+                            {settlements.estimated.unsettledOrderCount} unsettled orders · Gross {fmt(settlements.estimated.availableBalance)} − Fees {fmt(settlements.estimated.estimatedFees)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-700 dark:text-blue-300">
+                            Estimated
+                          </Badge>
+                          {settlements.accuracy && (
+                            <p className="text-[9px] text-muted-foreground mt-1">
+                              {settlements.accuracy.samples > 0 ? `${settlements.accuracy.recentAccuracy || settlements.accuracy.avgAccuracy}% accurate` : ''}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Accuracy note */}
+                    <p className="text-[9px] text-muted-foreground italic px-1">
+                      Calculated from unsettled order data. Final amount may vary due to refunds & chargebacks.
+                      {settlements.accuracy && settlements.accuracy.samples > 0 && (
+                        <span> Past accuracy: {settlements.accuracy.avgAccuracy}% avg over {settlements.accuracy.samples} settlements.</span>
+                      )}
+                    </p>
+                  </div>
+                )}
 
-              return (
-                <div className="space-y-3">
-                  {/* Pending / Upcoming Settlements */}
-                  {pending.length > 0 && (
+                {/* Pending/Upcoming Settlements from API (if any) */}
+                {(() => {
+                  const pending = (settlements.settlements || []).filter(s => s.status === 'created' || s.status === 'initiated');
+                  if (pending.length === 0) return null;
+                  return (
                     <div className="space-y-2">
                       <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Upcoming</p>
                       {pending.map(s => (
@@ -513,7 +551,6 @@ export default function DashboardView() {
                               <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{fmt(s.amount)}</p>
                               <p className="text-[10px] text-muted-foreground mt-0.5">
                                 {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date pending'}
-                                {' · Expected T+2 days'}
                               </p>
                             </div>
                             <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-300">
@@ -523,10 +560,14 @@ export default function DashboardView() {
                         </div>
                       ))}
                     </div>
-                  )}
+                  );
+                })()}
 
-                  {/* Failed Settlements */}
-                  {failed.length > 0 && (
+                {/* Failed Settlements */}
+                {(() => {
+                  const failed = (settlements.settlements || []).filter(s => s.status === 'failed');
+                  if (failed.length === 0) return null;
+                  return (
                     <div className="space-y-2">
                       <p className="text-[11px] font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">Failed</p>
                       {failed.map(s => (
@@ -541,36 +582,34 @@ export default function DashboardView() {
                         </div>
                       ))}
                     </div>
-                  )}
+                  );
+                })()}
 
-                  {/* Recent Processed Settlements */}
-                  {processed.length > 0 && (
+                {/* Recent Processed Settlements */}
+                {(() => {
+                  const processed = (settlements.settlements || []).filter(s => s.status === 'processed');
+                  if (processed.length === 0) return null;
+                  const totalSettled = processed.reduce((sum, s) => sum + (s.amount || 0), 0);
+                  return (
                     <div className="space-y-2">
-                      <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                        Recent Deposits
-                      </p>
-                      {/* Latest settlement highlighted */}
-                      {(() => {
-                        const latest = processed[0];
-                        return (
-                          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{fmt(latest.amount)}</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5">
-                                  {latest.createdAt ? new Date(latest.createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <Badge className="text-[10px]">Settled</Badge>
-                                {latest.utr && <p className="text-[9px] text-muted-foreground mt-1">UTR: {latest.utr}</p>}
-                              </div>
-                            </div>
+                      <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Recent Deposits</p>
+                      {/* Latest settlement */}
+                      <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{fmt(processed[0].amount)}</p>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {processed[0].createdAt ? new Date(processed[0].createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                            </p>
                           </div>
-                        );
-                      })()}
-                      {/* Remaining processed */}
-                      {processed.length > 1 && processed.slice(1, 5).map(s => (
+                          <div className="text-right">
+                            <Badge className="text-[10px]">Settled</Badge>
+                            {processed[0].utr && <p className="text-[9px] text-muted-foreground mt-1">UTR: {processed[0].utr}</p>}
+                          </div>
+                        </div>
+                      </div>
+                      {/* More processed */}
+                      {processed.slice(1, 4).map(s => (
                         <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 border border-border/50">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground w-16">
@@ -582,30 +621,32 @@ export default function DashboardView() {
                           <span className="text-sm font-semibold">{fmt(s.amount)}</span>
                         </div>
                       ))}
-                      {processed.length > 5 && (
-                        <p className="text-[11px] text-center text-muted-foreground">+{processed.length - 5} more in Reports</p>
+                      {processed.length > 4 && (
+                        <p className="text-[11px] text-center text-muted-foreground">+{processed.length - 4} more in Reports</p>
                       )}
+                      {/* Total */}
+                      <div className="flex items-center justify-between pt-2 border-t border-border">
+                        <span className="text-[11px] text-muted-foreground">Total settled ({processed.length} deposits)</span>
+                        <span className="text-sm font-bold">{fmt(totalSettled)}</span>
+                      </div>
                     </div>
-                  )}
+                  );
+                })()}
 
-                  {/* Total settled summary */}
-                  {processed.length > 0 && (
-                    <div className="flex items-center justify-between pt-2 border-t border-border">
-                      <span className="text-[11px] text-muted-foreground">Total settled ({processed.length} deposits)</span>
-                      <span className="text-sm font-bold">{fmt(totalSettled)}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })() : (
+                {/* Edge case: no data at all */}
+                {(!settlements.settlements || settlements.settlements.length === 0) && (!settlements.estimated || settlements.estimated.estimatedSettlement <= 0) && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Landmark className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">No settlement data yet</p>
+                    <p className="text-xs mt-1">Settlement data will appear after Razorpay processes deposits.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
               <div className="text-center py-6 text-muted-foreground">
                 <Landmark className="w-8 h-8 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">No bank settlements</p>
-                <p className="text-xs mt-1">
-                  {settlements?.active
-                    ? 'No settlements found for this period.'
-                    : 'Connect Razorpay in Integrations to track bank settlements'}
-                </p>
+                <p className="text-xs mt-1">Connect Razorpay in Integrations to track bank settlements</p>
               </div>
             )}
           </CardContent>
