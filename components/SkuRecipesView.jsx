@@ -1,132 +1,182 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit, Package, ChevronDown, ChevronUp, AlertCircle, Boxes, Info, X } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
+import {
+  Plus, Trash2, Edit, Package, ChevronDown, ChevronRight, AlertCircle, Boxes, Info, X,
+  Search, FileText, Copy, Link2, Unlink, RefreshCw, CheckCircle2, ArrowUpDown, LayoutTemplate, Zap
+} from 'lucide-react';
 import { toast } from 'sonner';
 
-const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function SkuRecipesView() {
   const [recipes, setRecipes] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingRecipe, setEditingRecipe] = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
   const [showGuide, setShowGuide] = useState(true);
+  const [filter, setFilter] = useState('all'); // 'all' | 'needs-setup' | 'has-recipe'
+  const [sortBy, setSortBy] = useState('orders'); // 'orders' | 'name' | 'revenue'
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
 
-  const [form, setForm] = useState({
-    sku: '', productName: '', defaultWastageBuffer: '5',
-    ingredients: [],
+  // Dialogs
+  const [recipeDialogOpen, setRecipeDialogOpen] = useState(false);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const [editingRecipe, setEditingRecipe] = useState(null);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [applyingTemplate, setApplyingTemplate] = useState(null);
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState([]);
+
+  // Recipe form
+  const [recipeForm, setRecipeForm] = useState({
+    sku: '', productName: '', defaultWastageBuffer: '5', ingredients: [],
   });
 
-  const fetchData = async () => {
+  // Template form
+  const [templateForm, setTemplateForm] = useState({
+    name: '', description: '', defaultWastageBuffer: '5', ingredients: [],
+  });
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [r, inv] = await Promise.all([
+      const [r, t, inv] = await Promise.all([
         fetch('/api/sku-recipes').then(r => r.json()),
+        fetch('/api/recipe-templates').then(r => r.json()),
         fetch('/api/inventory-items').then(r => r.json()),
       ]);
       setRecipes(Array.isArray(r) ? r : []);
+      setTemplates(Array.isArray(t) ? t : []);
       setInventoryItems(Array.isArray(inv) ? inv : []);
-    } catch (err) { toast.error('Failed to load'); }
+    } catch (err) { toast.error('Failed to load data'); }
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const inventoryByCategory = {};
-  inventoryItems.forEach(item => {
-    const cat = item.category || 'Uncategorized';
-    if (!inventoryByCategory[cat]) inventoryByCategory[cat] = [];
-    inventoryByCategory[cat].push(item);
-  });
+  // ===== Derived data =====
+  const inventoryByCategory = useMemo(() => {
+    const map = {};
+    inventoryItems.forEach(item => {
+      const cat = item.category || 'Uncategorized';
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(item);
+    });
+    return map;
+  }, [inventoryItems]);
+
   const categories = Object.keys(inventoryByCategory).sort();
 
-  // Get baseCostPerUnit for an inventory item (backward-compatible)
   const getItemBaseCost = (item) => {
+    if (item.avgCostPerUnit && item.avgCostPerUnit > 0) return item.avgCostPerUnit;
     if (item.baseCostPerUnit) return item.baseCostPerUnit;
-    const price = item.purchasePrice ?? item.costPerUnit ?? 0;
-    const qty = item.purchaseQuantity || item.yieldPerUnit || 1;
+    const price = item.purchasePrice ?? 0;
+    const qty = item.purchaseQuantity || 1;
     return price / Math.max(1, qty);
   };
 
-  // Calculate recipe costs using BOM architecture: quantityUsed * baseCostPerUnit
   const calcRecipeCost = (recipe) => {
     let total = 0;
     const breakdown = {};
     (recipe.ingredients || []).forEach(ing => {
       const baseCost = ing.baseCostPerUnit || 0;
-      const qtyUsed = ing.quantityUsed || ing.quantity || 0;
+      const qtyUsed = ing.quantityUsed || 0;
       const lineCost = qtyUsed * baseCost;
       total += lineCost;
       const cat = ing.category || 'Uncategorized';
       breakdown[cat] = (breakdown[cat] || 0) + lineCost;
     });
-    // Legacy format support
     (recipe.rawMaterials || []).forEach(rm => {
       const cost = (rm.pricePerUnit || 0) * (rm.quantity || 0);
       total += cost;
       breakdown['Raw Material'] = (breakdown['Raw Material'] || 0) + cost;
     });
     (recipe.packaging || []).forEach(pkg => {
-      total += (pkg.pricePerUnit || 0);
+      total += pkg.pricePerUnit || 0;
       breakdown['Packaging'] = (breakdown['Packaging'] || 0) + (pkg.pricePerUnit || 0);
     });
     const wastage = total * ((recipe.defaultWastageBuffer || 0) / 100);
     return { subtotal: total, wastage, total: total + wastage, breakdown };
   };
 
-  const handleSubmit = async () => {
-    // Build BOM ingredients with baseCostPerUnit + quantityUsed
-    // Also maintain backward-compatible rawMaterials/packaging for profitCalculator legacy path
-    const rawMaterials = [];
-    const packaging = [];
-    const ingredients = form.ingredients.map(ing => {
-      const item = inventoryItems.find(i => i._id === ing.inventoryItemId);
-      const baseCost = item ? getItemBaseCost(item) : (ing.baseCostPerUnit || 0);
-      const unit = item?.unit || item?.unitMeasurement || ing.unit || 'units';
-      const result = {
-        inventoryItemId: ing.inventoryItemId,
-        name: item?.name || ing.name,
-        category: item?.category || ing.category,
-        quantityUsed: Number(ing.quantityUsed) || 0,
-        baseCostPerUnit: Math.round(baseCost * 100) / 100,
-        unit: unit,
-      };
-      // Legacy format for backward compatibility
-      if (result.category === 'Raw Material') {
-        rawMaterials.push({ name: result.name, quantity: result.quantityUsed, pricePerUnit: result.baseCostPerUnit, unitMeasurement: unit });
-      } else if (result.category === 'Packaging') {
-        packaging.push({ name: result.name, pricePerUnit: result.baseCostPerUnit * result.quantityUsed });
-      }
-      return result;
-    });
+  // Stats
+  const totalRecipes = recipes.length;
+  const needsSetup = recipes.filter(r => r.needsCostInput || (r.ingredients || []).length === 0).length;
+  const hasRecipe = totalRecipes - needsSetup;
+  const totalOrders = recipes.reduce((s, r) => s + (r.orderCount || 0), 0);
+  const coveredOrders = recipes.filter(r => (r.ingredients || []).length > 0).reduce((s, r) => s + (r.orderCount || 0), 0);
+  const coveragePercent = totalOrders > 0 ? Math.round((coveredOrders / totalOrders) * 100) : 0;
 
-    let consumableCost = 0;
-    ingredients.forEach(ing => {
-      if (ing.category !== 'Raw Material' && ing.category !== 'Packaging') {
-        consumableCost += (ing.baseCostPerUnit || 0) * (ing.quantityUsed || 0);
-      }
-    });
+  // Filtered & sorted
+  const filteredRecipes = useMemo(() => {
+    let list = [...recipes];
+    if (filter === 'needs-setup') list = list.filter(r => r.needsCostInput || (r.ingredients || []).length === 0);
+    if (filter === 'has-recipe') list = list.filter(r => (r.ingredients || []).length > 0);
+    if (searchTerm.trim()) {
+      const s = searchTerm.toLowerCase();
+      list = list.filter(r => r.productName?.toLowerCase().includes(s) || r.sku?.toLowerCase().includes(s));
+    }
+    if (sortBy === 'orders') list.sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0));
+    if (sortBy === 'name') list.sort((a, b) => (a.productName || '').localeCompare(b.productName || ''));
+    if (sortBy === 'revenue') list.sort((a, b) => (b.totalRevenue || 0) - (a.totalRevenue || 0));
+    return list;
+  }, [recipes, filter, searchTerm, sortBy]);
 
+  // ===== Ingredient helpers =====
+  const addIngredient = (form, setForm, itemId) => {
+    const item = inventoryItems.find(i => i._id === itemId);
+    if (!item) return;
+    if (form.ingredients.some(ing => ing.inventoryItemId === itemId)) {
+      toast.error('Already added'); return;
+    }
+    setForm({
+      ...form,
+      ingredients: [...form.ingredients, {
+        inventoryItemId: item._id, name: item.name,
+        inventoryItemName: item.name,
+        category: item.category, quantityUsed: 1,
+        baseCostPerUnit: Math.round(getItemBaseCost(item) * 100) / 100,
+        unit: item.unit || 'units',
+      }],
+    });
+  };
+
+  const removeIngredient = (form, setForm, idx) => {
+    setForm({ ...form, ingredients: form.ingredients.filter((_, i) => i !== idx) });
+  };
+
+  const updateIngredientQty = (form, setForm, idx, qty) => {
+    const arr = [...form.ingredients];
+    arr[idx] = { ...arr[idx], quantityUsed: Number(qty) };
+    setForm({ ...form, ingredients: arr });
+  };
+
+  // ===== Handlers =====
+  const handleSaveRecipe = async () => {
+    const ingredients = recipeForm.ingredients.map(ing => ({
+      inventoryItemId: ing.inventoryItemId, name: ing.name,
+      inventoryItemName: ing.name,
+      category: ing.category, quantityUsed: Number(ing.quantityUsed) || 0,
+      baseCostPerUnit: ing.baseCostPerUnit, unit: ing.unit,
+    }));
     const data = {
-      sku: form.sku,
-      productName: form.productName,
-      defaultWastageBuffer: Number(form.defaultWastageBuffer),
+      sku: recipeForm.sku, productName: recipeForm.productName,
+      defaultWastageBuffer: Number(recipeForm.defaultWastageBuffer),
       ingredients,
-      rawMaterials,
-      packaging,
-      consumableCost,
+      needsCostInput: ingredients.length === 0,
     };
-
     try {
       if (editingRecipe) {
         await fetch(`/api/sku-recipes/${editingRecipe._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -135,286 +185,590 @@ export default function SkuRecipesView() {
         await fetch('/api/sku-recipes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         toast.success('Recipe created');
       }
-      setDialogOpen(false); setEditingRecipe(null); fetchData();
+      setRecipeDialogOpen(false);
+      setEditingRecipe(null);
+      fetchData();
     } catch (err) { toast.error('Failed to save'); }
   };
 
-  const deleteRecipe = async (id) => {
-    if (!confirm('Delete this recipe?')) return;
-    await fetch(`/api/sku-recipes/${id}`, { method: 'DELETE' });
-    toast.success('Deleted'); fetchData();
+  const handleSaveTemplate = async () => {
+    if (!templateForm.name.trim()) return toast.error('Template name required');
+    const ingredients = templateForm.ingredients.map(ing => ({
+      inventoryItemId: ing.inventoryItemId, name: ing.name,
+      inventoryItemName: ing.name,
+      category: ing.category, quantityUsed: Number(ing.quantityUsed) || 0,
+      baseCostPerUnit: ing.baseCostPerUnit, unit: ing.unit,
+    }));
+    const data = {
+      name: templateForm.name, description: templateForm.description,
+      defaultWastageBuffer: Number(templateForm.defaultWastageBuffer), ingredients,
+    };
+    try {
+      if (editingTemplate) {
+        await fetch(`/api/recipe-templates/${editingTemplate._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        toast.success('Template updated');
+      } else {
+        await fetch('/api/recipe-templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        toast.success('Template created');
+      }
+      setTemplateDialogOpen(false);
+      setEditingTemplate(null);
+      fetchData();
+    } catch (err) { toast.error('Failed to save'); }
   };
 
-  const addIngredient = (itemId) => {
-    if (!itemId) return;
-    const item = inventoryItems.find(i => i._id === itemId);
-    if (!item) return;
-    if (form.ingredients.some(ing => ing.inventoryItemId === itemId)) {
-      toast.error('Item already in recipe'); return;
-    }
-    const baseCost = getItemBaseCost(item);
-    setForm({
-      ...form,
-      ingredients: [...form.ingredients, {
-        inventoryItemId: item._id,
-        name: item.name,
-        category: item.category,
-        quantityUsed: 1,
-        baseCostPerUnit: Math.round(baseCost * 100) / 100,
-        unit: item.unit || item.unitMeasurement || 'units',
-      }],
-    });
+  const handleApplyTemplate = async () => {
+    if (!applyingTemplate || selectedRecipeIds.length === 0) return toast.error('Select products');
+    try {
+      const res = await fetch('/api/recipe-templates/apply', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: applyingTemplate._id, recipeIds: selectedRecipeIds }),
+      });
+      const data = await res.json();
+      toast.success(data.message || `Applied to ${data.applied} products`);
+      setApplyDialogOpen(false);
+      setSelectedRecipeIds([]);
+      fetchData();
+    } catch (err) { toast.error('Failed to apply'); }
   };
 
-  const openEdit = (recipe) => {
+  const handleRepush = async (tplId) => {
+    try {
+      const res = await fetch('/api/recipe-templates/repush', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: tplId }),
+      });
+      const data = await res.json();
+      toast.success(data.message);
+      fetchData();
+    } catch (err) { toast.error('Failed'); }
+  };
+
+  const handleDeleteTemplate = async (id) => {
+    if (!confirm('Delete this template? Linked recipes will keep their current ingredients but be unlinked.')) return;
+    // Unlink all recipes first
+    await fetch('/api/recipe-templates/unlink', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ templateId: id }) });
+    await fetch(`/api/recipe-templates/${id}`, { method: 'DELETE' });
+    toast.success('Deleted');
+    fetchData();
+  };
+
+  const openEditRecipe = (recipe) => {
     setEditingRecipe(recipe);
     let ingredients = (recipe.ingredients || []).map(ing => {
-      // For existing BOM ingredients, lookup latest baseCost from inventory
       const item = inventoryItems.find(i => i._id === ing.inventoryItemId);
       return {
-        inventoryItemId: ing.inventoryItemId || '',
-        name: ing.name,
+        inventoryItemId: ing.inventoryItemId || '', name: ing.name || ing.inventoryItemName || '',
         category: ing.category || 'Raw Material',
-        quantityUsed: ing.quantityUsed || ing.quantity || 0,
-        baseCostPerUnit: item ? getItemBaseCost(item) : (ing.baseCostPerUnit || ing.costPerUnit || 0),
-        unit: ing.unit || ing.unitMeasurement || 'units',
+        quantityUsed: ing.quantityUsed || 0,
+        baseCostPerUnit: item ? getItemBaseCost(item) : (ing.baseCostPerUnit || 0),
+        unit: ing.unit || 'units',
       };
     });
-    // Convert legacy format
-    if (ingredients.length === 0) {
-      (recipe.rawMaterials || []).forEach(rm => {
-        ingredients.push({
-          inventoryItemId: rm.materialId || '',
-          name: rm.name, category: 'Raw Material',
-          quantityUsed: rm.quantity || 0, baseCostPerUnit: rm.pricePerUnit || 0,
-          unit: rm.unitMeasurement || 'units',
-        });
-      });
-      (recipe.packaging || []).forEach(pkg => {
-        ingredients.push({
-          inventoryItemId: pkg.materialId || '',
-          name: pkg.name, category: 'Packaging',
-          quantityUsed: 1, baseCostPerUnit: pkg.pricePerUnit || 0,
-          unit: 'units',
-        });
-      });
-    }
-    setForm({
+    setRecipeForm({
       sku: recipe.sku, productName: recipe.productName,
-      defaultWastageBuffer: String(recipe.defaultWastageBuffer || 5),
-      ingredients,
+      defaultWastageBuffer: String(recipe.defaultWastageBuffer || 5), ingredients,
     });
-    setDialogOpen(true);
+    setRecipeDialogOpen(true);
   };
 
-  const getAvailable = (category) => {
-    const catItems = inventoryByCategory[category] || [];
-    return catItems.filter(i => !form.ingredients.some(ing => ing.inventoryItemId === i._id));
+  const openEditTemplate = (tpl) => {
+    setEditingTemplate(tpl);
+    const ingredients = (tpl.ingredients || []).map(ing => {
+      const item = inventoryItems.find(i => i._id === ing.inventoryItemId);
+      return {
+        inventoryItemId: ing.inventoryItemId || '', name: ing.name || '',
+        category: ing.category || 'Raw Material',
+        quantityUsed: ing.quantityUsed || 0,
+        baseCostPerUnit: item ? getItemBaseCost(item) : (ing.baseCostPerUnit || 0),
+        unit: ing.unit || 'units',
+      };
+    });
+    setTemplateForm({
+      name: tpl.name, description: tpl.description || '',
+      defaultWastageBuffer: String(tpl.defaultWastageBuffer || 5), ingredients,
+    });
+    setTemplateDialogOpen(true);
   };
+
+  const openApplyTemplate = (tpl) => {
+    setApplyingTemplate(tpl);
+    // Pre-select recipes that match the template name pattern
+    const nameWords = tpl.name.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const suggestedIds = recipes
+      .filter(r => nameWords.some(w => r.productName?.toLowerCase().includes(w)))
+      .map(r => r._id);
+    setSelectedRecipeIds(suggestedIds);
+    setApplyDialogOpen(true);
+  };
+
+  // ===== Ingredient Form Component =====
+  const IngredientForm = ({ form: f, setForm: sf, label }) => (
+    <div className="space-y-3">
+      {inventoryItems.length === 0 ? (
+        <div className="p-3 rounded-md border border-amber-200 bg-amber-50">
+          <p className="text-sm text-amber-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" /> Add items in <strong>Inventory</strong> page first, then come back here.
+          </p>
+        </div>
+      ) : (
+        categories.map(cat => {
+          const available = (inventoryByCategory[cat] || []).filter(i => !f.ingredients.some(ing => ing.inventoryItemId === i._id));
+          const catIngredients = f.ingredients.filter(ing => ing.category === cat);
+          return (
+            <div key={cat} className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Boxes className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-sm font-medium">{cat}</span>
+                  <Badge variant="outline" className="text-[10px]">{catIngredients.length}</Badge>
+                </div>
+                {available.length > 0 && (
+                  <Select onValueChange={v => addIngredient(f, sf, v)}>
+                    <SelectTrigger className="w-52 h-7 text-xs"><SelectValue placeholder={`+ Add ${cat.toLowerCase()}`} /></SelectTrigger>
+                    <SelectContent>
+                      {available.map(item => (
+                        <SelectItem key={item._id} value={item._id}>
+                          {item.name} ({fmt(getItemBaseCost(item))}/{item.unit})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {catIngredients.map(ing => {
+                const idx = f.ingredients.indexOf(ing);
+                const lineCost = (ing.baseCostPerUnit || 0) * (ing.quantityUsed || 0);
+                return (
+                  <div key={idx} className="flex gap-2 items-center pl-5">
+                    <div className="flex-1 h-8 px-2 border rounded bg-muted/30 flex items-center text-sm truncate">
+                      {ing.name}
+                      <Badge variant="secondary" className="ml-auto text-[10px]">{fmt(ing.baseCostPerUnit)}/{ing.unit}</Badge>
+                    </div>
+                    <Input type="number" min="0" step="0.01" className="w-20 h-8 text-sm" placeholder="Qty"
+                      value={ing.quantityUsed}
+                      onChange={e => updateIngredientQty(f, sf, idx, e.target.value)} />
+                    <span className="text-xs font-medium w-16 text-right">{fmt(lineCost)}</span>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive shrink-0"
+                      onClick={() => removeIngredient(f, sf, idx)}>
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })
+      )}
+      {f.ingredients.length > 0 && (
+        <div className="p-2.5 rounded bg-primary/5 border border-primary/20">
+          <div className="grid grid-cols-3 gap-2 text-xs">
+            <div><span className="text-muted-foreground">Subtotal</span><p className="font-bold">{fmt(f.ingredients.reduce((s, i) => s + (i.baseCostPerUnit || 0) * (i.quantityUsed || 0), 0))}</p></div>
+            <div><span className="text-muted-foreground">Wastage ({f.defaultWastageBuffer}%)</span><p className="font-bold">{fmt(f.ingredients.reduce((s, i) => s + (i.baseCostPerUnit || 0) * (i.quantityUsed || 0), 0) * (Number(f.defaultWastageBuffer) / 100))}</p></div>
+            <div><span className="text-muted-foreground">Total COGS</span><p className="font-bold text-primary">{fmt(f.ingredients.reduce((s, i) => s + (i.baseCostPerUnit || 0) * (i.quantityUsed || 0), 0) * (1 + Number(f.defaultWastageBuffer) / 100))}</p></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
-    <div className="space-y-4 max-w-[1400px] mx-auto">
-      {/* Inline UX Guide */}
+    <div className="space-y-6 max-w-[1400px] mx-auto">
+      {/* Getting Started Guide */}
       {showGuide && (
-        <div className="relative rounded-xl border border-emerald-200 dark:border-emerald-800 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/30 p-5">
-          <button onClick={() => setShowGuide(false)} className="absolute top-3 right-3 text-emerald-400 hover:text-emerald-600 transition">
+        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5">
+          <button onClick={() => setShowGuide(false)} className="absolute top-3 right-3 text-blue-400 hover:text-blue-600">
             <X className="w-4 h-4" />
           </button>
           <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
-              <Info className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-sm text-emerald-900 dark:text-emerald-100">How SKU Recipes Work</h3>
-              <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
-                Build your product recipes by selecting items from your Inventory. <strong>Example:</strong> If a mini album uses <strong>0.5 meters of bubble wrap</strong>, just enter '0.5'. The engine will calculate the exact cost per order (<strong>0.5 x {"\u20B9"}10 = {"\u20B9"}5.00</strong>).
-              </p>
-              <p className="text-xs text-emerald-500 dark:text-emerald-400 mt-2">Line Cost = Quantity Used x Base Cost Per Unit (from Inventory)</p>
+            <div className="p-2 rounded-lg bg-blue-100"><Zap className="w-5 h-5 text-blue-600" /></div>
+            <div className="space-y-2">
+              <h3 className="font-semibold text-sm text-blue-900">Quick Setup Guide</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
+                <div className={`p-2.5 rounded-lg border ${inventoryItems.length > 0 ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {inventoryItems.length > 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">1</span>}
+                    <span className="font-semibold">Add Inventory Items</span>
+                  </div>
+                  <p className="text-muted-foreground">Raw materials & packaging in the Inventory page</p>
+                </div>
+                <div className={`p-2.5 rounded-lg border ${templates.length > 0 ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {templates.length > 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">2</span>}
+                    <span className="font-semibold">Create Templates</span>
+                  </div>
+                  <p className="text-muted-foreground">Define ingredient recipes once, reuse across products</p>
+                </div>
+                <div className={`p-2.5 rounded-lg border ${hasRecipe > 0 ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {hasRecipe > 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">3</span>}
+                    <span className="font-semibold">Apply to Products</span>
+                  </div>
+                  <p className="text-muted-foreground">Assign templates to multiple products at once</p>
+                </div>
+                <div className="p-2.5 rounded-lg border border-blue-200 bg-white">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">4</span>
+                    <span className="font-semibold">Accurate COGS</span>
+                  </div>
+                  <p className="text-muted-foreground">Orders auto-calculate cost using FIFO batch prices</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">Define product BOM recipes. Materials from Inventory are auto-costed.</p>
-        <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditingRecipe(null); }}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setForm({ sku: '', productName: '', defaultWastageBuffer: '5', ingredients: [] })}>
-              <Plus className="w-4 h-4 mr-2" /> New Recipe
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{editingRecipe ? 'Edit' : 'New'} SKU Recipe</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>SKU Code</Label><Input value={form.sku} onChange={e => setForm({...form, sku: e.target.value})} placeholder="GS-ALBUM-MINI" /></div>
-                <div><Label>Product Name</Label><Input value={form.productName} onChange={e => setForm({...form, productName: e.target.value})} /></div>
-                <div className="col-span-2"><Label>Wastage Buffer %</Label><Input type="number" value={form.defaultWastageBuffer} onChange={e => setForm({...form, defaultWastageBuffer: e.target.value})} /></div>
-              </div>
+      {/* Progress Bar */}
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-sm font-medium">Recipe Coverage</p>
+              <p className="text-xs text-muted-foreground">{hasRecipe}/{totalRecipes} products have recipes — {coveragePercent}% of orders costed</p>
+            </div>
+            <Badge variant={coveragePercent >= 80 ? 'default' : coveragePercent >= 40 ? 'secondary' : 'destructive'}>
+              {coveragePercent}%
+            </Badge>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2.5">
+            <div className="bg-primary rounded-full h-2.5 transition-all" style={{ width: `${totalRecipes > 0 ? (hasRecipe / totalRecipes) * 100 : 0}%` }} />
+          </div>
+        </CardContent>
+      </Card>
 
-              {inventoryItems.length === 0 && (
-                <div className="p-4 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800">
-                  <p className="text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    No inventory items found. Add items in the <strong>Inventory</strong> page first.
-                  </p>
-                </div>
-              )}
+      {/* Recipe Templates Section */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <LayoutTemplate className="w-5 h-5 text-primary" />
+            <h3 className="text-lg font-semibold">Recipe Templates</h3>
+            <Badge variant="outline">{templates.length}</Badge>
+          </div>
+          <Button size="sm" onClick={() => {
+            setEditingTemplate(null);
+            setTemplateForm({ name: '', description: '', defaultWastageBuffer: '5', ingredients: [] });
+            setTemplateDialogOpen(true);
+          }}>
+            <Plus className="w-3.5 h-3.5 mr-1" /> New Template
+          </Button>
+        </div>
 
-              {categories.map(category => {
-                const available = getAvailable(category);
-                const categoryIngredients = form.ingredients.filter(ing => ing.category === category);
-                return (
-                  <div key={category} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <Boxes className="w-4 h-4 text-primary" />
-                        <Label className="text-sm font-semibold">{category}</Label>
-                        <Badge variant="outline" className="text-[10px]">{categoryIngredients.length} items</Badge>
+        {templates.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              <LayoutTemplate className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="font-medium">No templates yet</p>
+              <p className="text-sm mt-1">Create a template to define ingredients once, then apply to multiple products.</p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => {
+                setEditingTemplate(null);
+                setTemplateForm({ name: '', description: '', defaultWastageBuffer: '5', ingredients: [] });
+                setTemplateDialogOpen(true);
+              }}>
+                <Plus className="w-3.5 h-3.5 mr-1" /> Create First Template
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {templates.map(tpl => {
+              const cost = calcRecipeCost(tpl);
+              return (
+                <Card key={tpl._id} className="overflow-hidden">
+                  <CardContent className="pt-4 pb-3">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="font-semibold text-sm">{tpl.name}</p>
+                        {tpl.description && <p className="text-xs text-muted-foreground mt-0.5">{tpl.description}</p>}
                       </div>
-                      {available.length > 0 && (
-                        <Select onValueChange={addIngredient}>
-                          <SelectTrigger className="w-56 h-8 text-xs">
-                            <SelectValue placeholder={`Add ${category.toLowerCase()}...`} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {available.map(item => (
-                              <SelectItem key={item._id} value={item._id}>
-                                {item.name} ({fmt(getItemBaseCost(item))}/{item.unit || item.unitMeasurement || 'unit'})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <Badge variant="secondary" className="shrink-0">{fmt(cost.total)}</Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {(tpl.ingredients || []).map((ing, i) => (
+                        <Badge key={i} variant="outline" className="text-[10px]">
+                          {ing.name}: {ing.quantityUsed} {ing.unit}
+                        </Badge>
+                      ))}
+                      {(tpl.ingredients || []).length === 0 && (
+                        <p className="text-xs text-muted-foreground">No ingredients — edit to add</p>
                       )}
                     </div>
-                    {categoryIngredients.map((ing) => {
-                      const globalIdx = form.ingredients.indexOf(ing);
-                      const lineCost = (ing.baseCostPerUnit || 0) * (ing.quantityUsed || 0);
-                      return (
-                        <div key={globalIdx} className="flex gap-2 items-center pl-6">
-                          <div className="flex-1 h-9 px-3 border rounded-md bg-muted/30 flex items-center text-sm truncate">
-                            {ing.name}
-                            <Badge variant="secondary" className="ml-2 text-[10px]">{fmt(ing.baseCostPerUnit)}/{ing.unit}</Badge>
-                          </div>
-                          <div className="w-24">
-                            <Input type="number" min="0" step="0.01" className="h-9 text-sm" placeholder="Qty Used" value={ing.quantityUsed}
-                              onChange={e => {
-                                const arr = [...form.ingredients];
-                                arr[globalIdx] = { ...arr[globalIdx], quantityUsed: Number(e.target.value) };
-                                setForm({...form, ingredients: arr});
-                              }}
-                            />
-                          </div>
-                          <div className="w-24 text-right text-xs text-muted-foreground whitespace-nowrap">
-                            <span className="font-medium text-foreground">{fmt(lineCost)}</span>
-                            <br /><span className="text-[10px]">{ing.quantityUsed || 0} x {fmt(ing.baseCostPerUnit)}</span>
-                          </div>
-                          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive shrink-0" onClick={() => {
-                            setForm({...form, ingredients: form.ingredients.filter((_, j) => j !== globalIdx)});
-                          }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    <Separator className="my-2" />
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        <Link2 className="w-3 h-3 inline mr-1" />
+                        {tpl.linkedRecipeCount || 0} products linked
+                      </p>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => openApplyTemplate(tpl)}>
+                          <Copy className="w-3 h-3 mr-1" /> Apply
+                        </Button>
+                        {(tpl.linkedRecipeCount || 0) > 0 && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleRepush(tpl._id)} title="Re-push template changes to all linked products">
+                            <RefreshCw className="w-3 h-3" />
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="h-7" onClick={() => openEditTemplate(tpl)}>
+                          <Edit className="w-3 h-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-destructive" onClick={() => handleDeleteTemplate(tpl._id)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <Separator />
+
+      {/* Products Section */}
+      <div>
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 className="text-lg font-semibold">Products ({filteredRecipes.length})</h3>
+            <p className="text-xs text-muted-foreground">Sorted by most orders first. Products without recipes show ₹0 COGS.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+              <Input className="pl-8 h-9 w-52 text-sm" placeholder="Search products..."
+                value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+            <Select value={filter} onValueChange={setFilter}>
+              <SelectTrigger className="w-36 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All ({totalRecipes})</SelectItem>
+                <SelectItem value="needs-setup">Needs Setup ({needsSetup})</SelectItem>
+                <SelectItem value="has-recipe">Has Recipe ({hasRecipe})</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="orders">Most Orders</SelectItem>
+                <SelectItem value="revenue">Most Revenue</SelectItem>
+                <SelectItem value="name">Name A-Z</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {filteredRecipes.map(recipe => {
+            const costs = calcRecipeCost(recipe);
+            const hasIngredients = (recipe.ingredients || []).length > 0;
+            const isExpanded = expandedId === recipe._id;
+            return (
+              <Card key={recipe._id} className={`overflow-hidden ${!hasIngredients ? 'border-amber-200' : ''}`}>
+                <div className="flex items-center justify-between p-3 cursor-pointer hover:bg-muted/30"
+                  onClick={() => setExpandedId(isExpanded ? null : recipe._id)}>
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${hasIngredients ? 'bg-primary/10' : 'bg-amber-100'}`}>
+                      <Package className={`w-4 h-4 ${hasIngredients ? 'text-primary' : 'text-amber-600'}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium text-sm truncate">{recipe.productName}</h4>
+                        {!hasIngredients && <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300 shrink-0">Needs Setup</Badge>}
+                        {recipe.templateName && <Badge variant="secondary" className="text-[10px] shrink-0"><Link2 className="w-2.5 h-2.5 mr-0.5" />{recipe.templateName}</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground font-mono">{recipe.sku}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 shrink-0 ml-2">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs text-muted-foreground">{recipe.orderCount || 0} orders</p>
+                      <p className="text-xs text-muted-foreground">{fmt(recipe.totalRevenue || 0)} rev</p>
+                    </div>
+                    <div className="text-right w-20">
+                      <p className={`text-sm font-bold ${hasIngredients ? '' : 'text-muted-foreground'}`}>
+                        {hasIngredients ? fmt(costs.total) : '—'}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">COGS</p>
+                    </div>
+                    <div className="flex gap-0.5" onClick={e => e.stopPropagation()}>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditRecipe(recipe)}>
+                        <Edit className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                  </div>
+                </div>
+                {isExpanded && (
+                  <div className="border-t p-3 bg-muted/20 space-y-2">
+                    {hasIngredients ? (
+                      <>
+                        <div className="flex flex-wrap gap-1.5">
+                          {recipe.ingredients.map((ing, i) => (
+                            <Badge key={i} variant="outline" className="text-xs">
+                              {ing.name}: {ing.quantityUsed} {ing.unit} x {fmt(ing.baseCostPerUnit)} = {fmt((ing.quantityUsed || 0) * (ing.baseCostPerUnit || 0))}
+                            </Badge>
+                          ))}
                         </div>
-                      );
-                    })}
-                    {categoryIngredients.length === 0 && (
-                      <p className="text-xs text-muted-foreground pl-6">No {category.toLowerCase()} added. Select from dropdown above.</p>
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div><span className="text-muted-foreground">Materials</span><p className="font-bold">{fmt(costs.subtotal)}</p></div>
+                          <div><span className="text-muted-foreground">Wastage ({recipe.defaultWastageBuffer || 0}%)</span><p className="font-bold">{fmt(costs.wastage)}</p></div>
+                          <div><span className="text-muted-foreground">Total COGS</span><p className="font-bold text-primary">{fmt(costs.total)}</p></div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-3">
+                        <p className="text-sm text-muted-foreground mb-2">No recipe defined — COGS will be ₹0 for this product.</p>
+                        <div className="flex justify-center gap-2">
+                          <Button size="sm" variant="default" onClick={() => openEditRecipe(recipe)}>
+                            <Edit className="w-3.5 h-3.5 mr-1" /> Set Up Recipe
+                          </Button>
+                          {templates.length > 0 && (
+                            <Select onValueChange={tplId => {
+                              const tpl = templates.find(t => t._id === tplId);
+                              if (tpl) { setApplyingTemplate(tpl); setSelectedRecipeIds([recipe._id]); setApplyDialogOpen(true); }
+                            }}>
+                              <SelectTrigger className="h-8 w-auto text-xs"><SelectValue placeholder="Apply Template..." /></SelectTrigger>
+                              <SelectContent>
+                                {templates.map(t => <SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
-                );
-              })}
+                )}
+              </Card>
+            );
+          })}
+        </div>
 
-              {form.ingredients.length > 0 && (
-                <div className="p-3 rounded-md bg-primary/5 border border-primary/20 space-y-1">
-                  <p className="text-xs font-semibold text-primary">Recipe Cost Preview</p>
-                  {(() => {
-                    const costs = calcRecipeCost({ ...form, defaultWastageBuffer: Number(form.defaultWastageBuffer) });
-                    return (
-                      <div className="grid grid-cols-3 gap-2 text-xs">
-                        <div><span className="text-muted-foreground">Subtotal</span><p className="font-bold">{fmt(costs.subtotal)}</p></div>
-                        <div><span className="text-muted-foreground">Wastage ({form.defaultWastageBuffer}%)</span><p className="font-bold">{fmt(costs.wastage)}</p></div>
-                        <div><span className="text-muted-foreground">Total COGS</span><p className="font-bold text-lg text-primary">{fmt(costs.total)}</p></div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+        {filteredRecipes.length === 0 && !loading && (
+          <Card><CardContent className="py-10 text-center text-muted-foreground">
+            <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
+            <p>No products match your filter.</p>
+          </CardContent></Card>
+        )}
+      </div>
+
+      {/* Recipe Edit Dialog */}
+      <Dialog open={recipeDialogOpen} onOpenChange={v => { setRecipeDialogOpen(v); if (!v) setEditingRecipe(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editingRecipe ? 'Edit' : 'New'} Product Recipe</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div><Label>SKU Code</Label><Input value={recipeForm.sku} onChange={e => setRecipeForm({ ...recipeForm, sku: e.target.value })} placeholder="GS-ALBUM-MINI" disabled={!!editingRecipe?.shopifySynced} /></div>
+              <div><Label>Product Name</Label><Input value={recipeForm.productName} onChange={e => setRecipeForm({ ...recipeForm, productName: e.target.value })} /></div>
             </div>
-            <Button onClick={handleSubmit} className="w-full mt-2">{editingRecipe ? 'Update' : 'Create'} Recipe</Button>
-          </DialogContent>
-        </Dialog>
-      </div>
+            <div>
+              <Label>Wastage Buffer %</Label>
+              <Input type="number" className="w-32" value={recipeForm.defaultWastageBuffer}
+                onChange={e => setRecipeForm({ ...recipeForm, defaultWastageBuffer: e.target.value })} />
+              <p className="text-[11px] text-muted-foreground mt-1">Added on top of material cost to account for spoilage/waste</p>
+            </div>
+            <Separator />
+            <p className="text-sm font-medium">Ingredients (from Inventory)</p>
+            <IngredientForm form={recipeForm} setForm={setRecipeForm} />
+            <Button onClick={handleSaveRecipe} className="w-full">{editingRecipe ? 'Update' : 'Create'} Recipe</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      <div className="grid gap-4">
-        {recipes.map(recipe => {
-          const costs = calcRecipeCost(recipe);
-          const isExpanded = expandedId === recipe._id;
-          return (
-            <Card key={recipe._id} className="overflow-hidden">
-              <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/30" onClick={() => setExpandedId(isExpanded ? null : recipe._id)}>
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center"><Package className="w-5 h-5 text-primary" /></div>
-                  <div>
-                    <h3 className="font-semibold text-sm">{recipe.productName}</h3>
-                    <p className="text-xs text-muted-foreground font-mono">{recipe.sku}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right hidden sm:block">
-                    <p className="text-sm font-bold">{fmt(Math.round(costs.total))}</p>
-                    <p className="text-xs text-muted-foreground">Total COGS</p>
-                  </div>
-                  <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(recipe)}><Edit className="w-3.5 h-3.5" /></Button>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => deleteRecipe(recipe._id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                  </div>
-                  {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </div>
+      {/* Template Edit Dialog */}
+      <Dialog open={templateDialogOpen} onOpenChange={v => { setTemplateDialogOpen(v); if (!v) setEditingTemplate(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editingTemplate ? 'Edit' : 'New'} Recipe Template</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-700">
+              <Info className="w-3.5 h-3.5 inline mr-1" />
+              Templates let you define ingredients once, then apply to multiple products. When you update a template, you can re-push changes to all linked products.
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div><Label>Template Name *</Label><Input value={templateForm.name} onChange={e => setTemplateForm({ ...templateForm, name: e.target.value })} placeholder="e.g. Tin Mini Album Recipe" /></div>
+              <div><Label>Description</Label><Input value={templateForm.description} onChange={e => setTemplateForm({ ...templateForm, description: e.target.value })} placeholder="Optional" /></div>
+            </div>
+            <div>
+              <Label>Wastage Buffer %</Label>
+              <Input type="number" className="w-32" value={templateForm.defaultWastageBuffer}
+                onChange={e => setTemplateForm({ ...templateForm, defaultWastageBuffer: e.target.value })} />
+            </div>
+            <Separator />
+            <p className="text-sm font-medium">Template Ingredients</p>
+            <IngredientForm form={templateForm} setForm={setTemplateForm} />
+            <Button onClick={handleSaveTemplate} className="w-full">{editingTemplate ? 'Update' : 'Create'} Template</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Template Dialog */}
+      <Dialog open={applyDialogOpen} onOpenChange={v => { setApplyDialogOpen(v); if (!v) { setApplyingTemplate(null); setSelectedRecipeIds([]); } }}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Apply Template: {applyingTemplate?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-3 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-700">
+              <Info className="w-3.5 h-3.5 inline mr-1" />
+              Select products to apply this template to. This will <strong>replace</strong> their current ingredients with the template's ingredients. Products will be linked to this template for future re-pushes.
+            </div>
+
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">{selectedRecipeIds.length} of {recipes.length} selected</p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="h-7 text-xs"
+                  onClick={() => setSelectedRecipeIds(recipes.filter(r => r.needsCostInput || (r.ingredients || []).length === 0).map(r => r._id))}>
+                  Select Needs Setup
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs"
+                  onClick={() => setSelectedRecipeIds(selectedRecipeIds.length === recipes.length ? [] : recipes.map(r => r._id))}>
+                  {selectedRecipeIds.length === recipes.length ? 'Deselect All' : 'Select All'}
+                </Button>
               </div>
-              {isExpanded && (
-                <div className="border-t p-4 bg-muted/20 space-y-3">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                    {Object.entries(costs.breakdown).map(([cat, amt]) => (
-                      <div key={cat}><span className="text-muted-foreground">{cat}</span><p className="font-bold text-sm">{fmt(amt)}</p></div>
-                    ))}
-                    <div><span className="text-muted-foreground">Wastage ({recipe.defaultWastageBuffer || 0}%)</span><p className="font-bold text-sm">{fmt(Math.round(costs.wastage))}</p></div>
-                    <div><span className="font-semibold">Total COGS</span><p className="font-bold text-lg text-primary">{fmt(Math.round(costs.total))}</p></div>
-                  </div>
-                  {(recipe.ingredients || []).length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {recipe.ingredients.map((ing, i) => {
-                        const baseCost = ing.baseCostPerUnit || 0;
-                        const qtyUsed = ing.quantityUsed || ing.quantity || 0;
-                        return (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            {ing.name}: {qtyUsed} {ing.unit || ''} x {fmt(baseCost)} = {fmt(qtyUsed * baseCost)}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {(recipe.ingredients || []).length === 0 && (recipe.rawMaterials || []).length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {(recipe.rawMaterials || []).map((rm, i) => (
-                        <Badge key={`rm-${i}`} variant="outline" className="text-xs">{rm.name}: {rm.quantity} x {fmt(rm.pricePerUnit)}</Badge>
-                      ))}
-                      {(recipe.packaging || []).map((pkg, i) => (
-                        <Badge key={`pkg-${i}`} variant="outline" className="text-xs">{pkg.name}: {fmt(pkg.pricePerUnit)}</Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
-          );
-        })}
-      </div>
+            </div>
 
-      {recipes.length === 0 && !loading && (
-        <Card><CardContent className="py-12 text-center text-muted-foreground">
-          <Package className="w-10 h-10 mx-auto mb-2 text-muted-foreground/50" />
-          <p className="font-medium">No SKU recipes yet</p>
-          <p className="text-sm mt-1">Sync products from Shopify or create recipes manually. Add inventory items first.</p>
-        </CardContent></Card>
-      )}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+              <Input className="pl-8 h-8 text-sm" placeholder="Search products..."
+                value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+
+            <div className="max-h-[350px] overflow-y-auto border rounded-lg">
+              {recipes
+                .filter(r => !searchTerm.trim() || r.productName?.toLowerCase().includes(searchTerm.toLowerCase()) || r.sku?.toLowerCase().includes(searchTerm.toLowerCase()))
+                .sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0))
+                .map(recipe => {
+                  const checked = selectedRecipeIds.includes(recipe._id);
+                  const hasIngredients = (recipe.ingredients || []).length > 0;
+                  return (
+                    <div key={recipe._id}
+                      className={`flex items-center gap-3 px-3 py-2 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer ${checked ? 'bg-primary/5' : ''}`}
+                      onClick={() => {
+                        setSelectedRecipeIds(prev => checked ? prev.filter(id => id !== recipe._id) : [...prev, recipe._id]);
+                      }}>
+                      <Checkbox checked={checked} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{recipe.productName}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">{recipe.sku}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs">{recipe.orderCount || 0} orders</p>
+                        {!hasIngredients && <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300">No recipe</Badge>}
+                        {recipe.templateId && recipe.templateId !== applyingTemplate?._id && (
+                          <Badge variant="outline" className="text-[9px]">Linked: {recipe.templateName}</Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            <Button onClick={handleApplyTemplate} className="w-full" disabled={selectedRecipeIds.length === 0}>
+              Apply to {selectedRecipeIds.length} Products
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

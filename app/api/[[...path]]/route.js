@@ -1028,9 +1028,38 @@ async function shopifySyncOrders() {
       }
     }
 
+    // Auto-create SKU recipe stubs for any new SKUs found in orders
+    const allOrderSkus = await db.collection('orders').distinct('sku');
+    const existingRecipeSkus = new Set((await db.collection('skuRecipes').distinct('sku')));
+    let recipeStubsCreated = 0;
+    for (const sku of allOrderSkus) {
+      if (!existingRecipeSkus.has(sku)) {
+        const sampleOrder = await db.collection('orders').findOne({ sku });
+        await db.collection('skuRecipes').insertOne({
+          _id: uuidv4(),
+          sku,
+          productName: sampleOrder?.productName || sku,
+          shopifySynced: true,
+          needsCostInput: true,
+          ingredients: [],
+          rawMaterials: [],
+          packaging: [],
+          consumableCost: 0,
+          totalWeightGrams: 0,
+          defaultWastageBuffer: 5,
+          monthlyWastageOverride: null,
+          templateId: null,
+          templateName: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        recipeStubsCreated++;
+      }
+    }
+
     return {
-      message: `Synced ${synced} new orders, updated ${updated} existing. Total Shopify orders: ${allShopifyOrders.length}`,
-      synced, updated, totalShopifyOrders: allShopifyOrders.length
+      message: `Synced ${synced} new orders, updated ${updated} existing. Created ${recipeStubsCreated} recipe stubs. Total Shopify orders: ${allShopifyOrders.length}`,
+      synced, updated, recipeStubsCreated, totalShopifyOrders: allShopifyOrders.length
     };
   } catch (err) {
     return { error: `Shopify order sync failed: ${err.message}`, synced: 0 };
@@ -1706,9 +1735,41 @@ export async function GET(request) {
         if (subResource) return json(await getDoc('packagingMaterials', subResource));
         return json(await listDocs('packagingMaterials'));
 
-      case 'sku-recipes':
+      case 'sku-recipes': {
         if (subResource) return json(await getDoc('skuRecipes', subResource));
-        return json(await listDocs('skuRecipes'));
+        const db = await getDb();
+        const recipes = await db.collection('skuRecipes').find({}).sort({ productName: 1 }).toArray();
+        // Enrich with order stats
+        const orderStats = await db.collection('orders').aggregate([
+          { $group: { _id: '$sku', orderCount: { $sum: 1 }, totalRevenue: { $sum: '$salePrice' } } }
+        ]).toArray();
+        const statsMap = {};
+        orderStats.forEach(s => { statsMap[s._id] = s; });
+        const enriched = recipes.map(r => ({
+          ...r,
+          orderCount: statsMap[r.sku]?.orderCount || 0,
+          totalRevenue: statsMap[r.sku]?.totalRevenue || 0,
+        }));
+        return json(enriched);
+      }
+
+      case 'recipe-templates': {
+        const db = await getDb();
+        if (subResource) {
+          const tpl = await db.collection('recipeTemplates').findOne({ _id: subResource });
+          if (tpl) {
+            // Include linked recipe count
+            tpl.linkedRecipeCount = await db.collection('skuRecipes').countDocuments({ templateId: subResource });
+          }
+          return json(tpl);
+        }
+        const templates = await db.collection('recipeTemplates').find({}).sort({ createdAt: -1 }).toArray();
+        // Enrich with linked count
+        for (const t of templates) {
+          t.linkedRecipeCount = await db.collection('skuRecipes').countDocuments({ templateId: t._id });
+        }
+        return json(templates);
+      }
 
       case 'orders': {
         if (subResource) return json(await getDoc('orders', subResource));
@@ -2079,7 +2140,86 @@ export async function POST(request) {
         return json(await createDoc('packagingMaterials', body), 201);
       case 'sku-recipes':
         return json(await createDoc('skuRecipes', body), 201);
-      case 'orders':
+
+      case 'recipe-templates': {
+        const db = await getDb();
+
+        if (subResource === 'apply') {
+          // POST /api/recipe-templates/apply — apply template to selected SKU recipes
+          const { templateId, recipeIds } = body;
+          if (!templateId || !recipeIds || !Array.isArray(recipeIds)) {
+            return json({ error: 'templateId and recipeIds array required' }, 400);
+          }
+          const template = await db.collection('recipeTemplates').findOne({ _id: templateId });
+          if (!template) return json({ error: 'Template not found' }, 404);
+
+          const result = await db.collection('skuRecipes').updateMany(
+            { _id: { $in: recipeIds } },
+            {
+              $set: {
+                ingredients: template.ingredients || [],
+                defaultWastageBuffer: template.defaultWastageBuffer ?? 5,
+                templateId: template._id,
+                templateName: template.name,
+                needsCostInput: false,
+                updatedAt: new Date().toISOString(),
+              }
+            }
+          );
+          return json({
+            message: `Applied "${template.name}" to ${result.modifiedCount} products`,
+            applied: result.modifiedCount,
+          });
+        }
+
+        if (subResource === 'repush') {
+          // POST /api/recipe-templates/repush — re-push template changes to all linked recipes
+          const { templateId } = body;
+          if (!templateId) return json({ error: 'templateId required' }, 400);
+          const template = await db.collection('recipeTemplates').findOne({ _id: templateId });
+          if (!template) return json({ error: 'Template not found' }, 404);
+
+          const result = await db.collection('skuRecipes').updateMany(
+            { templateId },
+            {
+              $set: {
+                ingredients: template.ingredients || [],
+                defaultWastageBuffer: template.defaultWastageBuffer ?? 5,
+                templateName: template.name,
+                updatedAt: new Date().toISOString(),
+              }
+            }
+          );
+          return json({
+            message: `Re-pushed "${template.name}" to ${result.modifiedCount} linked products`,
+            updated: result.modifiedCount,
+          });
+        }
+
+        if (subResource === 'unlink') {
+          // POST /api/recipe-templates/unlink — unlink a recipe from its template
+          const { recipeId } = body;
+          if (!recipeId) return json({ error: 'recipeId required' }, 400);
+          await db.collection('skuRecipes').updateOne(
+            { _id: recipeId },
+            { $set: { templateId: null, templateName: null, updatedAt: new Date().toISOString() } }
+          );
+          return json({ message: 'Recipe unlinked from template' });
+        }
+
+        // Default: Create new template
+        const tpl = {
+          _id: uuidv4(),
+          name: body.name || 'Untitled Template',
+          description: body.description || '',
+          ingredients: body.ingredients || [],
+          defaultWastageBuffer: Number(body.defaultWastageBuffer) || 5,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await db.collection('recipeTemplates').insertOne(tpl);
+        return json(tpl, 201);
+      }
         return json(await createDoc('orders', body), 201);
       case 'employees':
         return json(await createDoc('employees', body), 201);
@@ -2489,6 +2629,16 @@ export async function PUT(request) {
       case 'sku-recipes':
         if (!id) return json({ error: 'ID required' }, 400);
         return json(await updateDoc('skuRecipes', id, body));
+
+      case 'recipe-templates': {
+        if (!id) return json({ error: 'ID required' }, 400);
+        const db = await getDb();
+        const updateData = { ...body, updatedAt: new Date().toISOString() };
+        delete updateData._id;
+        delete updateData.linkedRecipeCount;
+        await db.collection('recipeTemplates').updateOne({ _id: id }, { $set: updateData });
+        return json(await db.collection('recipeTemplates').findOne({ _id: id }));
+      }
       case 'employees':
         if (!id) return json({ error: 'ID required' }, 400);
         return json(await updateDoc('employees', id, body));
@@ -2525,6 +2675,7 @@ export async function DELETE(request) {
       'overhead-expenses': 'overheadExpenses',
       'inventory-items': 'inventoryItems',
       'stock-batches': 'stockBatches',
+      'recipe-templates': 'recipeTemplates',
     };
 
     const collection = collectionMap[resource];
