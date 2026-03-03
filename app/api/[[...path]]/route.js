@@ -1876,7 +1876,7 @@ async function getRazorpaySettlements() {
   const authHeader = 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64');
 
   try {
-    const res = await fetch('https://api.razorpay.com/v1/settlements?count=20&skip=0', {
+    const res = await fetch('https://api.razorpay.com/v1/settlements?count=100&skip=0', {
       headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
     });
 
@@ -1885,7 +1885,28 @@ async function getRazorpaySettlements() {
     }
 
     const data = await res.json();
-    const items = (data.items || []).map(s => ({
+    let allItems = (data.items || []);
+
+    // Paginate to get ALL settlements
+    let totalCount = data.count || allItems.length;
+    let skip = allItems.length;
+    while (skip < totalCount) {
+      try {
+        const nextRes = await fetch(`https://api.razorpay.com/v1/settlements?count=100&skip=${skip}`, {
+          headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }
+        });
+        if (nextRes.ok) {
+          const nextData = await nextRes.json();
+          const nextItems = nextData.items || [];
+          if (nextItems.length === 0) break;
+          allItems = allItems.concat(nextItems);
+          totalCount = nextData.count || totalCount;
+          skip += nextItems.length;
+        } else break;
+      } catch { break; }
+    }
+
+    const items = allItems.map(s => ({
       id: s.id,
       amount: (s.amount || 0) / 100,
       status: s.status,
@@ -1896,15 +1917,29 @@ async function getRazorpaySettlements() {
     }));
 
     // --- Compute Estimated Available Balance ---
-    // Find orders reconciled with Razorpay but not yet settled (no settlementId)
-    const unsettledOrders = await db.collection('orders').find({
+    // Only count orders created AFTER the last processed settlement (truly unsettled)
+    const processedSettlements = items.filter(s => s.status === 'processed');
+    const lastSettlementDate = processedSettlements.length > 0 && processedSettlements[0].createdAt
+      ? new Date(processedSettlements[0].createdAt)
+      : null;
+
+    let unsettledQuery = {
       razorpayReconciled: true,
-      $or: [
+    };
+
+    if (lastSettlementDate) {
+      // Only orders whose Razorpay payment was captured AFTER the last settlement
+      unsettledQuery.orderDate = { $gt: lastSettlementDate.toISOString().split('T')[0] };
+    } else {
+      // No settlements yet — all reconciled orders are unsettled
+      unsettledQuery.$or = [
         { razorpaySettlementId: null },
         { razorpaySettlementId: { $exists: false } },
         { razorpaySettlementId: '' },
-      ]
-    }).toArray();
+      ];
+    }
+
+    const unsettledOrders = await db.collection('orders').find(unsettledQuery).toArray();
 
     let estGross = 0, estFees = 0, estTax = 0;
     unsettledOrders.forEach(o => {
@@ -1964,7 +1999,6 @@ async function getRazorpaySettlements() {
       .toArray();
 
     // Try to match processed settlements with stored estimates
-    const processedSettlements = items.filter(s => s.status === 'processed');
     for (const s of processedSettlements) {
       if (!s.createdAt) continue;
       const settDate = new Date(s.createdAt).toISOString().split('T')[0];

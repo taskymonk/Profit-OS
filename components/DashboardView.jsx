@@ -414,72 +414,8 @@ export default function DashboardView() {
         />
       </div>
 
-      {/* Payment Reconciliation + Bank Settlements */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Payment Reconciliation */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <CardTitle className="text-base">Payment Reconciliation</CardTitle>
-                <CardDescription>Razorpay match rate & gateway fees</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {revenueSplit && revenueSplit.totalOrders > 0 && revenueSplit.reconciled.count > 0 ? (
-              <div className="space-y-4">
-                {/* Match Rate */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-3xl font-bold text-foreground">{revenueSplit.matchRate}%</p>
-                    <p className="text-[11px] text-muted-foreground">Orders reconciled</p>
-                  </div>
-                  <div className="text-right space-y-0.5">
-                    <p className="text-sm font-semibold">{revenueSplit.reconciled.count} <span className="text-muted-foreground font-normal">/ {revenueSplit.totalOrders}</span></p>
-                    <p className="text-[11px] text-muted-foreground">matched orders</p>
-                  </div>
-                </div>
-                {/* Progress bar */}
-                <div className="h-2 rounded-full bg-muted overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-500" style={{ width: `${revenueSplit.matchRate}%` }} />
-                </div>
-                {/* Fee summary */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50">
-                    <p className="text-[10px] text-muted-foreground">Gateway Fees</p>
-                    <p className="text-sm font-bold">{fmt(revenueSplit.totalFees)}</p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50">
-                    <p className="text-[10px] text-muted-foreground">Gateway Tax</p>
-                    <p className="text-sm font-bold">{fmt(revenueSplit.totalTax)}</p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50">
-                    <p className="text-[10px] text-muted-foreground">Effective Rate</p>
-                    <p className="text-sm font-bold">{revenueSplit.effectiveFeeRate}%</p>
-                  </div>
-                </div>
-                {/* Unmatched warning */}
-                {revenueSplit.unreconciled.count > 0 && (
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                      <span className="text-xs text-amber-700 dark:text-amber-300">{revenueSplit.unreconciled.count} unmatched payments</span>
-                    </div>
-                    <button onClick={() => {/* Navigate to reports */}} className="text-[11px] text-primary font-medium hover:underline">View in Reports →</button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <CreditCard className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No reconciliation data yet</p>
-                <p className="text-xs mt-1">Sync Razorpay in Integrations to match payments with exact fees</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Bank Settlements */}
+      <div className="grid grid-cols-1 gap-4">
 
         {/* Bank Settlements — Redesigned */}
         <Card>
