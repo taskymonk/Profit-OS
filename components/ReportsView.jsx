@@ -832,43 +832,59 @@ export default function ReportsView() {
               {/* Estimated Balance & Accuracy */}
               {paymentsData.settlementsActive && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {/* Estimated Balance */}
-                  {paymentsData.estimated && paymentsData.estimated.estimatedSettlement > 0 && (
+                  {/* Settlement Estimates */}
+                  {paymentsData.estimated && (paymentsData.estimated.availableNet > 0 || paymentsData.estimated.todaySettlement > 0) ? (
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-blue-500" /> Expected Next Settlement
+                          <Clock className="w-4 h-4 text-blue-500" /> Settlement Estimates
                           <Badge variant="outline" className="text-[10px] ml-1">Calculated</Badge>
                         </CardTitle>
-                        <CardDescription>Computed from unsettled order data in your database</CardDescription>
+                        <CardDescription>Computed from unsettled order data (last {paymentsData.estimated.lookbackDays} days)</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="space-y-3">
-                          <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                            <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{fmt(paymentsData.estimated.estimatedSettlement)}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Expected by {paymentsData.estimated.expectedDate
-                                ? new Date(paymentsData.estimated.expectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })
-                                : 'next business day'} before 9 PM IST
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="p-2 rounded bg-muted/50 border border-border/50">
-                              <p className="text-[10px] text-muted-foreground">Gross Amount</p>
-                              <p className="text-sm font-bold">{fmt(paymentsData.estimated.availableBalance)}</p>
+                        <div className="space-y-4">
+                          {/* Available Balance */}
+                          {paymentsData.estimated.availableNet > 0 && (
+                            <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                              <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Available Balance</p>
+                              <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{fmt(paymentsData.estimated.availableNet)}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {paymentsData.estimated.availableOrderCount} unsettled orders · Gross {fmt(paymentsData.estimated.availableBalance)} − Fees {fmt(paymentsData.estimated.availableFees + paymentsData.estimated.availableTax)}
+                              </p>
                             </div>
-                            <div className="p-2 rounded bg-muted/50 border border-border/50">
-                              <p className="text-[10px] text-muted-foreground">Fees + Tax</p>
-                              <p className="text-sm font-bold">-{fmt(paymentsData.estimated.estimatedFees + paymentsData.estimated.estimatedTax)}</p>
+                          )}
+                          {/* Today's Settlement */}
+                          {paymentsData.estimated.todaySettlement > 0 && (
+                            <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                              <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider mb-1">Today's Expected Settlement</p>
+                              <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{fmt(paymentsData.estimated.todaySettlement)}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Expected before 9 PM IST · {paymentsData.estimated.todayOrderCount} orders
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                Payments from {paymentsData.estimated.todaySettlementWindow}
+                              </p>
                             </div>
-                            <div className="p-2 rounded bg-muted/50 border border-border/50">
-                              <p className="text-[10px] text-muted-foreground">Unsettled Orders</p>
-                              <p className="text-sm font-bold">{paymentsData.estimated.unsettledOrderCount}</p>
-                            </div>
-                          </div>
+                          )}
                           <p className="text-[10px] text-muted-foreground italic">
-                            Final amount may vary due to refunds, chargebacks, and adjustments by Razorpay.
+                            Estimated from order data. Final amounts may vary due to refunds, chargebacks, and Razorpay adjustments. Re-sync for better accuracy.
                           </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-muted-foreground" /> Settlement Estimates
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-center py-6 text-muted-foreground">
+                          <Clock className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                          <p className="text-sm">No unsettled orders detected</p>
+                          <p className="text-xs mt-1">All recent reconciled orders appear to be settled.</p>
                         </div>
                       </CardContent>
                     </Card>

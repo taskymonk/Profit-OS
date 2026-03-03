@@ -431,41 +431,57 @@ export default function DashboardView() {
           <CardContent>
             {settlements?.active ? (
               <div className="space-y-3">
-                {/* Estimated Available Balance + Expected Settlement */}
-                {settlements.estimated && settlements.estimated.estimatedSettlement > 0 && (
+                {/* Estimated Available Balance + Today's Settlement */}
+                {settlements.estimated && (settlements.estimated.availableNet > 0 || settlements.estimated.todaySettlement > 0) && (
                   <div className="space-y-2">
-                    <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> Expected Settlement
-                      <span className="text-[9px] font-normal text-muted-foreground ml-1">(calculated)</span>
-                    </p>
-                    <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(settlements.estimated.estimatedSettlement)}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {settlements.estimated.expectedDate
-                              ? `Expected by ${new Date(settlements.estimated.expectedDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} before 9 PM`
-                              : 'Pending settlement cycle'}
-                          </p>
-                          <p className="text-[9px] text-muted-foreground mt-0.5">
-                            {settlements.estimated.unsettledOrderCount} unsettled orders · Gross {fmt(settlements.estimated.availableBalance)} − Fees {fmt(settlements.estimated.estimatedFees)}
-                          </p>
+                    {/* Available Balance */}
+                    {settlements.estimated.availableNet > 0 && (
+                      <>
+                        <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
+                          Available Balance
+                          <span className="text-[9px] font-normal text-muted-foreground ml-1">(estimated)</span>
+                        </p>
+                        <div className="p-3 rounded-lg bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(settlements.estimated.availableNet)}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {settlements.estimated.availableOrderCount} unsettled orders (last {settlements.estimated.lookbackDays} days)
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="text-[9px] border-blue-300 text-blue-600 dark:text-blue-300">Est.</Badge>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-700 dark:text-blue-300">
-                            Estimated
-                          </Badge>
-                          {settlements.accuracy && (
-                            <p className="text-[9px] text-muted-foreground mt-1">
-                              {settlements.accuracy.samples > 0 ? `${settlements.accuracy.recentAccuracy || settlements.accuracy.avgAccuracy}% accurate` : ''}
-                            </p>
-                          )}
+                      </>
+                    )}
+
+                    {/* Today's Settlement */}
+                    {settlements.estimated.todaySettlement > 0 && (
+                      <>
+                        <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1 mt-2">
+                          <Clock className="w-3 h-3" /> Today's Expected Settlement
+                          <span className="text-[9px] font-normal text-muted-foreground ml-1">(estimated)</span>
+                        </p>
+                        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{fmt(settlements.estimated.todaySettlement)}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                Expected before 9 PM IST · {settlements.estimated.todayOrderCount} orders
+                              </p>
+                              <p className="text-[9px] text-muted-foreground">
+                                Payments from {settlements.estimated.todaySettlementWindow}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600 dark:text-amber-300">Est.</Badge>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                    {/* Accuracy note */}
+                      </>
+                    )}
+
+                    {/* Disclaimer */}
                     <p className="text-[9px] text-muted-foreground italic px-1">
-                      Calculated from unsettled order data. Final amount may vary due to refunds & chargebacks.
+                      Estimated from order data. Final amounts may vary due to refunds & chargebacks. Re-sync Razorpay for better accuracy.
                       {settlements.accuracy && settlements.accuracy.samples > 0 && (
                         <span> Past accuracy: {settlements.accuracy.avgAccuracy}% avg over {settlements.accuracy.samples} settlements.</span>
                       )}

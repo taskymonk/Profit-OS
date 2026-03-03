@@ -1916,74 +1916,111 @@ async function getRazorpaySettlements() {
       createdAt: s.created_at ? new Date(s.created_at * 1000).toISOString() : null,
     }));
 
-    // --- Compute Estimated Available Balance ---
-    // Only count orders created AFTER the last processed settlement (truly unsettled)
+    // --- Compute Estimated Available Balance & Today's Settlement ---
+    // Two-tier approach:
+    //   1. "Available Balance" = orders with razorpayReconciled:true AND no settlementId AND captured within last 5 days
+    //      (older null-settlement orders are likely settled but not updated in DB since last sync)
+    //   2. "Today's Settlement" = subset: payments captured ~T-2 business days ago (queued for today)
     const processedSettlements = items.filter(s => s.status === 'processed');
-    const lastSettlementDate = processedSettlements.length > 0 && processedSettlements[0].createdAt
-      ? new Date(processedSettlements[0].createdAt)
-      : null;
+    const now = new Date();
 
-    let unsettledQuery = {
+    // Calculate the cutoff: 5 calendar days ago (covers T+2 + weekends + buffer)
+    const availBalanceCutoff = new Date(now);
+    availBalanceCutoff.setDate(availBalanceCutoff.getDate() - 5);
+    const cutoffStr = availBalanceCutoff.toISOString().split('T')[0];
+
+    // Calculate T-2 business days ago for "today's settlement" bucket
+    let todaySettlementDate = new Date(now);
+    let bDays = 0;
+    while (bDays < 2) {
+      todaySettlementDate.setDate(todaySettlementDate.getDate() - 1);
+      const dow = todaySettlementDate.getDay();
+      if (dow !== 0 && dow !== 6) bDays++;
+    }
+    const todaySettCutoffStart = todaySettlementDate.toISOString().split('T')[0];
+    // Today's settlement covers payments from ~T-2 to ~T-1 (the day before today)
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const todaySettCutoffEnd = yesterday.toISOString().split('T')[0];
+
+    // Query: Available Balance — orders reconciled, no settlement ID, recent (last 5 days)
+    const availBalanceOrders = await db.collection('orders').find({
       razorpayReconciled: true,
-    };
-
-    if (lastSettlementDate) {
-      // Only orders whose Razorpay payment was captured AFTER the last settlement
-      unsettledQuery.orderDate = { $gt: lastSettlementDate.toISOString().split('T')[0] };
-    } else {
-      // No settlements yet — all reconciled orders are unsettled
-      unsettledQuery.$or = [
+      $or: [
         { razorpaySettlementId: null },
         { razorpaySettlementId: { $exists: false } },
         { razorpaySettlementId: '' },
-      ];
-    }
+      ],
+      orderDate: { $gte: cutoffStr },
+    }).toArray();
 
-    const unsettledOrders = await db.collection('orders').find(unsettledQuery).toArray();
-
-    let estGross = 0, estFees = 0, estTax = 0;
-    unsettledOrders.forEach(o => {
-      estGross += o.salePrice || 0;
-      estFees += o.razorpayFee || 0;
-      estTax += o.razorpayTax || 0;
+    let abGross = 0, abFees = 0, abTax = 0;
+    availBalanceOrders.forEach(o => {
+      abGross += o.salePrice || 0;
+      abFees += o.razorpayFee || 0;
+      abTax += o.razorpayTax || 0;
     });
-    const estNet = estGross - estFees - estTax;
+    const abNet = abGross - abFees - abTax;
 
-    // Determine expected settlement date (T+2 business days from now)
-    const now = new Date();
+    // Query: Today's Settlement — subset of above, payments captured around T-2 business days ago
+    const todaySettlementOrders = availBalanceOrders.filter(o => {
+      const d = (o.orderDate || '').split('T')[0];
+      return d >= todaySettCutoffStart && d <= todaySettCutoffEnd;
+    });
+
+    let tsGross = 0, tsFees = 0, tsTax = 0;
+    todaySettlementOrders.forEach(o => {
+      tsGross += o.salePrice || 0;
+      tsFees += o.razorpayFee || 0;
+      tsTax += o.razorpayTax || 0;
+    });
+    const tsNet = tsGross - tsFees - tsTax;
+
+    // Expected settlement date (next business day at 9 PM IST for today's batch)
     let estDate = new Date(now);
-    let bizDays = 0;
-    while (bizDays < 2) {
+    estDate.setHours(21, 0, 0, 0); // Today before 9 PM
+    // If it's already past 9 PM, move to next business day
+    if (now.getHours() >= 21) {
       estDate.setDate(estDate.getDate() + 1);
-      const dow = estDate.getDay();
-      if (dow !== 0 && dow !== 6) bizDays++; // skip weekends
+      while (estDate.getDay() === 0 || estDate.getDay() === 6) {
+        estDate.setDate(estDate.getDate() + 1);
+      }
     }
-    // Settlement typically before 9 PM IST
-    estDate.setHours(21, 0, 0, 0);
 
     const estimated = {
-      availableBalance: Math.round(estGross * 100) / 100,
-      estimatedSettlement: Math.round(estNet * 100) / 100,
-      estimatedFees: Math.round(estFees * 100) / 100,
-      estimatedTax: Math.round(estTax * 100) / 100,
-      unsettledOrderCount: unsettledOrders.length,
+      // Available Balance — all unsettled funds
+      availableBalance: Math.round(abGross * 100) / 100,
+      availableNet: Math.round(abNet * 100) / 100,
+      availableFees: Math.round(abFees * 100) / 100,
+      availableTax: Math.round(abTax * 100) / 100,
+      availableOrderCount: availBalanceOrders.length,
+      // Today's Settlement — batch being sent today
+      todaySettlement: Math.round(tsNet * 100) / 100,
+      todayGross: Math.round(tsGross * 100) / 100,
+      todayFees: Math.round(tsFees * 100) / 100,
+      todayTax: Math.round(tsTax * 100) / 100,
+      todayOrderCount: todaySettlementOrders.length,
       expectedDate: estDate.toISOString(),
+      // Metadata
+      lookbackDays: 5,
+      todaySettlementWindow: `${todaySettCutoffStart} to ${todaySettCutoffEnd}`,
       computedAt: now.toISOString(),
     };
 
     // --- Save estimate for accuracy tracking ---
-    const todayKey = now.toISOString().split('T')[0]; // e.g. "2026-03-03"
-    if (estNet > 0) {
+    const todayKey = now.toISOString().split('T')[0];
+    if (tsNet > 0) {
       await db.collection('settlementEstimates').updateOne(
         { _id: todayKey },
         {
           $set: {
             date: todayKey,
-            estimatedNet: estimated.estimatedSettlement,
-            estimatedGross: estimated.availableBalance,
-            estimatedFees: estimated.estimatedFees,
-            estimatedTax: estimated.estimatedTax,
-            orderCount: unsettledOrders.length,
+            estimatedNet: estimated.todaySettlement,
+            estimatedGross: estimated.todayGross,
+            estimatedFees: estimated.todayFees,
+            estimatedTax: estimated.todayTax,
+            orderCount: estimated.todayOrderCount,
+            availableBalanceNet: estimated.availableNet,
             computedAt: now.toISOString(),
           }
         },
