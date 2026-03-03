@@ -1847,6 +1847,23 @@ export async function GET(request) {
 
       case 'inventory-items': {
         // Enhanced: include currentStock from batches
+        if (subResource === 'categories') {
+          // GET /api/inventory-items/categories — inventory category tree
+          const db = await getDb();
+          let cats = await db.collection('inventoryCategories').find({}).sort({ name: 1 }).toArray();
+          if (cats.length === 0) {
+            // Seed default inventory categories
+            const defaults = [
+              { _id: uuidv4(), name: 'Raw Material', subCategories: ['Flowers', 'Chocolates', 'Edibles'], updatedAt: new Date().toISOString() },
+              { _id: uuidv4(), name: 'Packaging', subCategories: ['Boxes', 'Wrapping', 'Bags'], updatedAt: new Date().toISOString() },
+              { _id: uuidv4(), name: 'Consumables', subCategories: ['Adhesives', 'Stationery'], updatedAt: new Date().toISOString() },
+              { _id: uuidv4(), name: 'Labels & Stickers', subCategories: [], updatedAt: new Date().toISOString() },
+            ];
+            await db.collection('inventoryCategories').insertMany(defaults);
+            cats = defaults;
+          }
+          return json(cats);
+        }
         if (subResource) {
           const item = await getDoc('inventoryItems', subResource);
           if (item) {
@@ -2402,12 +2419,25 @@ export async function POST(request) {
       }
       case 'inventory-items': {
         const db = await getDb();
+        if (subResource === 'categories' && body.categories) {
+          // POST /api/inventory-items/categories — save inventory categories
+          await db.collection('inventoryCategories').deleteMany({});
+          const cats = body.categories.map(c => ({
+            _id: c._id || uuidv4(),
+            name: c.name,
+            subCategories: c.subCategories || [],
+            updatedAt: new Date().toISOString(),
+          }));
+          if (cats.length > 0) await db.collection('inventoryCategories').insertMany(cats);
+          return json(cats);
+        }
         const purchasePrice = Number(body.purchasePrice) || 0;
         const purchaseQuantity = Math.max(1, Number(body.purchaseQuantity) || 1);
         const item = {
           _id: uuidv4(),
           name: body.name || '',
           category: body.category || 'Raw Material',
+          subCategory: body.subCategory || '',
           purchasePrice,
           purchaseQuantity,
           unit: body.unit || 'units',

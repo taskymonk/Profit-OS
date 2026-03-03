@@ -2,7 +2,7 @@
 """
 Phase 8.5 Reality Reconciliation Patches Testing Suite
 Tests 3 areas: Inventory Items CRUD, Ad Spend Tax Multiplier, Shopify Sync URL Verification
-Base URL: https://overhead-refactor.preview.emergentagent.com/api (per review request)
+Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api (per review request)
 """
 
 import requests
@@ -11,7 +11,7 @@ from pymongo import MongoClient
 import time
 
 # Configuration from review request
-BASE_URL = "https://overhead-refactor.preview.emergentagent.com/api"
+BASE_URL = "https://expense-fifo-rebuild.preview.emergentagent.com/api"
 MONGO_URI = "mongodb://localhost:27017"
 DB_NAME = "profitos"
 

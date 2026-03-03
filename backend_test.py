@@ -18,7 +18,7 @@ import json
 import time
 
 # Configuration - Use BASE URL from .env
-BASE_URL = "https://overhead-refactor.preview.emergentagent.com/api"
+BASE_URL = "https://expense-fifo-rebuild.preview.emergentagent.com/api"
 
 def print_test_step(step_name, step_num=None):
     prefix = f"🎯 TEST {step_num}: " if step_num else "🔧 "

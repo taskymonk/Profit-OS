@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from 'sonner';
 import {
   Plus, Trash2, Edit2, FolderTree, Save, Loader2, RefreshCw,
-  Calendar, Repeat, Infinity as InfinityIcon, StopCircle, ChevronDown, ChevronRight, Banknote, ReceiptText, Settings2, Package
+  Calendar, Repeat, Infinity as InfinityIcon, StopCircle, ChevronDown, ChevronRight, Banknote, ReceiptText, Settings2, Package, X, Zap, CheckCircle2, Info
 } from 'lucide-react';
 
 const fmt = (val) => `₹${Math.abs(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -41,6 +41,7 @@ export default function ExpensesView() {
   const [newCatName, setNewCatName] = useState('');
   const [newSubCat, setNewSubCat] = useState({});
   const [inventoryItems, setInventoryItems] = useState([]);
+  const [showGuide, setShowGuide] = useState(true);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -203,6 +204,33 @@ export default function ExpensesView() {
           </Button>
         </div>
       </div>
+
+      {/* Getting Started Guide */}
+      {showGuide && (
+        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+          <button onClick={() => setShowGuide(false)} className="absolute top-2.5 right-2.5 text-blue-400 hover:text-blue-600"><X className="w-4 h-4" /></button>
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-blue-100"><Zap className="w-4 h-4 text-blue-600" /></div>
+            <div className="space-y-1.5">
+              <h3 className="font-semibold text-sm text-blue-900">Expense Tracking Guide</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                <div className="p-2 rounded-lg border border-blue-200 bg-white">
+                  <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 className="w-3.5 h-3.5 text-blue-500" /><span className="font-semibold">Recurring Costs</span></div>
+                  <p className="text-muted-foreground">Add your Shopify subscription, salaries, rent, etc. Set them as Monthly/Yearly with auto-generation.</p>
+                </div>
+                <div className="p-2 rounded-lg border border-blue-200 bg-white">
+                  <div className="flex items-center gap-1.5 mb-0.5"><Package className="w-3.5 h-3.5 text-blue-500" /><span className="font-semibold">Raw Material Purchases</span></div>
+                  <p className="text-muted-foreground">Link purchases to inventory items — stock batches are created automatically for FIFO costing.</p>
+                </div>
+                <div className="p-2 rounded-lg border border-blue-200 bg-white">
+                  <div className="flex items-center gap-1.5 mb-0.5"><ReceiptText className="w-3.5 h-3.5 text-blue-500" /><span className="font-semibold">P&L Impact</span></div>
+                  <p className="text-muted-foreground">All expenses are pro-rated in the Dashboard P&L waterfall. Monthly costs are divided by days in the selected period.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">

@@ -91,6 +91,24 @@ export default function IntegrationsView() {
         </Button>
       </div>
 
+      {/* Connection Status Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { name: 'Shopify', active: shopify.active && shopify.storeUrl, desc: shopify.active ? 'Orders & products synced' : 'Connect to sync orders' },
+          { name: 'Razorpay', active: razorpay.active && razorpay.keyId, desc: razorpay.active ? 'Payment fees reconciled' : 'Connect for exact gateway fees' },
+          { name: 'Meta Ads', active: metaAds.active && metaAds.token, desc: metaAds.active ? 'Ad spend tracked' : 'Connect for ad spend tracking' },
+          { name: 'India Post', active: indiaPost.active, desc: indiaPost.active ? 'RTO tracking enabled' : 'Connect for shipment tracking' },
+        ].map(i => (
+          <div key={i.name} className={`flex items-center gap-2.5 p-3 rounded-lg border ${i.active ? 'border-green-200 bg-green-50' : 'border-muted bg-muted/30'}`}>
+            {i.active ? <CheckCircle className="w-4 h-4 text-green-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0" />}
+            <div>
+              <p className={`text-sm font-medium ${i.active ? 'text-green-700' : 'text-muted-foreground'}`}>{i.name}</p>
+              <p className="text-[10px] text-muted-foreground">{i.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Shopify */}
       <Card>
         <CardHeader className="pb-3">

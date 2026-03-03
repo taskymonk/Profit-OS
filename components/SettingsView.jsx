@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
@@ -53,6 +53,24 @@ export default function SettingsView() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">White-label configuration for your tenant</p>
         <Button onClick={handleSave} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? 'Saving...' : 'Save Settings'}</Button>
+      </div>
+
+      {/* Setup Checklist */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'GST Rate', done: config.gstRate > 0, value: `${config.gstRate || 0}%` },
+          { label: 'Shopify Txn Fee', done: (config.shopifyTxnFeeRate || 0) > 0, value: `${config.shopifyTxnFeeRate || 0}%` },
+          { label: 'Ad Spend Tax', done: (config.adSpendTaxRate || 0) > 0, value: `${config.adSpendTaxRate || 0}%` },
+          { label: 'Business Name', done: config.tenantName && config.tenantName !== 'My Business', value: config.tenantName || 'Not set' },
+        ].map((item, i) => (
+          <div key={i} className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs ${item.done ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+            {item.done ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+            <div>
+              <p className="font-medium">{item.label}</p>
+              <p className="text-muted-foreground">{item.value}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Brand */}

@@ -16,7 +16,7 @@ import {
   Target, ChevronDown, ChevronUp, RefreshCw,
   Package, Truck, CreditCard, Megaphone, ArrowUpRight, ArrowDownRight,
   CalendarDays, Zap, Building2, BarChart3, LineChart as LineChartIcon, ArrowDown, ArrowRight, RotateCcw,
-  Landmark, Wallet, Banknote, Clock
+  Landmark, Wallet, Banknote, Clock, X, CheckCircle2, Info
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -204,6 +204,7 @@ export default function DashboardView() {
   const [chartType, setChartType] = useState('bar');
   const [pendingRange, setPendingRange] = useState({ from: undefined, to: undefined });
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [showSetupBanner, setShowSetupBanner] = useState(true);
 
   const fetchData = async () => {
     setLoading(true);
@@ -253,6 +254,11 @@ export default function DashboardView() {
   }
 
   const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown, dateRange: activeDateRange, revenueSplit } = data;
+
+  // Setup status checks
+  const hasShopify = data.tenant?.shopify?.lastSync || allTime?.totalOrders > 0;
+  const hasRazorpay = data.tenant?.razorpay?.keyId;
+  const hasExpenses = (overhead?.monthlyTotal || 0) > 0;
 
   // Trend calc
   const dd = dailyData || [];
@@ -340,6 +346,39 @@ export default function DashboardView() {
           <Button variant="ghost" size="icon" onClick={fetchData} className="h-7 w-7"><RefreshCw className="w-3.5 h-3.5" /></Button>
         </div>
       </div>
+
+      {/* Setup Status Banner */}
+      {showSetupBanner && (
+        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4">
+          <button onClick={() => setShowSetupBanner(false)} className="absolute top-2.5 right-2.5 text-blue-400 hover:text-blue-600"><X className="w-4 h-4" /></button>
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-semibold text-blue-900">System Readiness</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md ${hasShopify ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+              {hasShopify ? <CheckCircle2 className="w-3 h-3" /> : <Info className="w-3 h-3" />}
+              <span>Shopify {hasShopify ? `(${allTime?.totalOrders || 0} orders)` : '— Connect'}</span>
+            </div>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md ${hasRazorpay ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+              {hasRazorpay ? <CheckCircle2 className="w-3 h-3" /> : <Info className="w-3 h-3" />}
+              <span>Razorpay {hasRazorpay ? '— Connected' : '— Connect'}</span>
+            </div>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md ${plBreakdown?.totalCOGS > 0 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+              {plBreakdown?.totalCOGS > 0 ? <CheckCircle2 className="w-3 h-3" /> : <Info className="w-3 h-3" />}
+              <span>SKU Recipes {plBreakdown?.totalCOGS > 0 ? '— Active' : '— Set up'}</span>
+            </div>
+            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md ${hasExpenses ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+              {hasExpenses ? <CheckCircle2 className="w-3 h-3" /> : <Info className="w-3 h-3" />}
+              <span>Expenses {hasExpenses ? `(${fmt(overhead?.monthlyTotal || 0)}/mo)` : '— Log costs'}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-blue-100 text-blue-700">
+              <Info className="w-3 h-3" />
+              <span>Inventory → FIFO Costing</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
