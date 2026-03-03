@@ -188,19 +188,15 @@ export default function App() {
         {/* Logo Area */}
         <div className={`flex items-center border-b border-sidebar-border ${sidebarOpen ? 'h-16 px-4' : 'h-16 px-2 justify-center'}`}>
           {sidebarOpen ? (
-            <div className="flex flex-col justify-center w-full overflow-hidden">
+            <div className="flex items-center w-full overflow-hidden h-full py-2">
               {tenantConfig?.logo ? (
-                <>
-                  <img src={tenantConfig.logo} alt={tenantConfig?.tenantName || ''} className="max-h-8 w-auto object-contain object-left"
-                    onError={(e) => { e.target.style.display = 'none'; e.target.nextElementSibling && (e.target.nextElementSibling.style.display = 'block'); }} />
-                  <span className="hidden font-bold text-sidebar-foreground text-sm truncate">{tenantConfig?.tenantName || 'Profit OS'}</span>
-                  <p className="text-[9px] text-muted-foreground mt-0.5 tracking-wide">True Profit OS</p>
-                </>
+                <img src={tenantConfig.logo} alt={tenantConfig?.tenantName || ''} className="max-h-full w-auto object-contain object-left"
+                  onError={(e) => { e.target.style.display = 'none'; }} />
               ) : (
-                <>
-                  <h1 className="font-bold text-sidebar-foreground text-sm truncate">{tenantConfig?.tenantName || 'Profit OS'}</h1>
+                <div className="flex flex-col justify-center">
+                  <h1 className="font-bold text-sidebar-foreground text-base truncate">{tenantConfig?.tenantName || 'Profit OS'}</h1>
                   <p className="text-[9px] text-muted-foreground tracking-wide">True Profit OS</p>
-                </>
+                </div>
               )}
             </div>
           ) : (
