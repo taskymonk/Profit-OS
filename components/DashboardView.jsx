@@ -415,195 +415,143 @@ export default function DashboardView() {
       </div>
 
       {/* Bank Settlements */}
-      <div className="grid grid-cols-1 gap-4">
-
-        {/* Bank Settlements — Redesigned */}
-        <Card>
-          <CardHeader className="pb-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Landmark className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <CardTitle className="text-base">Bank Settlements</CardTitle>
-                <CardDescription>Razorpay payouts to your bank account</CardDescription>
-              </div>
+              <CardTitle className="text-base">Bank Settlements</CardTitle>
             </div>
-          </CardHeader>
-          <CardContent>
-            {settlements?.active ? (
-              <div className="space-y-3">
-                {/* Estimated Available Balance + Today's Settlement */}
-                {settlements.estimated && (settlements.estimated.availableNet > 0 || settlements.estimated.todaySettlement > 0) && (
-                  <div className="space-y-2">
-                    {/* Available Balance */}
-                    {settlements.estimated.availableNet > 0 && (
-                      <>
-                        <p className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1">
-                          Available Balance
-                          <span className="text-[9px] font-normal text-muted-foreground ml-1">(estimated)</span>
-                        </p>
-                        <div className="p-3 rounded-lg bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(settlements.estimated.availableNet)}</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                {settlements.estimated.availableOrderCount} unsettled orders (last {settlements.estimated.lookbackDays} days)
-                              </p>
-                            </div>
-                            <Badge variant="outline" className="text-[9px] border-blue-300 text-blue-600 dark:text-blue-300">Est.</Badge>
-                          </div>
-                        </div>
-                      </>
-                    )}
+            {settlements?.active && settlements?.estimated && (
+              <p className="text-[9px] text-muted-foreground italic">
+                Estimated from order data · may vary
+                {settlements.accuracy?.samples > 0 && ` · ${settlements.accuracy.avgAccuracy}% accurate`}
+              </p>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {settlements?.active ? (
+            <div className="space-y-3">
+              {/* Hero Row — 3 key metrics */}
+              {(() => {
+                const processed = (settlements.settlements || []).filter(s => s.status === 'processed');
+                const totalSettled = processed.reduce((sum, s) => sum + (s.amount || 0), 0);
+                const est = settlements.estimated;
+                const hasEstimates = est && (est.availableNet > 0 || est.todaySettlement > 0);
 
-                    {/* Today's Settlement */}
-                    {settlements.estimated.todaySettlement > 0 && (
-                      <>
-                        <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1 mt-2">
-                          <Clock className="w-3 h-3" /> Today's Expected Settlement
-                          <span className="text-[9px] font-normal text-muted-foreground ml-1">(estimated)</span>
-                        </p>
-                        <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{fmt(settlements.estimated.todaySettlement)}</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                Expected before 9 PM IST · {settlements.estimated.todayOrderCount} orders
-                              </p>
-                              <p className="text-[9px] text-muted-foreground">
-                                Payments from {settlements.estimated.todaySettlementWindow}
-                              </p>
-                            </div>
-                            <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600 dark:text-amber-300">Est.</Badge>
+                return (
+                  <>
+                    <div className={`grid gap-3 ${hasEstimates ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1'}`}>
+                      {/* Available Balance */}
+                      {est?.availableNet > 0 && (
+                        <div className="p-3 rounded-lg bg-blue-50/80 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Available Balance</p>
+                            <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-blue-300/60 text-blue-500">Est.</Badge>
                           </div>
+                          <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(est.availableNet)}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{est.availableOrderCount} orders · last {est.lookbackDays}d</p>
                         </div>
-                      </>
-                    )}
-
-                    {/* Disclaimer */}
-                    <p className="text-[9px] text-muted-foreground italic px-1">
-                      Estimated from order data. Final amounts may vary due to refunds & chargebacks. Re-sync Razorpay for better accuracy.
-                      {settlements.accuracy && settlements.accuracy.samples > 0 && (
-                        <span> Past accuracy: {settlements.accuracy.avgAccuracy}% avg over {settlements.accuracy.samples} settlements.</span>
                       )}
-                    </p>
-                  </div>
-                )}
 
-                {/* Pending/Upcoming Settlements from API (if any) */}
-                {(() => {
-                  const pending = (settlements.settlements || []).filter(s => s.status === 'created' || s.status === 'initiated');
-                  if (pending.length === 0) return null;
-                  return (
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Upcoming</p>
-                      {pending.map(s => (
-                        <div key={s.id} className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-lg font-bold text-amber-700 dark:text-amber-300">{fmt(s.amount)}</p>
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Date pending'}
-                              </p>
-                            </div>
-                            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-300">
-                              {s.status === 'created' ? 'Pending' : 'Initiated'}
-                            </Badge>
+                      {/* Today's Settlement */}
+                      {est?.todaySettlement > 0 && (
+                        <div className="p-3 rounded-lg bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Today's Settlement</p>
+                            <Badge variant="outline" className="text-[8px] h-4 px-1.5 border-amber-300/60 text-amber-500">Est.</Badge>
                           </div>
+                          <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{fmt(est.todaySettlement)}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Before 9 PM · {est.todayOrderCount} orders</p>
                         </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+                      )}
 
-                {/* Failed Settlements */}
-                {(() => {
-                  const failed = (settlements.settlements || []).filter(s => s.status === 'failed');
-                  if (failed.length === 0) return null;
-                  return (
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold text-red-600 dark:text-red-400 uppercase tracking-wider">Failed</p>
-                      {failed.map(s => (
+                      {/* Total Settled */}
+                      {processed.length > 0 && (
+                        <div className="p-3 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800">
+                          <p className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">Total Settled</p>
+                          <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{fmt(totalSettled)}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">{processed.length} deposits all time</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Pending/Upcoming from API */}
+                    {(() => {
+                      const pending = (settlements.settlements || []).filter(s => s.status === 'created' || s.status === 'initiated');
+                      if (pending.length === 0) return null;
+                      return pending.map(s => (
+                        <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-amber-500" />
+                            <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">{fmt(s.amount)}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                            </span>
+                          </div>
+                          <Badge variant="outline" className="text-[9px] border-amber-300 text-amber-600">{s.status === 'created' ? 'Pending' : 'Initiated'}</Badge>
+                        </div>
+                      ));
+                    })()}
+
+                    {/* Failed Settlements */}
+                    {(() => {
+                      const failed = (settlements.settlements || []).filter(s => s.status === 'failed');
+                      if (failed.length === 0) return null;
+                      return failed.map(s => (
                         <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
                             <span className="text-sm font-semibold text-red-700 dark:text-red-300">{fmt(s.amount)}</span>
                           </div>
-                          <span className="text-[11px] text-muted-foreground">
-                            {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
-                          </span>
+                          <span className="text-[10px] text-muted-foreground">{s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}</span>
                         </div>
-                      ))}
-                    </div>
-                  );
-                })()}
+                      ));
+                    })()}
 
-                {/* Recent Processed Settlements */}
-                {(() => {
-                  const processed = (settlements.settlements || []).filter(s => s.status === 'processed');
-                  if (processed.length === 0) return null;
-                  const totalSettled = processed.reduce((sum, s) => sum + (s.amount || 0), 0);
-                  return (
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Recent Deposits</p>
-                      {/* Latest settlement */}
-                      <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{fmt(processed[0].amount)}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {processed[0].createdAt ? new Date(processed[0].createdAt).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <Badge className="text-[10px]">Settled</Badge>
-                            {processed[0].utr && <p className="text-[9px] text-muted-foreground mt-1">UTR: {processed[0].utr}</p>}
-                          </div>
+                    {/* Recent Deposits — compact list */}
+                    {processed.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Recent Deposits</p>
+                        <div className="space-y-1">
+                          {processed.slice(0, 5).map((s, i) => (
+                            <div key={s.id} className={`flex items-center justify-between py-1.5 px-3 rounded-md ${i === 0 ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40' : 'bg-muted/30 border border-border/30'}`}>
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted-foreground w-14">
+                                  {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                                </span>
+                                {s.utr && <span className="text-[9px] text-muted-foreground font-mono hidden md:inline">UTR: {s.utr}</span>}
+                              </div>
+                              <span className={`text-sm font-semibold ${i === 0 ? 'text-emerald-700 dark:text-emerald-300' : ''}`}>{fmt(s.amount)}</span>
+                            </div>
+                          ))}
                         </div>
+                        {processed.length > 5 && (
+                          <p className="text-[10px] text-center text-muted-foreground mt-1.5">+{processed.length - 5} more in Reports</p>
+                        )}
                       </div>
-                      {/* More processed */}
-                      {processed.slice(1, 4).map(s => (
-                        <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/50 border border-border/50">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground w-16">
-                              {s.createdAt ? new Date(s.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
-                            </span>
-                            <Badge variant="secondary" className="text-[9px] h-4">Settled</Badge>
-                            {s.utr && <span className="text-[9px] text-muted-foreground hidden sm:inline">UTR: {s.utr}</span>}
-                          </div>
-                          <span className="text-sm font-semibold">{fmt(s.amount)}</span>
-                        </div>
-                      ))}
-                      {processed.length > 4 && (
-                        <p className="text-[11px] text-center text-muted-foreground">+{processed.length - 4} more in Reports</p>
-                      )}
-                      {/* Total */}
-                      <div className="flex items-center justify-between pt-2 border-t border-border">
-                        <span className="text-[11px] text-muted-foreground">Total settled ({processed.length} deposits)</span>
-                        <span className="text-sm font-bold">{fmt(totalSettled)}</span>
-                      </div>
-                    </div>
-                  );
-                })()}
+                    )}
 
-                {/* Edge case: no data at all */}
-                {(!settlements.settlements || settlements.settlements.length === 0) && (!settlements.estimated || settlements.estimated.estimatedSettlement <= 0) && (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <Landmark className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">No settlement data yet</p>
-                    <p className="text-xs mt-1">Settlement data will appear after Razorpay processes deposits.</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-6 text-muted-foreground">
-                <Landmark className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No bank settlements</p>
-                <p className="text-xs mt-1">Connect Razorpay in Integrations to track bank settlements</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                    {/* No data edge case */}
+                    {processed.length === 0 && !hasEstimates && (
+                      <div className="text-center py-4 text-muted-foreground">
+                        <p className="text-sm">No settlement data yet</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground">
+              <Landmark className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No bank settlements</p>
+              <p className="text-xs mt-1">Connect Razorpay in Integrations to track bank settlements</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
