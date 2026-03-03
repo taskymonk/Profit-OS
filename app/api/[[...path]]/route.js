@@ -779,6 +779,197 @@ async function getReportEmployeeOutput(params) {
   }).sort((a, b) => b.totalOrdersPrepared - a.totalOrdersPrepared);
 }
 
+// ==================== NEW REPORT FUNCTIONS ====================
+
+async function getReportMonthlyPL(params) {
+  const db = await getDb();
+  const orders = await db.collection('orders').find({}).toArray();
+  const expenses = await db.collection('overheadExpenses').find({}).toArray();
+  const dailySpends = await db.collection('dailyMarketingSpend').find({}).toArray();
+  const tenantConfig = await db.collection('tenantConfig').findOne({}) || {};
+  const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
+  const skuMap = {};
+  skuRecipes.forEach(r => { skuMap[r.sku] = r; });
+  const taxMul = 1 + ((tenantConfig.adSpendTaxRate ?? 18) / 100);
+  const shopifyTxnRate = (tenantConfig.shopifyTxnFeeRate || 2) / 100;
+
+  // Build monthly buckets
+  const months = {};
+  orders.forEach(o => {
+    const d = new Date(o.orderDate);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (!months[key]) months[key] = { month: key, revenue: 0, cogs: 0, shopifyFees: 0, razorpayFees: 0, adSpend: 0, overhead: 0, netProfit: 0, orderCount: 0, rtoCount: 0 };
+    months[key].orderCount++;
+    months[key].revenue += o.salePrice || 0;
+    if (o.status === 'RTO') months[key].rtoCount++;
+    // COGS
+    const recipe = skuMap[o.sku];
+    if (recipe?.ingredients?.length) {
+      const cogs = recipe.ingredients.reduce((s, ing) => s + ((ing.costPerUnit || 0) * (ing.quantityUsed || 0)), 0);
+      months[key].cogs += cogs;
+    }
+    // Shopify fee
+    months[key].shopifyFees += (o.salePrice || 0) * shopifyTxnRate;
+    // Razorpay fee
+    months[key].razorpayFees += o.gatewayFee || 0;
+  });
+
+  // Add ad spend per month
+  dailySpends.forEach(s => {
+    const d = new Date(s.date + 'T00:00:00+05:30');
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (months[key]) months[key].adSpend += (s.spendAmount || 0) * taxMul;
+  });
+
+  // Add overhead expenses per month (pro-rata)
+  expenses.forEach(exp => {
+    const amt = exp.amount || 0;
+    const freq = exp.frequency || 'monthly';
+    let monthlyAmt = amt;
+    if (freq === 'yearly') monthlyAmt = amt / 12;
+    else if (freq === 'one-time') monthlyAmt = 0; // attributed only to purchase month
+    else if (freq === 'weekly') monthlyAmt = amt * 4.33;
+    else if (freq === 'daily') monthlyAmt = amt * 30;
+
+    if (freq === 'one-time' && exp.date) {
+      const d = new Date(exp.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (months[key]) months[key].overhead += amt;
+    } else {
+      Object.keys(months).forEach(key => { months[key].overhead += monthlyAmt; });
+    }
+  });
+
+  // Calc net profit
+  Object.values(months).forEach(m => {
+    m.netProfit = m.revenue - m.cogs - m.shopifyFees - m.razorpayFees - m.adSpend - m.overhead;
+    m.margin = m.revenue > 0 ? Math.round((m.netProfit / m.revenue) * 10000) / 100 : 0;
+    // Round everything
+    ['revenue', 'cogs', 'shopifyFees', 'razorpayFees', 'adSpend', 'overhead', 'netProfit'].forEach(k => { m[k] = Math.round(m[k]); });
+  });
+
+  return Object.values(months).sort((a, b) => a.month.localeCompare(b.month));
+}
+
+async function getReportCustomerRepeat(params) {
+  const db = await getDb();
+  const orders = await db.collection('orders').find({}).toArray();
+  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 90));
+  const endDate = params.endDate ? new Date(params.endDate) : new Date();
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  const filteredOrders = orders.filter(o => {
+    const d = new Date(o.orderDate);
+    return d >= startDate && d <= endDate;
+  });
+
+  const customers = {};
+  filteredOrders.forEach(o => {
+    const email = (o.customerEmail || o.customerName || 'unknown').toLowerCase().trim();
+    if (!customers[email]) customers[email] = { email, name: o.customerName || email, orders: 0, totalSpent: 0, firstOrder: o.orderDate, lastOrder: o.orderDate };
+    customers[email].orders++;
+    customers[email].totalSpent += o.salePrice || 0;
+    if (new Date(o.orderDate) < new Date(customers[email].firstOrder)) customers[email].firstOrder = o.orderDate;
+    if (new Date(o.orderDate) > new Date(customers[email].lastOrder)) customers[email].lastOrder = o.orderDate;
+  });
+
+  const custs = Object.values(customers);
+  const repeatCustomers = custs.filter(c => c.orders > 1);
+  const oneTimeCustomers = custs.filter(c => c.orders === 1);
+  const totalCustomers = custs.length;
+  const repeatRate = totalCustomers > 0 ? Math.round((repeatCustomers.length / totalCustomers) * 10000) / 100 : 0;
+  const avgOrderValue = filteredOrders.length > 0 ? Math.round(filteredOrders.reduce((s, o) => s + (o.salePrice || 0), 0) / filteredOrders.length) : 0;
+  const avgRepeatOrders = repeatCustomers.length > 0 ? Math.round(repeatCustomers.reduce((s, c) => s + c.orders, 0) / repeatCustomers.length * 10) / 10 : 0;
+  const repeatRevenue = Math.round(repeatCustomers.reduce((s, c) => s + c.totalSpent, 0));
+  const oneTimeRevenue = Math.round(oneTimeCustomers.reduce((s, c) => s + c.totalSpent, 0));
+
+  return {
+    summary: { totalCustomers, repeatCustomers: repeatCustomers.length, oneTimeCustomers: oneTimeCustomers.length, repeatRate, avgOrderValue, avgRepeatOrders, repeatRevenue, oneTimeRevenue },
+    topRepeatCustomers: repeatCustomers.sort((a, b) => b.orders - a.orders).slice(0, 20).map(c => ({
+      ...c, totalSpent: Math.round(c.totalSpent), avgOrderValue: Math.round(c.totalSpent / c.orders),
+    })),
+  };
+}
+
+async function getReportProductCOGS(params) {
+  const db = await getDb();
+  const recipes = await db.collection('skuRecipes').find({}).toArray();
+  const orders = await db.collection('orders').find({}).toArray();
+  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
+  const endDate = params.endDate ? new Date(params.endDate) : new Date();
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(23, 59, 59, 999);
+
+  const filteredOrders = orders.filter(o => new Date(o.orderDate) >= startDate && new Date(o.orderDate) <= endDate);
+  const recipeMap = {};
+  recipes.forEach(r => { recipeMap[r.sku] = r; });
+
+  const skuStats = {};
+  filteredOrders.forEach(o => {
+    if (!skuStats[o.sku]) skuStats[o.sku] = { sku: o.sku, productName: o.productName, orders: 0, revenue: 0, cogs: 0, hasRecipe: !!recipeMap[o.sku]?.ingredients?.length };
+    skuStats[o.sku].orders++;
+    skuStats[o.sku].revenue += o.salePrice || 0;
+    const recipe = recipeMap[o.sku];
+    if (recipe?.ingredients?.length) {
+      skuStats[o.sku].cogs += recipe.ingredients.reduce((s, i) => s + ((i.costPerUnit || 0) * (i.quantityUsed || 0)), 0);
+    }
+  });
+
+  return Object.values(skuStats).sort((a, b) => (b.revenue - b.cogs) - (a.revenue - a.cogs)).map(s => ({
+    ...s, revenue: Math.round(s.revenue), cogs: Math.round(s.cogs),
+    grossProfit: Math.round(s.revenue - s.cogs),
+    margin: s.revenue > 0 ? Math.round(((s.revenue - s.cogs) / s.revenue) * 10000) / 100 : 0,
+    avgCOGSPerOrder: s.orders > 0 ? Math.round(s.cogs / s.orders) : 0,
+  }));
+}
+
+async function getReportExpenseTrend(params) {
+  const db = await getDb();
+  const expenses = await db.collection('overheadExpenses').find({}).toArray();
+  const categories = await db.collection('expenseCategories').find({}).toArray();
+  const catNames = categories.map(c => c.name);
+
+  // Build monthly expense by category
+  const months = {};
+  expenses.forEach(exp => {
+    const cat = exp.category || 'Uncategorized';
+    const amt = exp.amount || 0;
+    const freq = exp.frequency || 'monthly';
+
+    if (freq === 'one-time' && exp.date) {
+      const d = new Date(exp.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!months[key]) months[key] = { month: key, total: 0 };
+      if (!months[key][cat]) months[key][cat] = 0;
+      months[key][cat] += amt;
+      months[key].total += amt;
+    } else {
+      let monthlyAmt = amt;
+      if (freq === 'yearly') monthlyAmt = amt / 12;
+      else if (freq === 'weekly') monthlyAmt = amt * 4.33;
+      else if (freq === 'daily') monthlyAmt = amt * 30;
+      // Distribute to all recent months (last 6 months)
+      for (let i = 0; i < 6; i++) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (!months[key]) months[key] = { month: key, total: 0 };
+        if (!months[key][cat]) months[key][cat] = 0;
+        months[key][cat] += monthlyAmt;
+        months[key].total += monthlyAmt;
+      }
+    }
+  });
+
+  // Round all values
+  Object.values(months).forEach(m => {
+    Object.keys(m).forEach(k => { if (typeof m[k] === 'number') m[k] = Math.round(m[k]); });
+  });
+
+  return { data: Object.values(months).sort((a, b) => a.month.localeCompare(b.month)), categories: [...new Set([...catNames, ...expenses.map(e => e.category).filter(Boolean)])] };
+}
+
 // ==================== SHOPIFY SYNC ====================
 
 async function shopifySyncProducts() {
@@ -1706,6 +1897,14 @@ export async function GET(request) {
             return json(await getReportRtoLocations(params));
           case 'employee-output':
             return json(await getReportEmployeeOutput(params));
+          case 'monthly-pl':
+            return json(await getReportMonthlyPL(params));
+          case 'customer-repeat':
+            return json(await getReportCustomerRepeat(params));
+          case 'product-cogs':
+            return json(await getReportProductCOGS(params));
+          case 'expense-trend':
+            return json(await getReportExpenseTrend(params));
           default:
             return json({ error: 'Unknown report type' }, 404);
         }
@@ -2137,15 +2336,38 @@ export async function POST(request) {
       }
 
       case 'purge': {
-        // Purge all demo data but keep tenantConfig and integrations
+        // Selective purge or full purge
         const db = await getDb();
-        const collections = ['orders', 'skuRecipes', 'rawMaterials', 'packagingMaterials', 'vendors', 'employees', 'overheadExpenses'];
+        const purgeType = body.purgeType || 'all'; // 'all', 'orders', 'inventory', 'expenses', 'recipes'
+        let collectionsToPurge = [];
+
+        if (purgeType === 'orders') {
+          collectionsToPurge = ['orders'];
+        } else if (purgeType === 'inventory') {
+          collectionsToPurge = ['inventoryItems', 'inventoryCategories', 'stockBatches', 'stockConsumptions'];
+        } else if (purgeType === 'expenses') {
+          collectionsToPurge = ['overheadExpenses', 'expenseCategories', 'dailyMarketingSpend'];
+        } else if (purgeType === 'recipes') {
+          collectionsToPurge = ['skuRecipes', 'recipeTemplates'];
+        } else {
+          // Purge everything except tenantConfig, integrations, syncHistory
+          collectionsToPurge = [
+            'orders', 'skuRecipes', 'recipeTemplates',
+            'rawMaterials', 'packagingMaterials', 'vendors', 'employees',
+            'overheadExpenses', 'expenseCategories',
+            'inventoryItems', 'inventoryCategories',
+            'stockBatches', 'stockConsumptions',
+            'dailyMarketingSpend',
+          ];
+        }
+
         const counts = {};
-        for (const col of collections) {
+        for (const col of collectionsToPurge) {
           const result = await db.collection(col).deleteMany({});
           counts[col] = result.deletedCount;
         }
-        return json({ message: 'All demo data purged. TenantConfig and Integrations preserved.', purged: counts });
+        const label = purgeType === 'all' ? 'All data' : purgeType.charAt(0).toUpperCase() + purgeType.slice(1) + ' data';
+        return json({ message: `${label} purged successfully. Config and credentials preserved.`, purged: counts });
       }
 
       case 'vendors':
@@ -2595,9 +2817,33 @@ export async function PUT(request) {
       }
 
       case 'integrations': {
+        // Smart save: only update fields that were actually changed (not masked values)
         const db = await getDb();
-        const updateData = { ...body, updatedAt: new Date().toISOString() };
-        delete updateData._id;
+        const existing = await db.collection('integrations').findOne({ _id: 'integrations-config' }) || {};
+        const updateData = { updatedAt: new Date().toISOString() };
+
+        // Helper: check if a secret field is a masked value (contains * or is all dots/bullets)
+        const isMasked = (val) => !val || /^\*+.{0,4}$/.test(val) || /^[•*]+$/.test(val) || val === '********';
+
+        // Merge each integration section, preserving untouched secrets
+        const mergeSection = (key, secretFields) => {
+          if (!body[key]) return;
+          const merged = { ...(existing[key] || {}), ...body[key] };
+          // For each secret field, if it looks masked, restore the original
+          secretFields.forEach(sf => {
+            if (isMasked(body[key][sf]) && existing[key]?.[sf]) {
+              merged[sf] = existing[key][sf];
+            }
+          });
+          updateData[key] = merged;
+        };
+
+        mergeSection('shopify', ['accessToken']);
+        mergeSection('indiaPost', ['password']);
+        mergeSection('metaAds', ['token']);
+        mergeSection('razorpay', ['keySecret']);
+        mergeSection('exchangeRate', ['apiKey']);
+
         await db.collection('integrations').updateOne({ _id: 'integrations-config' }, { $set: updateData }, { upsert: true });
         return json({ message: 'Integrations updated successfully' });
       }
@@ -2657,6 +2903,12 @@ export async function PUT(request) {
         return json(await updateDoc('packagingMaterials', id, body));
       case 'sku-recipes':
         if (!id) return json({ error: 'ID required' }, 400);
+        // Support unlink action: PUT /api/sku-recipes/{id}/unlink
+        if (action === 'unlink') {
+          const db = await getDb();
+          await db.collection('skuRecipes').updateOne({ _id: id }, { $unset: { templateId: '', templateName: '' }, $set: { ingredients: [], updatedAt: new Date().toISOString() } });
+          return json(await db.collection('skuRecipes').findOne({ _id: id }));
+        }
         return json(await updateDoc('skuRecipes', id, body));
 
       case 'recipe-templates': {

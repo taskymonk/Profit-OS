@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import {
-  Plus, Trash2, Edit, Zap, UserCheck, Search,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Package
+  Plus, Trash2, Edit, Zap, UserCheck, Search, X, Info,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Package,
+  TrendingUp, TrendingDown, DollarSign, Truck, MapPin, ReceiptText, ShoppingBag
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,6 +41,7 @@ export default function OrdersView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [showGuide, setShowGuide] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
@@ -47,8 +50,11 @@ export default function OrdersView() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [skuRecipes, setSkuRecipes] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
   const [profitData, setProfitData] = useState({});
+
+  // Slide-out drawer state
+  const [drawerOrder, setDrawerOrder] = useState(null);
+  const [drawerLoading, setDrawerLoading] = useState(false);
 
   const [form, setForm] = useState({
     orderId: '', sku: '', productName: '', customerName: '',
@@ -138,7 +144,6 @@ export default function OrdersView() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Reset page when filter changes
   const handleFilterChange = (status) => {
     setFilterStatus(status);
     setPage(1);
@@ -162,6 +167,7 @@ export default function OrdersView() {
     if (!confirm('Delete this order?')) return;
     await fetch(`/api/orders/${id}`, { method: 'DELETE' });
     toast.success('Order deleted'); fetchOrders();
+    if (drawerOrder?._id === id) setDrawerOrder(null);
   };
 
   const handleMarkUrgent = async () => {
@@ -189,18 +195,17 @@ export default function OrdersView() {
     } catch (err) { toast.error('Failed'); }
   };
 
-  const fetchProfit = async (orderId) => {
-    try {
-      const res = await fetch(`/api/calculate-profit/${orderId}`);
-      const data = await res.json();
-      setProfitData(prev => ({ ...prev, [orderId]: data }));
-    } catch (err) { console.error(err); }
-  };
-
-  const toggleExpand = (id) => {
-    if (expandedId === id) { setExpandedId(null); return; }
-    setExpandedId(id);
-    if (!profitData[id]) fetchProfit(id);
+  const openDrawer = async (order) => {
+    setDrawerOrder(order);
+    if (!profitData[order._id]) {
+      setDrawerLoading(true);
+      try {
+        const res = await fetch(`/api/calculate-profit/${order._id}`);
+        const data = await res.json();
+        setProfitData(prev => ({ ...prev, [order._id]: data }));
+      } catch (err) { console.error(err); }
+      setDrawerLoading(false);
+    }
   };
 
   const openEdit = (order) => {
@@ -236,9 +241,29 @@ export default function OrdersView() {
     }
   };
 
+  const profit = drawerOrder ? profitData[drawerOrder._id] : null;
+
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
-      {/* Toolbar: Filters + Search + Add */}
+      {/* UX Guide Banner */}
+      {showGuide && (
+        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
+          <button onClick={() => setShowGuide(false)} className="absolute top-2.5 right-2.5 text-blue-400 hover:text-blue-600">
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-lg bg-blue-100 shrink-0"><ShoppingBag className="w-4 h-4 text-blue-600" /></div>
+            <div>
+              <h3 className="font-semibold text-sm text-blue-900">How Orders Work</h3>
+              <p className="text-xs text-blue-700 mt-1">
+                Orders sync from Shopify automatically. Click any order row to see its <strong>full profit breakdown</strong> — including COGS (from SKU Recipes), Shopify fees, Razorpay fees, and marketing allocation. Each order's true profit is calculated in real-time.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toolbar */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center">
           <div className="flex gap-1.5 flex-wrap">
@@ -251,12 +276,7 @@ export default function OrdersView() {
           <div className="flex gap-2 items-center">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9 w-64 h-9"
-                placeholder="Search Order ID, Customer, SKU..."
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
-              />
+              <Input className="pl-9 w-64 h-9" placeholder="Search Order ID, Customer, SKU..." value={searchInput} onChange={e => setSearchInput(e.target.value)} />
             </div>
             <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditingOrder(null); }}>
               <DialogTrigger asChild>
@@ -302,7 +322,6 @@ export default function OrdersView() {
           </div>
         </div>
 
-        {/* Summary bar */}
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
             {total > 0 ? `Showing ${((page - 1) * PAGE_SIZE) + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total} orders` : 'No orders found'}
@@ -357,179 +376,279 @@ export default function OrdersView() {
         </DialogContent>
       </Dialog>
 
-      {/* Orders Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead><tr className="border-b bg-muted/50">
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Order ID</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground hidden lg:table-cell">Product</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Customer</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Status</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">AWB / Tracking</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Sale Price</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Date</th>
-                <th className="py-3 px-4 text-xs font-medium text-muted-foreground w-28">Actions</th>
-              </tr></thead>
-              <tbody>
-                {orders.map(order => (
-                  <tr key={order._id} className="border-b hover:bg-muted/30 group">
-                    <td className="py-2.5 px-4 text-sm font-medium cursor-pointer" onClick={() => toggleExpand(order._id)}>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs">{order.orderId}</span>
-                        {order.isUrgent && <Badge variant="destructive" className="text-[10px] px-1 py-0"><Zap className="w-2.5 h-2.5" /></Badge>}
-                      </div>
-                      <span className="text-[11px] text-muted-foreground font-mono lg:hidden">{order.sku}</span>
-                    </td>
-                    <td className="py-2.5 px-4 hidden lg:table-cell">
-                      <div className="max-w-[200px] truncate text-xs">{order.productName}</div>
-                      <span className="text-[10px] font-mono text-muted-foreground">{order.sku}</span>
-                    </td>
-                    <td className="py-2.5 px-4 text-sm">{order.customerName || '-'}</td>
-                    <td className="py-2.5 px-4">
-                      <Badge variant={statusVariant(order.status)} className={statusColor(order.status)}>
-                        {order.status}
-                      </Badge>
-                    </td>
-                    <td className="py-2.5 px-4">
-                      {['Unfulfilled', 'In Transit'].includes(order.status) ? (
-                        <div className="flex items-center gap-1">
-                          <Input
-                            className="h-7 text-xs w-32 font-mono"
-                            placeholder="Enter AWB..."
-                            value={trackingEdits[order._id] !== undefined ? trackingEdits[order._id] : (order.trackingNumber || '')}
-                            onChange={e => setTrackingEdits(prev => ({ ...prev, [order._id]: e.target.value }))}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') {
-                                const val = trackingEdits[order._id] !== undefined ? trackingEdits[order._id] : (order.trackingNumber || '');
-                                saveTrackingNumber(order._id, val);
-                                setTrackingEdits(prev => { const n = {...prev}; delete n[order._id]; return n; });
-                              }
-                            }}
-                            onBlur={() => {
-                              if (trackingEdits[order._id] !== undefined && trackingEdits[order._id] !== (order.trackingNumber || '')) {
-                                saveTrackingNumber(order._id, trackingEdits[order._id]);
-                                setTrackingEdits(prev => { const n = {...prev}; delete n[order._id]; return n; });
-                              }
-                            }}
-                          />
-                          {savingTracking[order._id] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+      {/* Main Content: Table + Drawer */}
+      <div className="flex gap-0">
+        {/* Orders Table */}
+        <Card className={`flex-1 transition-all duration-300 ${drawerOrder ? 'rounded-r-none border-r-0' : ''}`}>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead><tr className="border-b bg-muted/50">
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Order ID</th>
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground hidden lg:table-cell">Product</th>
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Customer</th>
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground">AWB / Tracking</th>
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground text-right">Sale Price</th>
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Date</th>
+                  <th className="py-3 px-4 text-xs font-medium text-muted-foreground w-28">Actions</th>
+                </tr></thead>
+                <tbody>
+                  {orders.map(order => (
+                    <tr key={order._id}
+                      className={`border-b hover:bg-muted/30 group cursor-pointer transition-colors ${drawerOrder?._id === order._id ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
+                      onClick={() => openDrawer(order)}>
+                      <td className="py-2.5 px-4 text-sm font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs">{order.orderId}</span>
+                          {order.isUrgent && <Badge variant="destructive" className="text-[10px] px-1 py-0"><Zap className="w-2.5 h-2.5" /></Badge>}
                         </div>
-                      ) : order.trackingNumber ? (
-                        <span className="text-xs font-mono text-muted-foreground">{order.trackingNumber}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/50">—</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-4 text-sm text-right font-medium">{fmt(order.salePrice)}</td>
-                    <td className="py-2.5 px-4 text-xs text-muted-foreground whitespace-nowrap">{formatDate(order.orderDate)}</td>
-                    <td className="py-2.5 px-4">
-                      <div className="flex gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <Button size="icon" variant="ghost" title="Mark Urgent" className="h-7 w-7" onClick={() => { setSelectedOrder(order); setUrgentForm({ manualCourierName: 'BlueDart', manualShippingCost: '' }); setUrgentDialogOpen(true); }}>
-                          <Zap className="w-3.5 h-3.5 text-amber-500" />
-                        </Button>
-                        <Button size="icon" variant="ghost" title="Assign Employee" className="h-7 w-7" onClick={() => { setSelectedOrder(order); setAssignForm({ employeeId: '' }); setAssignDialogOpen(true); }}>
-                          <UserCheck className="w-3.5 h-3.5 text-blue-500" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(order)}>
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteOrder(order._id)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {/* Expanded profit row */}
-                {orders.map(order => (
-                  expandedId === order._id && profitData[order._id] ? (
-                    <tr key={`${order._id}-detail`} className="bg-muted/20">
-                      <td colSpan={8} className="p-4">
-                        <div className="grid grid-cols-3 md:grid-cols-7 gap-3 text-xs">
-                          <div><span className="text-muted-foreground">Net Revenue</span><p className="font-bold">{fmt(Math.round(profitData[order._id].netRevenue))}</p></div>
-                          <div><span className="text-muted-foreground">COGS</span><p className="font-bold">{fmt(Math.round(profitData[order._id].totalCOGS))}</p></div>
-                          <div>
-                            <span className="text-muted-foreground">Shipping</span>
-                            <p className="font-bold">{fmt(Math.round(profitData[order._id].shippingCost))}</p>
-                            {profitData[order._id].isRTO && <Badge variant="destructive" className="text-[10px]">RTO 2x</Badge>}
-                            {order.isUrgent && <Badge className="text-[10px] bg-amber-100 text-amber-700">{order.manualCourierName}</Badge>}
+                        <span className="text-[11px] text-muted-foreground font-mono lg:hidden">{order.sku}</span>
+                      </td>
+                      <td className="py-2.5 px-4 hidden lg:table-cell">
+                        <div className="max-w-[200px] truncate text-xs">{order.productName}</div>
+                        <span className="text-[10px] font-mono text-muted-foreground">{order.sku}</span>
+                      </td>
+                      <td className="py-2.5 px-4 text-sm">{order.customerName || '-'}</td>
+                      <td className="py-2.5 px-4">
+                        <Badge variant={statusVariant(order.status)} className={statusColor(order.status)}>
+                          {order.status}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 px-4" onClick={e => e.stopPropagation()}>
+                        {['Unfulfilled', 'In Transit'].includes(order.status) ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              className="h-7 text-xs w-32 font-mono"
+                              placeholder="Enter AWB..."
+                              value={trackingEdits[order._id] !== undefined ? trackingEdits[order._id] : (order.trackingNumber || '')}
+                              onChange={e => setTrackingEdits(prev => ({ ...prev, [order._id]: e.target.value }))}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  const val = trackingEdits[order._id] !== undefined ? trackingEdits[order._id] : (order.trackingNumber || '');
+                                  saveTrackingNumber(order._id, val);
+                                  setTrackingEdits(prev => { const n = {...prev}; delete n[order._id]; return n; });
+                                }
+                              }}
+                              onBlur={() => {
+                                if (trackingEdits[order._id] !== undefined && trackingEdits[order._id] !== (order.trackingNumber || '')) {
+                                  saveTrackingNumber(order._id, trackingEdits[order._id]);
+                                  setTrackingEdits(prev => { const n = {...prev}; delete n[order._id]; return n; });
+                                }
+                              }}
+                            />
+                            {savingTracking[order._id] && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
                           </div>
-                          <div><span className="text-muted-foreground">Txn Fees</span><p className="font-bold">{fmt(Math.round(profitData[order._id].totalTransactionFee))}</p></div>
-                          <div><span className="text-muted-foreground">Marketing</span><p className="font-bold">{fmt(Math.round(profitData[order._id].marketingAllocation))}</p></div>
-                          <div><span className="text-muted-foreground">Location</span><p className="font-medium">{order.destinationCity || '-'}</p><p className="text-muted-foreground">{order.destinationPincode}</p></div>
-                          <div>
-                            <span className="font-semibold">Net Profit</span>
-                            <p className={`text-lg font-bold ${profitData[order._id].netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {profitData[order._id].netProfit >= 0 ? '' : '-'}{fmt(Math.round(profitData[order._id].netProfit))}
-                            </p>
-                          </div>
+                        ) : order.trackingNumber ? (
+                          <span className="text-xs font-mono text-muted-foreground">{order.trackingNumber}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/50">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4 text-sm text-right font-medium">{fmt(order.salePrice)}</td>
+                      <td className="py-2.5 px-4 text-xs text-muted-foreground whitespace-nowrap">{formatDate(order.orderDate)}</td>
+                      <td className="py-2.5 px-4" onClick={e => e.stopPropagation()}>
+                        <div className="flex gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Button size="icon" variant="ghost" title="Mark Urgent" className="h-7 w-7" onClick={() => { setSelectedOrder(order); setUrgentForm({ manualCourierName: 'BlueDart', manualShippingCost: '' }); setUrgentDialogOpen(true); }}>
+                            <Zap className="w-3.5 h-3.5 text-amber-500" />
+                          </Button>
+                          <Button size="icon" variant="ghost" title="Assign Employee" className="h-7 w-7" onClick={() => { setSelectedOrder(order); setAssignForm({ employeeId: '' }); setAssignDialogOpen(true); }}>
+                            <UserCheck className="w-3.5 h-3.5 text-blue-500" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(order)}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteOrder(order._id)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
-                  ) : null
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Empty state */}
-          {!loading && orders.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <p className="text-lg font-medium mb-1">No orders found</p>
-              <p className="text-sm">
-                {searchTerm ? `No results for "${searchTerm}". Try a different search.` :
-                 filterStatus !== 'all' ? `No ${filterStatus} orders.` :
-                 'Sync orders from Shopify or add them manually.'}
-              </p>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t">
-              <span className="text-xs text-muted-foreground">
-                Page {page} of {totalPages}
-              </span>
-              <div className="flex items-center gap-1">
-                <Button size="icon" variant="outline" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage(1)} title="First page">
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-                <Button size="icon" variant="outline" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} title="Previous">
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-
-                {/* Page number buttons */}
-                {(() => {
-                  const pages = [];
-                  let start = Math.max(1, page - 2);
-                  let end = Math.min(totalPages, page + 2);
-                  if (end - start < 4) {
-                    if (start === 1) end = Math.min(totalPages, start + 4);
-                    else start = Math.max(1, end - 4);
-                  }
-                  for (let i = start; i <= end; i++) {
-                    pages.push(
-                      <Button key={i} size="sm" variant={i === page ? 'default' : 'outline'} className="h-8 w-8 text-xs" onClick={() => setPage(i)}>
-                        {i}
-                      </Button>
-                    );
-                  }
-                  return pages;
-                })()}
-
-                <Button size="icon" variant="outline" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} title="Next">
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                <Button size="icon" variant="outline" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Last page">
-                  <ChevronsRight className="w-4 h-4" />
-                </Button>
+            {!loading && orders.length === 0 && (
+              <div className="text-center py-16 text-muted-foreground">
+                <p className="text-lg font-medium mb-1">No orders found</p>
+                <p className="text-sm">
+                  {searchTerm ? `No results for "${searchTerm}". Try a different search.` :
+                   filterStatus !== 'all' ? `No ${filterStatus} orders.` :
+                   'Sync orders from Shopify or add them manually.'}
+                </p>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t">
+                <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+                <div className="flex items-center gap-1">
+                  <Button size="icon" variant="outline" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage(1)} title="First page"><ChevronsLeft className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="outline" className="h-8 w-8" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} title="Previous"><ChevronLeft className="w-4 h-4" /></Button>
+                  {(() => {
+                    const pages = [];
+                    let start = Math.max(1, page - 2);
+                    let end = Math.min(totalPages, page + 2);
+                    if (end - start < 4) {
+                      if (start === 1) end = Math.min(totalPages, start + 4);
+                      else start = Math.max(1, end - 4);
+                    }
+                    for (let i = start; i <= end; i++) {
+                      pages.push(<Button key={i} size="sm" variant={i === page ? 'default' : 'outline'} className="h-8 w-8 text-xs" onClick={() => setPage(i)}>{i}</Button>);
+                    }
+                    return pages;
+                  })()}
+                  <Button size="icon" variant="outline" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} title="Next"><ChevronRight className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="outline" className="h-8 w-8" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Last page"><ChevronsRight className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Slide-out Drawer */}
+        {drawerOrder && (
+          <Card className="w-[380px] shrink-0 rounded-l-none border-l-0 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="sticky top-0 bg-card z-10 border-b p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h3 className="font-semibold text-sm">Order {drawerOrder.orderId}</h3>
+                    <p className="text-xs text-muted-foreground">{formatDate(drawerOrder.orderDate)}</p>
+                  </div>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDrawerOrder(null)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={statusVariant(drawerOrder.status)} className={statusColor(drawerOrder.status)}>{drawerOrder.status}</Badge>
+                  {drawerOrder.isUrgent && <Badge variant="destructive" className="text-[10px]"><Zap className="w-3 h-3 mr-0.5" /> Urgent</Badge>}
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+                {/* Product Info */}
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Product</p>
+                  <p className="text-sm font-medium">{drawerOrder.productName}</p>
+                  <p className="text-[11px] font-mono text-muted-foreground">{drawerOrder.sku}</p>
+                </div>
+
+                {/* Customer & Location */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Customer</p>
+                    <p className="text-sm font-medium">{drawerOrder.customerName || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Location</p>
+                    <p className="text-sm font-medium flex items-center gap-1"><MapPin className="w-3 h-3" /> {drawerOrder.destinationCity || '-'}</p>
+                    <p className="text-[11px] text-muted-foreground">{drawerOrder.destinationPincode || ''}</p>
+                  </div>
+                </div>
+
+                {drawerOrder.preparedByName && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Prepared By</p>
+                    <Badge variant="outline"><UserCheck className="w-3 h-3 mr-1" /> {drawerOrder.preparedByName}</Badge>
+                  </div>
+                )}
+
+                {drawerOrder.trackingNumber && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Tracking Number</p>
+                    <p className="text-sm font-mono">{drawerOrder.trackingNumber}</p>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Profit Breakdown */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1"><ReceiptText className="w-3.5 h-3.5" /> PROFIT BREAKDOWN</p>
+                  {drawerLoading ? (
+                    <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                  ) : profit ? (
+                    <div className="space-y-2">
+                      {/* Revenue */}
+                      <div className="flex justify-between items-center py-1.5 px-2 rounded bg-emerald-50 dark:bg-emerald-950/30">
+                        <span className="text-xs flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Net Revenue</span>
+                        <span className="text-sm font-bold text-emerald-700">{fmt(Math.round(profit.netRevenue))}</span>
+                      </div>
+
+                      {/* Cost items */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center py-1 px-2 text-xs">
+                          <span className="text-muted-foreground flex items-center gap-1.5"><Package className="w-3 h-3" /> COGS (Materials)</span>
+                          <span className="font-medium text-red-600">-{fmt(Math.round(profit.totalCOGS))}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-1 px-2 text-xs">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <Truck className="w-3 h-3" /> Shipping
+                            {profit.isRTO && <Badge variant="destructive" className="text-[9px] h-4">RTO 2x</Badge>}
+                            {drawerOrder.isUrgent && <Badge className="text-[9px] h-4 bg-amber-100 text-amber-700">{drawerOrder.manualCourierName}</Badge>}
+                          </span>
+                          <span className="font-medium text-red-600">-{fmt(Math.round(profit.shippingCost))}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-1 px-2 text-xs">
+                          <span className="text-muted-foreground flex items-center gap-1.5"><ReceiptText className="w-3 h-3" /> Transaction Fees</span>
+                          <span className="font-medium text-red-600">-{fmt(Math.round(profit.totalTransactionFee))}</span>
+                        </div>
+                        {profit.marketingAllocation > 0 && (
+                          <div className="flex justify-between items-center py-1 px-2 text-xs">
+                            <span className="text-muted-foreground flex items-center gap-1.5"><TrendingUp className="w-3 h-3" /> Marketing</span>
+                            <span className="font-medium text-red-600">-{fmt(Math.round(profit.marketingAllocation))}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <Separator />
+
+                      {/* Net Profit */}
+                      <div className={`flex justify-between items-center py-2 px-3 rounded-lg ${profit.netProfit >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+                        <span className="text-sm font-semibold flex items-center gap-1.5">
+                          {profit.netProfit >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-red-600" />}
+                          Net Profit
+                        </span>
+                        <span className={`text-lg font-bold ${profit.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {profit.netProfit >= 0 ? '' : '-'}{fmt(Math.round(profit.netProfit))}
+                        </span>
+                      </div>
+
+                      {/* Margin */}
+                      <p className="text-[11px] text-center text-muted-foreground">
+                        Margin: {profit.netRevenue > 0 ? Math.round((profit.netProfit / profit.netRevenue) * 100) : 0}%
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-4">Could not calculate profit data</p>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Quick Actions */}
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">ACTIONS</p>
+                  <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs" onClick={() => openEdit(drawerOrder)}>
+                    <Edit className="w-3.5 h-3.5 mr-2" /> Edit Order
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs" onClick={() => { setSelectedOrder(drawerOrder); setUrgentForm({ manualCourierName: 'BlueDart', manualShippingCost: '' }); setUrgentDialogOpen(true); }}>
+                    <Zap className="w-3.5 h-3.5 mr-2 text-amber-500" /> Mark Urgent
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs" onClick={() => { setSelectedOrder(drawerOrder); setAssignForm({ employeeId: '' }); setAssignDialogOpen(true); }}>
+                    <UserCheck className="w-3.5 h-3.5 mr-2 text-blue-500" /> Assign Employee
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs text-destructive hover:text-destructive" onClick={() => deleteOrder(drawerOrder._id)}>
+                    <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete Order
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

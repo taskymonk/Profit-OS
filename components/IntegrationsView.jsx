@@ -85,6 +85,7 @@ export default function IntegrationsView() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">Securely store your API credentials. They are saved to your database and never hardcoded.</p>
+          <p className="text-[11px] text-emerald-600 mt-0.5">Only modified fields are saved — hidden credentials are preserved safely.</p>
         </div>
         <Button onClick={handleSave} disabled={saving}>
           <Save className="w-4 h-4 mr-2" />{saving ? 'Saving...' : 'Save All'}

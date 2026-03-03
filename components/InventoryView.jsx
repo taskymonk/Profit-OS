@@ -36,6 +36,7 @@ export default function InventoryView() {
   const [newCatName, setNewCatName] = useState('');
   const [newSubCat, setNewSubCat] = useState({});
   const [prepCollapsed, setPrepCollapsed] = useState(true);
+  const [prepSortBy, setPrepSortBy] = useState('lowStock');
 
   const [form, setForm] = useState({
     name: '', category: 'Raw Material', subCategory: '', purchasePrice: '',
@@ -100,7 +101,20 @@ export default function InventoryView() {
     if (p.canPrepare < groupedPreparable[baseName].minPrepare) groupedPreparable[baseName].minPrepare = p.canPrepare;
     groupedPreparable[baseName].totalMissing.push(...p.missingItems);
   });
-  const prepGroups = Object.entries(groupedPreparable).sort((a, b) => (a[1].minPrepare || 0) - (b[1].minPrepare || 0));
+  const prepGroups = Object.entries(groupedPreparable).sort((a, b) => {
+    const aGroup = a[1]; const bGroup = b[1];
+    if (prepSortBy === 'lowStock') {
+      // Low stock first (items that can prepare fewer units first)
+      return (aGroup.minPrepare || 0) - (bGroup.minPrepare || 0);
+    } else if (prepSortBy === 'mostOrders') {
+      return (bGroup.items.reduce((s, i) => s + (i.orderCount || 0), 0)) - (aGroup.items.reduce((s, i) => s + (i.orderCount || 0), 0));
+    } else if (prepSortBy === 'az') {
+      return a[0].localeCompare(b[0]);
+    } else if (prepSortBy === 'mostRevenue') {
+      return (bGroup.items.reduce((s, i) => s + (i.revenue || 0), 0)) - (aGroup.items.reduce((s, i) => s + (i.revenue || 0), 0));
+    }
+    return 0;
+  });
 
   const resetForm = () => {
     setForm({ name: '', category: 'Raw Material', subCategory: '', purchasePrice: '', purchaseQuantity: '1', unit: 'units', lowStockThreshold: '0' });
@@ -240,7 +254,18 @@ export default function InventoryView() {
           </div>
           {!prepCollapsed && (
             <CardContent className="pt-0">
-              <p className="text-xs text-muted-foreground mb-2">Based on current stock and SKU recipe ingredients. Shows how many orders of each product you can fulfill.</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-muted-foreground">Based on current stock and SKU recipe ingredients.</p>
+                <Select value={prepSortBy} onValueChange={setPrepSortBy}>
+                  <SelectTrigger className="w-40 h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lowStock">Low Stock First</SelectItem>
+                    <SelectItem value="mostOrders">Most Orders</SelectItem>
+                    <SelectItem value="mostRevenue">Most Revenue</SelectItem>
+                    <SelectItem value="az">A-Z</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
                 {prepGroups.map(([name, data]) => (
                   <div key={name} className={`border rounded-lg p-2.5 ${data.minPrepare === 0 ? 'border-red-200 bg-red-50/50' : data.minPrepare < 10 ? 'border-amber-200 bg-amber-50/50' : ''}`}>

@@ -336,6 +336,14 @@ export default function SkuRecipesView() {
                   </Select>
                 )}
               </div>
+              {catIngredients.length > 0 && (
+                <div className="flex gap-2 items-center pl-5 text-[10px] text-muted-foreground font-medium mb-0.5">
+                  <span className="flex-1">Item</span>
+                  <span className="w-24 text-center">Qty per unit</span>
+                  <span className="w-16 text-right">Line Cost</span>
+                  <span className="w-7"></span>
+                </div>
+              )}
               {catIngredients.map(ing => {
                 const idx = f.ingredients.indexOf(ing);
                 const lineCost = (ing.baseCostPerUnit || 0) * (ing.quantityUsed || 0);
@@ -345,9 +353,12 @@ export default function SkuRecipesView() {
                       {ing.name}
                       <Badge variant="secondary" className="ml-auto text-[10px]">{fmt(ing.baseCostPerUnit)}/{ing.unit}</Badge>
                     </div>
-                    <Input type="number" min="0" step="0.01" className="w-20 h-8 text-sm" placeholder="Qty"
-                      value={ing.quantityUsed}
-                      onChange={e => updateIngredientQty(f, sf, idx, e.target.value)} />
+                    <div className="w-24 flex items-center gap-1">
+                      <Input type="number" min="0" step="0.01" className="h-8 text-sm text-center" placeholder="e.g. 0.5"
+                        value={ing.quantityUsed}
+                        onChange={e => updateIngredientQty(f, sf, idx, e.target.value)} />
+                      <span className="text-[10px] text-muted-foreground shrink-0">{ing.unit}</span>
+                    </div>
                     <span className="text-xs font-medium w-16 text-right">{fmt(lineCost)}</span>
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive shrink-0"
                       onClick={() => removeIngredient(f, sf, idx)}>
@@ -595,6 +606,19 @@ export default function SkuRecipesView() {
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEditRecipe(recipe)}>
                         <Edit className="w-3.5 h-3.5" />
                       </Button>
+                      {recipe.templateId && (
+                        <Button size="icon" variant="ghost" className="h-8 w-8 text-amber-600 hover:text-amber-700" title={`Unlink from ${recipe.templateName || 'template'}`}
+                          onClick={async () => {
+                            if (!confirm(`Unlink "${recipe.productName}" from template "${recipe.templateName}"? The recipe ingredients will be cleared.`)) return;
+                            try {
+                              await fetch(`/api/sku-recipes/${recipe._id}/unlink`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                              toast.success('Recipe unlinked from template');
+                              fetchData();
+                            } catch (err) { toast.error('Failed to unlink'); }
+                          }}>
+                          <Unlink className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
                     {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                   </div>
@@ -740,9 +764,10 @@ export default function SkuRecipesView() {
                 .map(recipe => {
                   const checked = selectedRecipeIds.includes(recipe._id);
                   const hasIngredients = (recipe.ingredients || []).length > 0;
+                  const hasOtherTemplate = recipe.templateId && recipe.templateId !== applyingTemplate?._id;
                   return (
                     <div key={recipe._id}
-                      className={`flex items-center gap-3 px-3 py-2 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer ${checked ? 'bg-primary/5' : ''}`}
+                      className={`flex items-center gap-3 px-3 py-2 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer ${checked ? 'bg-primary/5' : ''} ${hasOtherTemplate ? 'bg-amber-50/50' : ''}`}
                       onClick={() => {
                         setSelectedRecipeIds(prev => checked ? prev.filter(id => id !== recipe._id) : [...prev, recipe._id]);
                       }}>
@@ -751,11 +776,18 @@ export default function SkuRecipesView() {
                         <p className="text-sm truncate">{recipe.productName}</p>
                         <p className="text-[10px] text-muted-foreground font-mono">{recipe.sku}</p>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="text-right shrink-0 space-y-0.5">
                         <p className="text-xs">{recipe.orderCount || 0} orders</p>
-                        {!hasIngredients && <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300">No recipe</Badge>}
-                        {recipe.templateId && recipe.templateId !== applyingTemplate?._id && (
-                          <Badge variant="outline" className="text-[9px]">Linked: {recipe.templateName}</Badge>
+                        {!hasIngredients && !recipe.templateId && <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300">No recipe</Badge>}
+                        {hasOtherTemplate && (
+                          <Badge variant="outline" className="text-[9px] text-orange-600 border-orange-300">
+                            <Unlink className="w-2.5 h-2.5 mr-0.5" /> Will replace: {recipe.templateName}
+                          </Badge>
+                        )}
+                        {recipe.templateId === applyingTemplate?._id && (
+                          <Badge variant="outline" className="text-[9px] text-green-600 border-green-300">
+                            <Link2 className="w-2.5 h-2.5 mr-0.5" /> Already linked
+                          </Badge>
                         )}
                       </div>
                     </div>

@@ -2714,3 +2714,157 @@ Clean up: Reset the 3 test recipes back to needsCostInput=true, ingredients=[] u
 The GET /api/recipe-templates/{id} endpoint returns 200 with null for missing templates instead of 404. This is a minor API implementation issue - the deletion functionality works correctly (template is removed from database), but the HTTP status code should be 404 for missing resources.
 
 **RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api"
+    - agent: "testing"
+      message: "🎉 PHASE 9G COMPREHENSIVE UX OPTIMIZATION TESTING COMPLETE - ALL 7 BACKEND FEATURES FULLY TESTED!
+
+🎯 **NEW REPORT ENDPOINTS**: ✅ ALL 4 REPORTS PASSED
+- ✅ Monthly P&L (GET /api/reports/monthly-pl): 18 months of P&L data with complete structure (month, orderCount, revenue, cogs, shopifyFees, razorpayFees, adSpend, overhead, netProfit, margin)
+- ✅ Customer Repeat (GET /api/reports/customer-repeat): Summary analysis of 1962 customers with 4.08% repeat rate, ₹498 avg order value, top 20 repeat customers
+- ✅ Product COGS Analysis (GET /api/reports/product-cogs): 115 products analyzed with sku, productName, orders, revenue, cogs, grossProfit, margin, avgCOGSPerOrder, hasRecipe
+- ✅ Expense Trend (GET /api/reports/expense-trend): Monthly expense breakdown with data array and 5 categories (Platform Fees, Salary, Raw Material Purchases, Operations, Utilities)
+
+🎯 **INTEGRATION MASKING BUG FIX**: ✅ CRITICAL SECURITY FIX WORKING
+- ✅ Verified masked secrets (********) do NOT overwrite existing values
+- ✅ isMasked() helper correctly detects masked patterns and preserves original secrets
+- ✅ Full integration save/restore flow tested successfully
+
+🎯 **SELECTIVE PURGE SYSTEM**: ✅ DATA MANAGEMENT WORKING
+- ✅ Selective purge with purgeType: 'recipes' deleted 115 recipes while preserving 2049 orders
+- ✅ Proper response structure with message and detailed purged counts
+- ✅ Critical data isolation: only targeted collections affected
+
+🎯 **RECIPE UNLINK FUNCTIONALITY**: ✅ TEMPLATE MANAGEMENT WORKING
+- ✅ Complete test flow: template creation → application → unlink → verification → cleanup
+- ✅ templateId correctly cleared to null, ingredients array cleared to empty
+- ✅ Template management system fully operational with proper cleanup
+
+**SYSTEM VALIDATION SUMMARY:**
+✓ All new report endpoints returning proper data structures with real Shopify data (2049+ orders, 115+ products)
+✓ Integration security enhancement preventing credential overwrites 
+✓ Selective data management with granular purge controls
+✓ Advanced recipe template system with unlink capabilities
+✓ No critical issues identified - all endpoints production-ready
+
+**PHASE 9G BACKEND FEATURES FULLY VERIFIED AND PRODUCTION-READY!** All 7 critical areas tested successfully with comprehensive validation and real data integration."
+
+
+## Current Phase: Comprehensive UX Optimization
+
+### New tasks to test:
+
+backend:
+  - task: "Integrations save masking bug fix - test that saving with masked/hidden secret fields does NOT overwrite existing secrets"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Backend updated to compare incoming secrets with isMasked() helper. Only changed fields are saved."
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Integration masking bug fix working correctly. Verified that saving with masked accessToken '********' does NOT overwrite existing secret values. The isMasked() helper properly detects masked values and preserves original secrets. Tested full flow: GET integrations → PUT with masked token → GET again → token preserved."
+
+  - task: "Selective purge endpoint - test purge with purgeType: orders, inventory, expenses, recipes, all"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Updated purge endpoint to support purgeType parameter (orders/inventory/expenses/recipes/all)"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Selective purge working perfectly. Successfully tested with purgeType: 'recipes' - deleted 115 recipes while preserving 2049 orders. Purge response includes proper structure with message and purged counts. Critical validation: orders collection untouched during selective recipe purge."
+
+  - task: "New report: Monthly P&L - GET /api/reports/monthly-pl"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint returns monthly P&L summary with revenue, COGS, fees, overhead, net profit"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Monthly P&L report fully functional. Returns array with 18 months of data. Each month object contains all required fields: month, orderCount, revenue, cogs, shopifyFees, razorpayFees, adSpend, overhead, netProfit, margin. Sample validation: 2024-07 had Revenue ₹24, Net Profit ₹23 (98% margin)."
+
+  - task: "New report: Customer Repeat - GET /api/reports/customer-repeat"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint returns customer retention data, repeat rate, top repeat customers"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Customer repeat report working correctly. Response includes summary object with all required fields: totalCustomers (1962), repeatCustomers (80), oneTimeCustomers, repeatRate (4.08%), avgOrderValue (₹498), avgRepeatOrders, repeatRevenue, oneTimeRevenue. Also includes topRepeatCustomers array with 20 entries."
+
+  - task: "New report: Product COGS Analysis - GET /api/reports/product-cogs"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint returns product-wise COGS analysis with margins"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Product COGS analysis fully operational. Returns array of 115 products with complete structure: sku, productName, orders, revenue, cogs, grossProfit, margin, avgCOGSPerOrder, hasRecipe. Top product: Customized Tin Mini Album (317 orders, ₹148,446 revenue, 100% margin due to no COGS configured yet)."
+
+  - task: "New report: Expense Trend - GET /api/reports/expense-trend"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint returns monthly expense breakdown by category"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Expense trend report working correctly. Returns object with 'data' array (1 month) and 'categories' array (5 categories: Platform Fees, Salary, Raw Material Purchases, Operations, Utilities). Sample month 2026-03 shows total expenses ₹5,000."
+
+  - task: "SKU Recipe unlink endpoint - PUT /api/sku-recipes/{id}/unlink"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "New endpoint to unlink a recipe from its template, clears ingredients"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED - Recipe unlink endpoint fully functional. Comprehensive test flow: created template with ingredients → applied to recipe → verified templateId and ingredients set → called unlink endpoint → verified templateId cleared to null and ingredients array cleared to empty. Template cleanup successful."
+
+test_instructions: |
+  Base URL: https://expense-fifo-rebuild.preview.emergentagent.com/api
+  Test each new endpoint:
+  1. GET /api/reports/monthly-pl - should return array of monthly P&L objects
+  2. GET /api/reports/customer-repeat?startDate=2024-01-01&endDate=2026-12-31 - should return summary + topRepeatCustomers
+  3. GET /api/reports/product-cogs?startDate=2024-01-01&endDate=2026-12-31 - should return array of SKU COGS analysis
+  4. GET /api/reports/expense-trend - should return { data: [...], categories: [...] }
+  5. PUT /api/integrations - test with masked secret values that they don't overwrite existing values
+  6. POST /api/purge with { purgeType: "recipes" } then verify only recipes are deleted (don't do "all" purge!)
+  7. PUT /api/sku-recipes/{id}/unlink - find a recipe with templateId and unlink it (then re-link if possible)

@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle, Globe, DollarSign, Settings2, ToggleLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
@@ -16,13 +17,14 @@ export default function SettingsView() {
   const [config, setConfig] = useState({
     tenantName: '', logo: '', primaryColor: '#059669', themePreference: 'system',
     baseCurrency: 'INR', supportedCurrencies: ['INR', 'USD'], timezone: 'Asia/Kolkata',
-    gstRate: 18, shopifyTxnFeeRate: 2, maxOrdersPerMonth: 5000, allowEmployeeTracking: true,
+    gstRate: 18, shopifyTxnFeeRate: 2, adSpendTaxRate: 18, allowEmployeeTracking: true,
     integrations: { shopifyActive: false, indiaPostActive: false, metaAdsActive: false },
   });
   const [saving, setSaving] = useState(false);
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [purging, setPurging] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [purgeType, setPurgeType] = useState('all');
 
   useEffect(() => {
     async function load() {
@@ -38,20 +40,31 @@ export default function SettingsView() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      // Remove maxOrdersPerMonth from config before saving
+      const saveData = { ...config };
+      delete saveData.maxOrdersPerMonth;
       await fetch('/api/tenant-config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify(saveData),
       });
       toast.success('Settings saved!');
     } catch (err) { toast.error('Failed to save'); }
     setSaving(false);
   };
 
+  const purgeOptions = [
+    { value: 'all', label: 'Everything', desc: 'Orders, Inventory, Expenses, Recipes, Templates, Stock Batches, Marketing Data', color: 'text-red-600' },
+    { value: 'orders', label: 'Orders Only', desc: 'All synced & manual orders', color: 'text-orange-600' },
+    { value: 'inventory', label: 'Inventory & Stock', desc: 'Inventory items, categories, FIFO stock batches, consumption records', color: 'text-orange-600' },
+    { value: 'expenses', label: 'Expenses & Marketing', desc: 'Overhead expenses, expense categories, daily ad spend data', color: 'text-orange-600' },
+    { value: 'recipes', label: 'Recipes & Templates', desc: 'SKU recipes and recipe templates', color: 'text-orange-600' },
+  ];
+
   return (
     <div className="space-y-6 max-w-[800px] mx-auto">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">White-label configuration for your tenant</p>
+        <p className="text-sm text-muted-foreground">Configure your dashboard settings and preferences</p>
         <Button onClick={handleSave} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? 'Saving...' : 'Save Settings'}</Button>
       </div>
 
@@ -73,9 +86,14 @@ export default function SettingsView() {
         ))}
       </div>
 
-      {/* Brand */}
+      {/* Brand & Identity */}
       <Card>
-        <CardHeader><div className="flex items-center gap-3"><Building2 className="w-5 h-5 text-primary" /><div><CardTitle className="text-base">Brand & Identity</CardTitle><CardDescription>Customize your dashboard branding</CardDescription></div></div></CardHeader>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10"><Building2 className="w-4 h-4 text-primary" /></div>
+            <div><CardTitle className="text-base">Brand & Identity</CardTitle><CardDescription>Customize your dashboard branding</CardDescription></div>
+          </div>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div><Label>Business Name</Label><Input value={config.tenantName} onChange={e => setConfig({...config, tenantName: e.target.value})} /></div>
           <div><Label>Logo URL</Label><Input value={config.logo} onChange={e => setConfig({...config, logo: e.target.value})} placeholder="https://..." /></div>
@@ -102,10 +120,44 @@ export default function SettingsView() {
         </CardContent>
       </Card>
 
+      {/* Tax & Fees */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-100"><DollarSign className="w-4 h-4 text-emerald-700" /></div>
+            <div><CardTitle className="text-base">Tax & Fees</CardTitle><CardDescription>Configure tax rates and transaction fee percentages</CardDescription></div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label>GST Rate (%)</Label>
+              <Input type="number" value={config.gstRate} onChange={e => setConfig({...config, gstRate: Number(e.target.value)})} />
+              <p className="text-[11px] text-muted-foreground mt-1">Applied to relevant expenses and deductions</p>
+            </div>
+            <div>
+              <Label>Shopify Txn Fee Rate (%)</Label>
+              <Input type="number" step="0.1" value={config.shopifyTxnFeeRate} onChange={e => setConfig({...config, shopifyTxnFeeRate: Number(e.target.value)})} />
+              <p className="text-[11px] text-muted-foreground mt-1">Basic=2%, Shopify=1%, Advanced=0.5%</p>
+            </div>
+            <div>
+              <Label>Ad Spend Tax Rate (%)</Label>
+              <Input type="number" value={config.adSpendTaxRate ?? 18} onChange={e => setConfig({...config, adSpendTaxRate: Number(e.target.value)})} />
+              <p className="text-[11px] text-muted-foreground mt-1">Meta charges auction price + GST (18% for India)</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Localization */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Localization & Tax</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-100"><Globe className="w-4 h-4 text-blue-700" /></div>
+            <div><CardTitle className="text-base">Localization</CardTitle><CardDescription>Currency, timezone, and regional settings</CardDescription></div>
+          </div>
+        </CardHeader>
+        <CardContent>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Base Currency</Label>
@@ -129,24 +181,17 @@ export default function SettingsView() {
               </Select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div><Label>GST Rate (%)</Label><Input type="number" value={config.gstRate} onChange={e => setConfig({...config, gstRate: Number(e.target.value)})} /></div>
-            <div><Label>Shopify Txn Fee Rate (%)</Label><Input type="number" step="0.1" value={config.shopifyTxnFeeRate} onChange={e => setConfig({...config, shopifyTxnFeeRate: Number(e.target.value)})} /><p className="text-[11px] text-muted-foreground mt-1">Shopify charges this on each order when using third-party payment gateway (Basic=2%, Shopify=1%, Advanced=0.5%)</p></div>
-            <div><Label>Max Orders/Month</Label><Input type="number" value={config.maxOrdersPerMonth} onChange={e => setConfig({...config, maxOrdersPerMonth: Number(e.target.value)})} /></div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Ad Spend Tax Rate (%)</Label>
-              <Input type="number" value={config.adSpendTaxRate ?? 18} onChange={e => setConfig({...config, adSpendTaxRate: Number(e.target.value)})} />
-              <p className="text-xs text-muted-foreground mt-1">Meta charges auction price + GST. Set to 18 for India. This multiplier is applied to all ad spend before profit deduction.</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
       {/* Feature Toggles */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Feature Toggles</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-100"><ToggleLeft className="w-4 h-4 text-purple-700" /></div>
+            <div><CardTitle className="text-base">Feature Toggles</CardTitle><CardDescription>Enable or disable optional features</CardDescription></div>
+          </div>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div><Label>Employee Tracking</Label><p className="text-xs text-muted-foreground">Track employee shifts and daily output</p></div>
@@ -168,7 +213,7 @@ export default function SettingsView() {
         </CardContent>
       </Card>
 
-      {/* Danger Zone: Purge Demo Data */}
+      {/* Danger Zone */}
       <Card className="border-red-200 dark:border-red-900/50">
         <CardHeader>
           <div className="flex items-center gap-3">
@@ -179,19 +224,28 @@ export default function SettingsView() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between p-4 rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-            <div>
-              <p className="font-medium text-sm">Purge All Demo Data</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Deletes all Orders, SKU Recipes, Employees, Vendors, Materials, and Expenses.
-                <br />Preserves your Tenant Config and Integration credentials.
-              </p>
-            </div>
-            <Button variant="destructive" onClick={() => { setPurgeDialogOpen(true); setConfirmText(''); }}>
-              <Trash2 className="w-4 h-4 mr-2" /> Purge Data
-            </Button>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">Select what you want to purge. <strong>Config and integration credentials are always preserved.</strong></p>
+          <div className="grid grid-cols-1 gap-2">
+            {purgeOptions.map(opt => (
+              <div key={opt.value}
+                className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-colors ${purgeType === opt.value ? 'border-red-300 bg-red-50 dark:bg-red-950/20' : 'border-border hover:border-red-200 hover:bg-red-50/50'}`}
+                onClick={() => setPurgeType(opt.value)}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${purgeType === opt.value ? 'border-red-500' : 'border-muted-foreground/40'}`}>
+                    {purgeType === opt.value && <div className="w-2 h-2 rounded-full bg-red-500" />}
+                  </div>
+                  <div>
+                    <p className={`font-medium text-sm ${opt.color}`}>{opt.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{opt.desc}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
+          <Button variant="destructive" className="w-full" onClick={() => { setPurgeDialogOpen(true); setConfirmText(''); }}>
+            <Trash2 className="w-4 h-4 mr-2" /> Purge {purgeOptions.find(p => p.value === purgeType)?.label || 'Data'}
+          </Button>
         </CardContent>
       </Card>
 
@@ -203,21 +257,14 @@ export default function SettingsView() {
               <AlertTriangle className="w-5 h-5" /> Confirm Data Purge
             </DialogTitle>
             <DialogDescription>
-              This will permanently delete ALL demo data including orders, products, employees, vendors, and expenses.
+              This will permanently delete <strong>{purgeOptions.find(p => p.value === purgeType)?.label}</strong>.
               Your Tenant Config and Integration credentials will be preserved.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 text-sm space-y-1">
-              <p className="font-medium text-red-700 dark:text-red-400">Collections to be purged:</p>
-              <ul className="text-xs text-red-600 dark:text-red-300 list-disc pl-5 space-y-0.5">
-                <li>Orders</li>
-                <li>SKU Recipes</li>
-                <li>Raw Materials & Packaging Materials</li>
-                <li>Vendors</li>
-                <li>Employees</li>
-                <li>Overhead Expenses</li>
-              </ul>
+            <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 text-sm">
+              <p className="font-medium text-red-700 dark:text-red-400 mb-1">What will be deleted:</p>
+              <p className="text-xs text-red-600 dark:text-red-300">{purgeOptions.find(p => p.value === purgeType)?.desc}</p>
             </div>
             <div>
               <Label className="text-sm">Type <span className="font-bold text-red-600">PURGE</span> to confirm</Label>
@@ -236,7 +283,11 @@ export default function SettingsView() {
             onClick={async () => {
               setPurging(true);
               try {
-                const res = await fetch('/api/purge', { method: 'POST' });
+                const res = await fetch('/api/purge', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ purgeType }),
+                });
                 const data = await res.json();
                 toast.success(data.message || 'Data purged successfully');
                 setPurgeDialogOpen(false);
@@ -247,7 +298,7 @@ export default function SettingsView() {
             }}
           >
             {purging ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
-            {purging ? 'Purging...' : 'Permanently Delete All Demo Data'}
+            {purging ? 'Purging...' : `Permanently Delete ${purgeOptions.find(p => p.value === purgeType)?.label}`}
           </Button>
         </DialogContent>
       </Dialog>
