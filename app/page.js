@@ -240,7 +240,10 @@ export default function App() {
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="p-3 border-t border-sidebar-border">
+        <div className="p-3 border-t border-sidebar-border space-y-1">
+          {sidebarOpen && (
+            <p className="text-[10px] text-muted-foreground/60 text-center tracking-wide">Powered by <span className="font-semibold text-muted-foreground/80">Profit OS</span></p>
+          )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="hidden lg:flex items-center justify-center w-full py-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent transition-colors"
