@@ -14,9 +14,11 @@ import {
   Plus, Trash2, Edit, Zap, UserCheck, Search, X, Info,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Package,
   TrendingUp, TrendingDown, DollarSign, Truck, MapPin, ReceiptText, ShoppingBag,
-  Copy, ExternalLink, Clock, CheckCircle2, Circle, AlertTriangle
+  Copy, ExternalLink, Clock, CheckCircle2, Circle, AlertTriangle, ScanLine
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getCarrierInfo, getTrackingUrl, getCarrierOptions } from '@/lib/shipping';
+import ShippingLabelScanner from '@/components/ShippingLabelScanner';
 
 const fmt = (val) => `\u20B9${Math.abs(val || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
@@ -79,6 +81,9 @@ export default function OrdersView() {
   const [kdsUsers, setKdsUsers] = useState([]);
   const [materialSummary, setMaterialSummary] = useState(null);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
+
+  // Shipping label scanner for order drawer
+  const [orderScannerOpen, setOrderScannerOpen] = useState(false);
 
   // Fetch tracking events for drawer order
   const fetchTrackingEvents = async (trackingNumber) => {
@@ -292,6 +297,22 @@ export default function OrdersView() {
       console.error('Failed to load material summary:', err);
     }
     setLoadingMaterials(false);
+  };
+
+  const handleOrderScanConfirm = async ({ trackingNumber, carrier }) => {
+    if (!drawerOrder) return;
+    try {
+      const res = await fetch(`/api/orders/${drawerOrder._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackingNumber, shippingCarrier: carrier }),
+      });
+      const updated = await res.json();
+      setDrawerOrder(prev => ({ ...prev, trackingNumber, shippingCarrier: carrier }));
+      fetchOrders();
+    } catch (err) {
+      toast.error('Failed to save tracking');
+    }
   };
 
   const openDrawer = async (order) => {
@@ -808,7 +829,26 @@ export default function OrdersView() {
 
                 {/* Shipment Tracking */}
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-muted-foreground mb-1">SHIPMENT TRACKING</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground">SHIPMENT TRACKING</p>
+                    <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => setOrderScannerOpen(true)}>
+                      <ScanLine className="w-3 h-3" /> Scan Label
+                    </Button>
+                  </div>
+
+                  {/* Carrier Badge */}
+                  {drawerOrder.shippingCarrier && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getCarrierInfo(drawerOrder.shippingCarrier)?.color }} />
+                      <span className="text-xs font-medium">{getCarrierInfo(drawerOrder.shippingCarrier)?.name}</span>
+                      {drawerOrder.trackingNumber && getTrackingUrl(drawerOrder.shippingCarrier, drawerOrder.trackingNumber) && (
+                        <a href={getTrackingUrl(drawerOrder.shippingCarrier, drawerOrder.trackingNumber)} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                          Track <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                   {/* Tracking Number Input */}
                   {(() => {
@@ -939,6 +979,14 @@ export default function OrdersView() {
           </Card>
         )}
       </div>
+      {/* Shipping Label Scanner for Order Drawer */}
+      <ShippingLabelScanner
+        open={orderScannerOpen}
+        onOpenChange={setOrderScannerOpen}
+        orderId={drawerOrder?._id}
+        orderNumber={drawerOrder?.orderId}
+        onConfirm={handleOrderScanConfirm}
+      />
     </div>
   );
 }

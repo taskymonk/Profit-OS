@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive Authentication & RBAC API Testing for Profit OS
-Base URL: https://kds-ops.preview.emergentagent.com/api
+Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api
 
 Tests the following endpoints:
 1. GET /api/auth-config
@@ -19,7 +19,7 @@ import json
 import sys
 from datetime import datetime
 
-BASE_URL = "https://kds-ops.preview.emergentagent.com/api"
+BASE_URL = "https://whatsapp-comms-next.preview.emergentagent.com/api"
 
 def print_test_header(test_name):
     print(f"\n{'='*60}")

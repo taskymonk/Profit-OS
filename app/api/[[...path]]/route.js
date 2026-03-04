@@ -2273,6 +2273,15 @@ export async function GET(request) {
         return json(safeUsers);
       }
 
+      case 'parcel-images': {
+        // GET /api/parcel-images?orderId=xxx
+        const db = await getDb();
+        const query = {};
+        if (params.orderId) query.orderId = params.orderId;
+        const images = await db.collection('parcelImages').find(query).sort({ createdAt: -1 }).limit(20).toArray();
+        return json(images);
+      }
+
       case 'dashboard':
         return json(await getDashboardData(params));
 
@@ -3025,6 +3034,26 @@ export async function POST(request) {
           employee: employee.name,
         });
       }
+
+
+      case 'parcel-images': {
+        // POST /api/parcel-images — Save parcel image
+        const db = await getDb();
+        if (!body.orderId || !body.imageData) {
+          return json({ error: 'orderId and imageData are required' }, 400);
+        }
+        const parcelImage = {
+          _id: uuidv4(),
+          orderId: body.orderId,
+          imageData: body.imageData,
+          extractedTrackingNo: body.extractedTrackingNo || null,
+          extractedCarrier: body.extractedCarrier || null,
+          createdAt: new Date().toISOString(),
+        };
+        await db.collection('parcelImages').insertOne(parcelImage);
+        return json({ _id: parcelImage._id, message: 'Parcel image saved' });
+      }
+
 
 
       case 'kds': {

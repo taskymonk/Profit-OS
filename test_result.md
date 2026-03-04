@@ -697,7 +697,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://kds-ops.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -745,7 +745,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://kds-ops.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -784,7 +784,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://kds-ops.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -1739,7 +1739,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://kds-ops.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -1787,7 +1787,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://kds-ops.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -1826,7 +1826,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://kds-ops.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -2487,7 +2487,7 @@ Test these endpoints:
 
 **PHASE 9F FIFO INVENTORY + RECIPE TEMPLATES UI TESTING COMPLETE - ALL SYSTEMS FULLY FUNCTIONAL!** Frontend perfectly integrated with backend FIFO system, ready for production use."
     - agent: "main"
-      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://kds-ops.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
+      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
     - agent: "testing"
       message: "🎉 ICON UPLOAD & BRANDING SETTINGS TESTING COMPLETE - BOTH FEATURES FULLY FUNCTIONAL!
 
@@ -2526,7 +2526,7 @@ Test these endpoints:
 - ✅ Status validation confirmed - using valid status values (created, initiated, processed, failed)
 - ✅ Sample settlement verified: ID setl_SMD5fQBVgtJkzE, Amount ₹465.60, Status: processed
 
-**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://kds-ops.preview.emergentagent.com/api"
+**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api"
     - agent: "main"
       message: "PHASE 9F: FIFO INVENTORY COSTING TESTING NEEDED. Base URL: http://localhost:3000/api. Test these 8 areas:
 
@@ -2754,7 +2754,7 @@ Clean up: Reset the 3 test recipes back to needsCostInput=true, ingredients=[] u
 **MINOR ISSUE IDENTIFIED:**
 The GET /api/recipe-templates/{id} endpoint returns 200 with null for missing templates instead of 404. This is a minor API implementation issue - the deletion functionality works correctly (template is removed from database), but the HTTP status code should be 404 for missing resources.
 
-**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://kds-ops.preview.emergentagent.com/api"
+**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 9G COMPREHENSIVE UX OPTIMIZATION TESTING COMPLETE - ALL 7 BACKEND FEATURES FULLY TESTED!
 
@@ -2789,7 +2789,72 @@ The GET /api/recipe-templates/{id} endpoint returns 200 with null for missing te
 **PHASE 9G BACKEND FEATURES FULLY VERIFIED AND PRODUCTION-READY!** All 7 critical areas tested successfully with comprehensive validation and real data integration."
 
 
-## Current Phase: Authentication & RBAC System
+## Current Phase: Shipping & Tracking Enhancement
+
+### Phase 3: Shipping & Tracking Enhancement
+
+backend:
+  - task: "Parcel Images Save API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "POST /api/parcel-images endpoint saves parcel image with orderId, imageData, extractedTrackingNo, extractedCarrier. Returns {_id, message}."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Parcel Images Save API fully functional. Successfully saved parcel image with ID: cc1273be-eaad-4bdc-b526-1c9251c94d09. API correctly accepts orderId, imageData, extractedTrackingNo, extractedCarrier and returns proper response structure."
+
+  - task: "Parcel Images Retrieve API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "GET /api/parcel-images?orderId=xxx retrieves parcel images for specific order, sorted by createdAt desc."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Parcel Images Retrieve API working correctly. Retrieved 1 parcel image for test order with proper structure including _id, orderId, imageData, createdAt fields. Sorting by createdAt desc confirmed."
+
+  - task: "Order Tracking Number Update API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "PUT /api/orders/{orderId}/tracking and PUT /api/orders/{orderId} endpoints update order with trackingNumber and shippingCarrier fields."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Order Tracking Update API fully functional. Successfully updated order SH-3008 with tracking number EE123456789IN and shipping carrier indiapost. Both general PUT /api/orders/{id} and specific sub-action support confirmed."
+
+  - task: "Order Details Verification API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "GET /api/orders/{orderId} returns order details including tracking information for verification."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Order Details Verification API working correctly. Successfully retrieved order with tracking information. Confirmed tracking number EE123456789IN and shipping carrier indiapost are properly persisted and retrievable."
+
+## Previous Phase: Authentication & RBAC System
 
 ### Phase 1: Auth & RBAC Implementation
 
@@ -3198,7 +3263,7 @@ backend:
 
 
 test_instructions: |
-  Base URL: https://kds-ops.preview.emergentagent.com/api
+  Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api
   
   NEW Auth Tests (Phase 1):
   1. GET /api/auth-config - should return { googleConfigured: boolean }
@@ -3365,6 +3430,80 @@ test_instructions: |
         comment: "Checkboxes on each order row + select-all in header. Bulk assignment toolbar appears when orders selected with employee dropdown, Assign to KDS button, and Material Summary calculator."
 
 
+  - task: "Parcel Images API (POST /api/parcel-images)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "POST /api/parcel-images saves base64 image data with orderId, extractedTrackingNo, extractedCarrier. GET /api/parcel-images?orderId=xxx retrieves images."
+
+  - task: "Parcel Images API (GET /api/parcel-images)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "GET /api/parcel-images?orderId=xxx returns parcel images sorted by createdAt desc, limited to 20."
+
+  - task: "Order Tracking Update via updateDoc"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "PUT /api/orders/{id} with body {trackingNumber, shippingCarrier} updates order via generic updateDoc. Used by ShippingLabelScanner after OCR scan."
+
+  - task: "Shipping Label Scanner Dialog (Orders View)"
+    implemented: true
+    working: true
+    file: "components/ShippingLabelScanner.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "✅ VERIFIED via UI - 'Scan Label' button in order drawer opens ShippingLabelScanner dialog. Shows Camera/Upload buttons and 'Skip scan' manual entry. Manual entry shows tracking number input and carrier dropdown. Tested on Order SH-3008."
+
+  - task: "Shipping Label Scanner Dialog (KDS Mark Packed)"
+    implemented: true
+    working: true
+    file: "components/KDSView.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "main"
+        comment: "✅ VERIFIED via UI - 'Mark Packed' button on completed KDS order opens ShippingLabelScanner dialog. Full flow tested: assigned→in_progress→completed→Mark Packed triggers scanner. Dialog shows with order number. Tested on Order SH-3005."
+
+  - task: "Carrier Detection & Tracking URL Generation"
+    implemented: true
+    working: true
+    file: "lib/shipping.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "extractTrackingInfo() parses OCR text to detect carrier keywords and tracking number patterns. Supports India Post, Blue Dart, Delhivery, DTDC, XpressBees, FedEx, Ecom Express. getTrackingUrl() generates carrier-specific tracking URLs. getCarrierOptions() returns dropdown options."
+
+
+
 - admin@giftsugar.com (master_admin, ID: 3e04cba3-909d-412c-8358-ec3c5dd55371)  
 - employee@giftsugar.com (employee, ID: e11dbb72-f831-4c5c-90cc-816b9bc2bc5b)
 
@@ -3375,7 +3514,7 @@ test_instructions: |
 - Role-based permission system functional ✓
 - First user auto-promotion to master_admin ✓
 
-**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://kds-ops.preview.emergentagent.com/api"
+**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 KDS (KITCHEN DISPLAY SYSTEM) API TESTING COMPLETE - ALL 10 ENDPOINTS FULLY FUNCTIONAL!
 
@@ -3419,6 +3558,30 @@ test_instructions: |
 **KDS SYSTEM STATUS**: 🎉 ALL 10 CRITICAL ENDPOINTS PRODUCTION-READY
 **Test Results**: 8/8 test suites passed (100% success rate)  
 **Existing Data**: 6 KDS assignments, 2057+ orders, verified users system
-**Base URL**: https://kds-ops.preview.emergentagent.com/api
+**Base URL**: https://whatsapp-comms-next.preview.emergentagent.com/api
 
 **PHASE 2: EMPLOYEE KDS + ERP SYSTEM FULLY TESTED AND OPERATIONAL!**"
+    - agent: "main"
+      message: "PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Test these 4 APIs: 1) POST /api/parcel-images - Save parcel image, 2) GET /api/parcel-images?orderId=xxx - Retrieve parcel images, 3) PUT /api/orders/{orderId} - Update order with tracking number and carrier, 4) GET /api/orders/{orderId} - Verify updated order has tracking info"
+    - agent: "testing"
+      message: "🎉 PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING COMPLETE - ALL 4 APIS PASSED!
+
+🎯 **PARCEL IMAGES SAVE API**: ✅ PASSED
+- POST /api/parcel-images successfully saves parcel image with orderId, imageData, extractedTrackingNo, extractedCarrier
+- Returns proper structure: {_id, message} 
+- Generated ID: cc1273be-eaad-4bdc-b526-1c9251c94d09
+
+🎯 **PARCEL IMAGES RETRIEVE API**: ✅ PASSED  
+- GET /api/parcel-images?orderId=test-order-123 successfully retrieves 1 parcel image
+- Proper array structure with _id, orderId, imageData, createdAt fields
+- Sorting by createdAt desc confirmed
+
+🎯 **ORDER TRACKING UPDATE API**: ✅ PASSED
+- PUT /api/orders/{id} successfully updated order SH-3008 with tracking EE123456789IN and carrier indiapost
+- Both general PUT and tracking sub-action endpoints working
+
+🎯 **ORDER DETAILS VERIFICATION API**: ✅ PASSED
+- GET /api/orders/{id} successfully retrieves order with tracking information
+- Tracking number and shipping carrier properly persisted and retrievable
+
+**PHASE 3 SHIPPING & TRACKING ENHANCEMENT APIS FULLY FUNCTIONAL!** All 4 critical endpoints working correctly with proper data persistence and retrieval. Real order data tested with successful tracking number updates."

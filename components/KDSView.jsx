@@ -17,6 +17,7 @@ import {
   AlertOctagon, PlusCircle, LayoutGrid, List
 } from 'lucide-react';
 import { toast } from 'sonner';
+import ShippingLabelScanner from '@/components/ShippingLabelScanner';
 
 const KDS_STATUSES = ['assigned', 'in_progress', 'completed', 'packed'];
 const STATUS_LABELS = {
@@ -67,6 +68,10 @@ export default function KDSView() {
   // Inventory items for material dropdowns
   const [inventoryItems, setInventoryItems] = useState([]);
 
+  // Shipping label scanner
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerAssignment, setScannerAssignment] = useState(null);
+
   const userId = session?.user?.id;
   const userName = session?.user?.name;
 
@@ -113,7 +118,17 @@ export default function KDSView() {
     return () => clearInterval(interval);
   }, [fetchAssignments]);
 
-  const updateStatus = async (assignmentId, newStatus) => {
+  const updateStatus = async (assignmentId, newStatus, skipScanner = false) => {
+    // If transitioning to packed, open the scanner first
+    if (newStatus === 'packed' && !skipScanner) {
+      const assignment = assignments.find(a => a._id === assignmentId);
+      if (assignment) {
+        setScannerAssignment(assignment);
+        setScannerOpen(true);
+        return;
+      }
+    }
+
     setUpdatingStatus(prev => ({ ...prev, [assignmentId]: true }));
     try {
       const res = await fetch(`/api/kds/assignments/${assignmentId}/status`, {
@@ -132,6 +147,19 @@ export default function KDSView() {
       toast.error('Failed to update status');
     }
     setUpdatingStatus(prev => ({ ...prev, [assignmentId]: false }));
+  };
+
+  const handleShippingConfirm = async ({ trackingNumber, carrier }) => {
+    if (!scannerAssignment) return;
+    // Save tracking info to the order
+    await fetch(`/api/orders/${scannerAssignment.orderId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trackingNumber, shippingCarrier: carrier }),
+    });
+    // Now update KDS status to packed
+    await updateStatus(scannerAssignment._id, 'packed', true);
+    setScannerAssignment(null);
   };
 
   const submitWastage = async () => {
@@ -474,6 +502,14 @@ export default function KDSView() {
           </Button>
         </DialogContent>
       </Dialog>
+      {/* Shipping Label Scanner */}
+      <ShippingLabelScanner
+        open={scannerOpen}
+        onOpenChange={(v) => { setScannerOpen(v); if (!v) setScannerAssignment(null); }}
+        orderId={scannerAssignment?.orderId}
+        orderNumber={scannerAssignment?.order?.orderId}
+        onConfirm={handleShippingConfirm}
+      />
     </div>
   );
 }

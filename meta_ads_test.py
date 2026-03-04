@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import time
 
 # Base URL from environment
-BASE_URL = "https://kds-ops.preview.emergentagent.com/api"
+BASE_URL = "https://whatsapp-comms-next.preview.emergentagent.com/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "profitos"
 
