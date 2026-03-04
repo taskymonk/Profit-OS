@@ -1500,6 +1500,41 @@ async function indiaPostSyncTracking() {
   }
 }
 
+async function indiaPostTestConnection() {
+  const db = await getDb();
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+
+  if (!integrations?.indiaPost?.username || !integrations?.indiaPost?.password) {
+    return { error: 'India Post credentials not configured. Enter username & password first.' };
+  }
+
+  const { username, password, sandboxMode } = integrations.indiaPost;
+  const baseUrl = sandboxMode !== false
+    ? 'https://test.cept.gov.in/beextcustomer/v1'
+    : 'https://cept.gov.in/beextcustomer/v1';
+
+  try {
+    const accessToken = await indiaPostAuth(username, password, baseUrl);
+    // Store token for future use
+    await db.collection('integrations').updateOne(
+      { _id: 'integrations-config' },
+      { $set: {
+        'indiaPost.lastTokenAt': new Date().toISOString(),
+        'indiaPost.tokenValid': true,
+      }}
+    );
+    await logSyncEvent(db, 'indiaPost', 'test-connection', 'success', { baseUrl });
+    return {
+      message: `Connection successful! Authenticated with India Post ${sandboxMode !== false ? 'Sandbox' : 'Production'} API.`,
+      baseUrl,
+      tokenReceived: true,
+    };
+  } catch (err) {
+    await logSyncEvent(db, 'indiaPost', 'test-connection', 'error', { error: err.message });
+    return { error: `Connection failed: ${err.message}` };
+  }
+}
+
 // (Shopify Bills CSV import removed — automated fee calculation via shopifyTxnFeeRate in Settings)
 
 // ==================== FIFO STOCK ENGINE ====================
@@ -2635,6 +2670,87 @@ export async function POST(request) {
 
       case 'indiapost':
         if (subResource === 'track-bulk' || subResource === 'sync-tracking') return json(await indiaPostSyncTracking());
+        if (subResource === 'test-connection') return json(await indiaPostTestConnection());
+        if (subResource === 'tracking-events') {
+          const trackNum = url.searchParams.get('trackingNumber');
+          if (!trackNum) return json({ error: 'trackingNumber required' }, 400);
+          const db = await getDb();
+          const events = await db.collection('indiaPostEvents')
+            .find({ trackingNumber: trackNum })
+            .sort({ timestamp: -1 })
+            .toArray();
+          return json({ trackingNumber: trackNum, events });
+        }
+        if (subResource === 'webhook') {
+          // POST /api/indiapost/webhook — Receive real-time tracking events from India Post
+          const db = await getDb();
+          try {
+            const events = Array.isArray(body) ? body : (body?.events || body?.data || [body]);
+            let processed = 0;
+
+            for (const event of events) {
+              const trackingNumber = event?.article_number || event?.tracking_number || event?.articleNumber || event?.consignment_number;
+              if (!trackingNumber) continue;
+
+              const eventDesc = event?.event || event?.event_description || event?.status || '';
+              const eventCode = event?.event_code || event?.code || '';
+              const location = event?.office_name || event?.location || event?.city || '';
+              const timestamp = event?.timestamp || event?.event_date || event?.date || new Date().toISOString();
+
+              // Store the event
+              await db.collection('indiaPostEvents').insertOne({
+                _id: uuidv4(),
+                trackingNumber,
+                event: eventDesc,
+                eventCode,
+                location,
+                timestamp,
+                rawPayload: event,
+                receivedAt: new Date().toISOString(),
+              });
+
+              // Update order status based on event
+              const order = await db.collection('orders').findOne({ trackingNumber });
+              if (order) {
+                let newStatus = order.status;
+                const desc = eventDesc.toLowerCase();
+                const code = eventCode.toUpperCase();
+
+                if (desc.includes('delivered') || desc.includes('item delivered')) {
+                  newStatus = 'Delivered';
+                } else if (code === 'RT' || desc.includes('return') || desc.includes('rto')) {
+                  newStatus = 'RTO';
+                } else if (desc.includes('dispatched') || desc.includes('in transit') || desc.includes('booked')) {
+                  if (order.status === 'Unfulfilled' || order.status === 'Pending') {
+                    newStatus = 'In Transit';
+                  }
+                } else if (desc.includes('out for delivery')) {
+                  newStatus = 'Out for Delivery';
+                }
+
+                const updateFields = {
+                  indiaPostLastEvent: eventDesc,
+                  indiaPostLastEventAt: timestamp,
+                  updatedAt: new Date().toISOString(),
+                };
+                if (newStatus !== order.status) {
+                  updateFields.status = newStatus;
+                  updateFields.statusUpdatedAt = new Date().toISOString();
+                }
+                await db.collection('orders').updateOne({ _id: order._id }, { $set: updateFields });
+              }
+              processed++;
+            }
+
+            await logSyncEvent(db, 'indiaPost', 'webhook', 'success', { eventsReceived: events.length, processed });
+            return json({ success: true, message: `Processed ${processed} tracking events`, processed });
+          } catch (err) {
+            console.error('India Post webhook error:', err);
+            const db2 = await getDb();
+            await logSyncEvent(db2, 'indiaPost', 'webhook', 'error', { error: err.message });
+            return json({ success: false, error: err.message }, 500);
+          }
+        }
         return json({ error: 'Unknown India Post action' }, 404);
 
       case 'meta-ads':

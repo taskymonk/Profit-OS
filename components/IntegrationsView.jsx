@@ -35,7 +35,12 @@ export default function IntegrationsView() {
   const [showSecrets, setShowSecrets] = useState({});
 
   const [shopify, setShopify] = useState({ storeUrl: '', accessToken: '', active: false });
-  const [indiaPost, setIndiaPost] = useState({ username: '', password: '', clientId: '', active: false, sandboxMode: true });
+  const [indiaPost, setIndiaPost] = useState({
+    username: '', password: '', bulkCustomerId: '', contractId: '',
+    senderName: '', senderCompany: '', senderAddress: '', senderCity: '', senderState: '', senderPincode: '', senderMobile: '', senderEmail: '',
+    active: false, sandboxMode: true,
+    webhookUrl: typeof window !== 'undefined' ? `${window.location.origin}/api/indiapost/webhook` : '',
+  });
   const [metaAds, setMetaAds] = useState({ token: '', adAccountId: '', active: false });
   const [razorpay, setRazorpay] = useState({ keyId: '', keySecret: '', active: false });
   const [exchangeRate, setExchangeRate] = useState({ apiKey: '', active: false });
@@ -225,7 +230,7 @@ export default function IntegrationsView() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30"><Truck className="w-5 h-5 text-orange-600" /></div>
-              <div><CardTitle className="text-base">India Post</CardTitle><CardDescription>RTO & delivery tracking via bulk API</CardDescription></div>
+              <div><CardTitle className="text-base">India Post</CardTitle><CardDescription>Shipment tracking, booking & delivery via Bulk Customer API</CardDescription></div>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant={indiaPost.active ? 'default' : 'secondary'}>{indiaPost.active ? 'Active' : 'Inactive'}</Badge>
@@ -233,28 +238,131 @@ export default function IntegrationsView() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-2 p-2 rounded bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-700 dark:text-amber-300">
-            <span>Sandbox: test.cept.gov.in | Prod: Separate credentials required</span>
-            <Switch checked={indiaPost.sandboxMode} onCheckedChange={v => setIndiaPost({...indiaPost, sandboxMode: v})} />
-            <span>{indiaPost.sandboxMode ? 'Sandbox' : 'Production'}</span>
+        <CardContent className="space-y-4">
+          {/* Environment Toggle */}
+          <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+            <div>
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                {indiaPost.sandboxMode ? '🧪 Sandbox Mode' : '🚀 Production Mode'}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {indiaPost.sandboxMode ? 'Using test.cept.gov.in — no real shipments' : 'Using production API — live shipments'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground">{indiaPost.sandboxMode ? 'Sandbox' : 'Production'}</span>
+              <Switch checked={indiaPost.sandboxMode} onCheckedChange={v => setIndiaPost({...indiaPost, sandboxMode: v})} />
+            </div>
           </div>
-          <div><Label>Username / Client ID</Label><Input value={indiaPost.username} onChange={e => setIndiaPost({...indiaPost, username: e.target.value})} /></div>
+
+          {/* API Credentials */}
           <div>
-            <Label>Password</Label>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">API Credentials</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Username</Label>
+                <Input value={indiaPost.username} onChange={e => setIndiaPost({...indiaPost, username: e.target.value})} placeholder="Phone number or User ID" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Password</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input type={showSecrets.indiaPostPwd ? 'text' : 'password'} value={indiaPost.password} onChange={e => setIndiaPost({...indiaPost, password: e.target.value})} placeholder="API password" />
+                  <Button variant="outline" size="icon" className="shrink-0" onClick={() => toggleSecret('indiaPostPwd')}>
+                    {showSecrets.indiaPostPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div>
+                <Label className="text-xs">Bulk Customer ID</Label>
+                <Input value={indiaPost.bulkCustomerId} onChange={e => setIndiaPost({...indiaPost, bulkCustomerId: e.target.value})} placeholder="e.g. 1234567890" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Contract ID</Label>
+                <Input value={indiaPost.contractId} onChange={e => setIndiaPost({...indiaPost, contractId: e.target.value})} placeholder="e.g. CN12345678" className="mt-1" />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Sender Details */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Default Sender Details</p>
+            <p className="text-[10px] text-muted-foreground mb-2">Used as the default sender address when booking shipments</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Sender Name</Label>
+                <Input value={indiaPost.senderName} onChange={e => setIndiaPost({...indiaPost, senderName: e.target.value})} placeholder="Business or person name" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Company Name</Label>
+                <Input value={indiaPost.senderCompany} onChange={e => setIndiaPost({...indiaPost, senderCompany: e.target.value})} placeholder="Company name" className="mt-1" />
+              </div>
+            </div>
+            <div className="mt-3">
+              <Label className="text-xs">Address</Label>
+              <Input value={indiaPost.senderAddress} onChange={e => setIndiaPost({...indiaPost, senderAddress: e.target.value})} placeholder="Full address line" className="mt-1" />
+            </div>
+            <div className="grid grid-cols-4 gap-3 mt-3">
+              <div>
+                <Label className="text-xs">City</Label>
+                <Input value={indiaPost.senderCity} onChange={e => setIndiaPost({...indiaPost, senderCity: e.target.value})} placeholder="City" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">State</Label>
+                <Input value={indiaPost.senderState} onChange={e => setIndiaPost({...indiaPost, senderState: e.target.value})} placeholder="State" className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Pincode</Label>
+                <Input value={indiaPost.senderPincode} onChange={e => setIndiaPost({...indiaPost, senderPincode: e.target.value})} placeholder="6 digits" maxLength={6} className="mt-1" />
+              </div>
+              <div>
+                <Label className="text-xs">Mobile</Label>
+                <Input value={indiaPost.senderMobile} onChange={e => setIndiaPost({...indiaPost, senderMobile: e.target.value})} placeholder="10 digits" maxLength={10} className="mt-1" />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Webhook URL */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Webhook</p>
+            <p className="text-[10px] text-muted-foreground mb-2">
+              Register this URL in India Post's portal to receive real-time tracking updates
+            </p>
             <div className="flex gap-2">
-              <Input type={showSecrets.indiaPostPwd ? 'text' : 'password'} value={indiaPost.password} onChange={e => setIndiaPost({...indiaPost, password: e.target.value})} />
-              <Button variant="outline" size="icon" onClick={() => toggleSecret('indiaPostPwd')}>
-                {showSecrets.indiaPostPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              <Input
+                value={indiaPost.webhookUrl || (typeof window !== 'undefined' ? `${window.location.origin}/api/indiapost/webhook` : '')}
+                readOnly
+                className="font-mono text-xs bg-muted/50"
+              />
+              <Button variant="outline" size="sm" className="shrink-0 text-xs"
+                onClick={() => {
+                  const url = indiaPost.webhookUrl || `${window.location.origin}/api/indiapost/webhook`;
+                  navigator.clipboard.writeText(url);
+                  toast.success('Webhook URL copied!');
+                }}>
+                Copy
               </Button>
             </div>
           </div>
+
           <Separator />
+
+          {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-2 items-start">
+            <Button size="sm" variant="outline" disabled={syncing.indiaPostTest}
+              onClick={() => runSync('indiaPostTest', '/api/indiapost/test-connection')}>
+              {syncing.indiaPostTest ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Globe className="w-3.5 h-3.5 mr-1.5" />}
+              Test Connection
+            </Button>
             <Button size="sm" variant="outline" disabled={syncing.indiaPost}
               onClick={() => runSync('indiaPost', '/api/indiapost/sync-tracking')}>
               {syncing.indiaPost ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Truck className="w-3.5 h-3.5 mr-1.5" />}
-              Run Bulk Tracking Now
+              Run Bulk Tracking
             </Button>
             {config?.indiaPost?.lastSyncAt && (
               <span className="text-[11px] text-muted-foreground self-center">
@@ -262,14 +370,24 @@ export default function IntegrationsView() {
               </span>
             )}
           </div>
-          {syncResults.indiaPost && (
-            <div className="text-xs p-2 rounded bg-muted flex items-center gap-1.5">
-              {syncResults.indiaPost.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
-              <span>{syncResults.indiaPost.error || syncResults.indiaPost.message}</span>
+          {(syncResults.indiaPostTest || syncResults.indiaPost) && (
+            <div className="text-xs p-2 rounded bg-muted space-y-1">
+              {syncResults.indiaPostTest && (
+                <div className="flex items-center gap-1.5">
+                  {syncResults.indiaPostTest.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                  <span>{syncResults.indiaPostTest.error || syncResults.indiaPostTest.message}</span>
+                </div>
+              )}
+              {syncResults.indiaPost && (
+                <div className="flex items-center gap-1.5">
+                  {syncResults.indiaPost.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                  <span>{syncResults.indiaPost.error || syncResults.indiaPost.message}</span>
+                </div>
+              )}
             </div>
           )}
           <p className="text-[11px] text-muted-foreground">
-            Scans all "In Transit" orders with tracking numbers. Updates status to Delivered or RTO based on India Post events.
+            Test Connection validates your credentials against the India Post API. Bulk Tracking scans all orders with tracking numbers and updates their delivery status.
           </p>
         </CardContent>
       </Card>
