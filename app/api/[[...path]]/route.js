@@ -2245,6 +2245,34 @@ export async function GET(request) {
     const params = getSearchParams(request);
 
     switch (resource) {
+      case 'auth-config': {
+        // Public endpoint - tells the login page if Google OAuth is configured
+        const db = await getDb();
+        const integrations = await db.collection('integrations').findOne({});
+        const googleConfigured = !!(integrations?.google?.clientId && integrations?.google?.clientSecret);
+        return json({ googleConfigured });
+      }
+
+      case 'users': {
+        const db = await getDb();
+        if (subResource && subResource !== 'me') {
+          const user = await db.collection('users').findOne({ _id: subResource });
+          if (!user) return json({ error: 'User not found' }, 404);
+          const { passwordHash, ...safeUser } = user;
+          return json(safeUser);
+        }
+        if (subResource === 'me') {
+          // Would need session - for now return instruction
+          return json({ error: 'Use /api/auth/session instead' }, 400);
+        }
+        const users = await db.collection('users').find({}).sort({ createdAt: -1 }).toArray();
+        const safeUsers = users.map(u => {
+          const { passwordHash, ...safe } = u;
+          return safe;
+        });
+        return json(safeUsers);
+      }
+
       case 'dashboard':
         return json(await getDashboardData(params));
 
@@ -2560,6 +2588,7 @@ export async function GET(request) {
           if (masked.metaAds?.token) masked.metaAds.token = masked.metaAds.token.replace(/.(?=.{4})/g, '*');
           if (masked.exchangeRate?.apiKey) masked.exchangeRate.apiKey = masked.exchangeRate.apiKey.replace(/.(?=.{4})/g, '*');
           if (masked.razorpay?.keySecret) masked.razorpay.keySecret = masked.razorpay.keySecret.replace(/.(?=.{4})/g, '*');
+          if (masked.google?.clientSecret) masked.google.clientSecret = masked.google.clientSecret.replace(/.(?=.{4})/g, '*');
           return json(masked);
         }
         return json({});
@@ -3375,9 +3404,41 @@ export async function PUT(request) {
         mergeSection('metaAds', ['token']);
         mergeSection('razorpay', ['keySecret']);
         mergeSection('exchangeRate', ['apiKey']);
+        mergeSection('google', ['clientSecret']);
 
         await db.collection('integrations').updateOne({ _id: 'integrations-config' }, { $set: updateData }, { upsert: true });
         return json({ message: 'Integrations updated successfully' });
+      }
+
+      case 'users': {
+        if (!id) return json({ error: 'User ID required' }, 400);
+        const db = await getDb();
+        const user = await db.collection('users').findOne({ _id: id });
+        if (!user) return json({ error: 'User not found' }, 404);
+
+        if (action === 'role') {
+          // PUT /api/users/{id}/role — change user role
+          const validRoles = ['master_admin', 'admin', 'employee'];
+          if (!body.role || !validRoles.includes(body.role)) {
+            return json({ error: 'Invalid role. Must be: master_admin, admin, or employee' }, 400);
+          }
+          await db.collection('users').updateOne(
+            { _id: id },
+            { $set: { role: body.role, updatedAt: new Date().toISOString() } }
+          );
+          const updated = await db.collection('users').findOne({ _id: id });
+          const { passwordHash, ...safeUser } = updated;
+          return json(safeUser);
+        }
+
+        // General user update (name, avatar)
+        const allowedFields = ['name', 'avatar'];
+        const updates = { updatedAt: new Date().toISOString() };
+        allowedFields.forEach(f => { if (body[f] !== undefined) updates[f] = body[f]; });
+        await db.collection('users').updateOne({ _id: id }, { $set: updates });
+        const updated = await db.collection('users').findOne({ _id: id });
+        const { passwordHash: _, ...safeUser } = updated;
+        return json(safeUser);
       }
 
       case 'orders': {
@@ -3521,6 +3582,7 @@ export async function DELETE(request) {
       'inventory-items': 'inventoryItems',
       'stock-batches': 'stockBatches',
       'recipe-templates': 'recipeTemplates',
+      'users': 'users',
     };
 
     const collection = collectionMap[resource];

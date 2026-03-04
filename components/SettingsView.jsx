@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle, Globe, DollarSign, Settings2, ToggleLeft, Upload, Image, Check, Sun, Moon, Monitor } from 'lucide-react';
+import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle, Globe, DollarSign, Settings2, ToggleLeft, Upload, Image, Check, Sun, Moon, Monitor, Users } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
@@ -103,6 +103,9 @@ export default function SettingsView() {
   const [suggestedColors, setSuggestedColors] = useState([]);
   const [liveColor, setLiveColor] = useState('#059669');
   const colorInputRef = useRef(null);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [changingRole, setChangingRole] = useState({});
 
   useEffect(() => {
     async function load() {
@@ -117,6 +120,53 @@ export default function SettingsView() {
     }
     load();
   }, []);
+
+  // Load users for user management
+  useEffect(() => {
+    async function loadUsers() {
+      setLoadingUsers(true);
+      try {
+        const res = await fetch('/api/users');
+        const data = await res.json();
+        if (Array.isArray(data)) setUsers(data);
+      } catch (err) { console.error('Failed to load users:', err); }
+      setLoadingUsers(false);
+    }
+    loadUsers();
+  }, []);
+
+  const handleRoleChange = async (userId, newRole) => {
+    setChangingRole(prev => ({ ...prev, [userId]: true }));
+    try {
+      const res = await fetch(`/api/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+      } else {
+        toast.success(`Role updated to ${newRole.replace('_', ' ')}`);
+        setUsers(prev => prev.map(u => u._id === userId ? { ...u, role: newRole } : u));
+      }
+    } catch (err) { toast.error('Failed to update role'); }
+    setChangingRole(prev => ({ ...prev, [userId]: false }));
+  };
+
+  const handleDeleteUser = async (userId, userName) => {
+    if (!confirm(`Are you sure you want to remove ${userName}? This action cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+      } else {
+        toast.success(`${userName} removed successfully`);
+        setUsers(prev => prev.filter(u => u._id !== userId));
+      }
+    } catch (err) { toast.error('Failed to remove user'); }
+  };
 
   // Extract colors from logo when logo changes
   useEffect(() => {
@@ -555,6 +605,80 @@ export default function SettingsView() {
             <div><Label>Meta Ads Sync</Label><p className="text-xs text-muted-foreground">Pull daily ad spend automatically</p></div>
             <Switch checked={config.integrations?.metaAdsActive} onCheckedChange={v => setConfig({...config, integrations: {...config.integrations, metaAdsActive: v}})} />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* User Management */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-900/30">
+              <Users className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+            </div>
+            <div>
+              <CardTitle className="text-base">User Management</CardTitle>
+              <CardDescription>Manage team members and their access roles</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingUsers ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : users.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No users found. Users appear here after they sign in.</p>
+          ) : (
+            <div className="space-y-3">
+              {users.map(user => (
+                <div key={user._id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/30 transition-colors">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {user.avatar ? (
+                      <img src={user.avatar} alt="" className="w-full h-full object-cover rounded-full" />
+                    ) : (
+                      <span className="text-sm font-semibold text-primary">{(user.name || user.email || 'U')[0].toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{user.name || 'Unnamed'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={user.role}
+                      onValueChange={(val) => handleRoleChange(user._id, val)}
+                      disabled={changingRole[user._id]}
+                    >
+                      <SelectTrigger className="w-[140px] h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="master_admin">Master Admin</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="employee">Employee</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDeleteUser(user._id, user.name || user.email)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground whitespace-nowrap hidden sm:block">
+                    {user.googleId ? '🔗 Google' : '📧 Email'}
+                  </span>
+                </div>
+              ))}
+              <div className="pt-2 border-t">
+                <p className="text-[11px] text-muted-foreground">
+                  <strong>Master Admin</strong>: Full access including Settings & Integrations. <strong>Admin</strong>: Everything except Settings & Integrations. <strong>Employee</strong>: Dashboard only (KDS in future).
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

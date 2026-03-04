@@ -1,5 +1,6 @@
 import './globals.css';
 import { Toaster } from 'sonner';
+import SessionProvider from '@/components/SessionProvider';
 
 export const metadata = {
   title: 'Profit OS - True Profit Engine',
@@ -16,8 +17,10 @@ export default function RootLayout({ children }) {
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
       <body className="font-sans antialiased bg-background text-foreground" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-        {children}
-        <Toaster position="top-right" richColors closeButton />
+        <SessionProvider>
+          {children}
+          <Toaster position="top-right" richColors closeButton />
+        </SessionProvider>
       </body>
     </html>
   );

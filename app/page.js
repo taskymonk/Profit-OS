@@ -1,15 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Receipt,
   Settings, Plug, ChevronLeft, ChevronRight, Menu, X,
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
-  Boxes, Moon, Sun, BarChart3
+  Boxes, Moon, Sun, BarChart3, LogOut, UserCircle, Shield,
+  ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import DashboardView from '@/components/DashboardView';
 import OrdersView from '@/components/OrdersView';
 import SkuRecipesView from '@/components/SkuRecipesView';
@@ -20,25 +28,52 @@ import IntegrationsView from '@/components/IntegrationsView';
 import SettingsView from '@/components/SettingsView';
 import ReportsView from '@/components/ReportsView';
 
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'orders', label: 'Orders', icon: ShoppingCart },
-  { id: 'products', label: 'SKU Recipes', icon: Package },
-  { id: 'inventory', label: 'Inventory', icon: Boxes },
-  { id: 'employees', label: 'Employees', icon: Users },
-  { id: 'expenses', label: 'Expenses', icon: Receipt },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
-  { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'settings', label: 'Settings', icon: Settings },
+const ALL_NAV_ITEMS = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'employee' },
+  { id: 'orders', label: 'Orders', icon: ShoppingCart, minRole: 'admin' },
+  { id: 'products', label: 'SKU Recipes', icon: Package, minRole: 'admin' },
+  { id: 'inventory', label: 'Inventory', icon: Boxes, minRole: 'admin' },
+  { id: 'employees', label: 'Employees', icon: Users, minRole: 'admin' },
+  { id: 'expenses', label: 'Expenses', icon: Receipt, minRole: 'admin' },
+  { id: 'reports', label: 'Reports', icon: BarChart3, minRole: 'admin' },
+  { id: 'integrations', label: 'Integrations', icon: Plug, minRole: 'master_admin' },
+  { id: 'settings', label: 'Settings', icon: Settings, minRole: 'master_admin' },
 ];
 
+const ROLE_LEVEL = { master_admin: 3, admin: 2, employee: 1 };
+
+function getRoleLabel(role) {
+  switch (role) {
+    case 'master_admin': return 'Master Admin';
+    case 'admin': return 'Admin';
+    case 'employee': return 'Employee';
+    default: return role || 'User';
+  }
+}
+
+function getRoleBadgeVariant(role) {
+  switch (role) {
+    case 'master_admin': return 'default';
+    case 'admin': return 'secondary';
+    default: return 'outline';
+  }
+}
+
 export default function App() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
   const [activeView, setActiveView] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [tenantConfig, setTenantConfig] = useState(null);
   const [dataReady, setDataReady] = useState(false);
+
+  const userRole = session?.user?.role || 'employee';
+  const userLevel = ROLE_LEVEL[userRole] || 1;
+
+  // Filter nav items based on user role
+  const navItems = ALL_NAV_ITEMS.filter(item => userLevel >= (ROLE_LEVEL[item.minRole] || 1));
 
   // Hex to HSL converter for CSS variables
   const hexToHSL = useCallback((hex) => {
@@ -68,7 +103,6 @@ export default function App() {
     const hsl = hexToHSL(hex);
     if (hsl) {
       document.documentElement.style.setProperty('--primary', hsl);
-      // Generate foreground (white for dark colors, dark for light ones)
       const l = parseInt(hsl.split('%')[0].split(' ').pop());
       document.documentElement.style.setProperty('--primary-foreground', l > 55 ? '0 0% 10%' : '0 0% 100%');
     }
@@ -83,7 +117,6 @@ export default function App() {
       setDarkMode(false);
       document.documentElement.classList.remove('dark');
     } else {
-      // system
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       setDarkMode(prefersDark);
       if (prefersDark) document.documentElement.classList.add('dark');
@@ -103,8 +136,17 @@ export default function App() {
     link.href = iconDataUrl;
   }, []);
 
-  // Load tenant config on mount
+  // Redirect to login if not authenticated
   useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.replace('/login');
+    }
+  }, [status, router]);
+
+  // Load tenant config on mount (once authenticated)
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
     async function init() {
       try {
         const configRes = await fetch('/api/tenant-config');
@@ -113,7 +155,6 @@ export default function App() {
           setTenantConfig(config);
           if (config.primaryColor) applyPrimaryColor(config.primaryColor);
           applyTheme(config.themePreference || 'system');
-          // Set favicon from icon (or logo fallback)
           if (config.icon) setFavicon(config.icon);
           else if (config.logo) setFavicon(config.logo);
         }
@@ -124,7 +165,7 @@ export default function App() {
       }
     }
     init();
-  }, [applyPrimaryColor, applyTheme, setFavicon]);
+  }, [status, applyPrimaryColor, applyTheme, setFavicon]);
 
   const toggleDarkMode = useCallback(() => {
     setDarkMode(prev => {
@@ -134,7 +175,6 @@ export default function App() {
       } else {
         document.documentElement.classList.remove('dark');
       }
-      // Save preference to backend
       fetch('/api/tenant-config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -143,6 +183,14 @@ export default function App() {
       return next;
     });
   }, []);
+
+  // Ensure active view is accessible by current role
+  useEffect(() => {
+    const isAccessible = navItems.some(item => item.id === activeView);
+    if (!isAccessible && navItems.length > 0) {
+      setActiveView(navItems[0].id);
+    }
+  }, [userRole, activeView, navItems]);
 
   const renderView = () => {
     switch (activeView) {
@@ -159,7 +207,8 @@ export default function App() {
     }
   };
 
-  if (!dataReady) {
+  // Show loading state while checking auth
+  if (status === 'loading' || (status === 'authenticated' && !dataReady)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center space-y-4">
@@ -168,6 +217,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (status === 'unauthenticated') {
+    return null;
   }
 
   return (
@@ -214,7 +268,7 @@ export default function App() {
 
         {/* Nav Items */}
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map(item => {
+          {navItems.map(item => {
             const Icon = item.icon;
             const isActive = activeView === item.id;
             return (
@@ -262,7 +316,7 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </Button>
             <h2 className="text-lg font-semibold">
-              {NAV_ITEMS.find(i => i.id === activeView)?.label || 'Dashboard'}
+              {navItems.find(i => i.id === activeView)?.label || 'Dashboard'}
             </h2>
             <Badge variant="outline" className="hidden sm:inline-flex text-xs">
               {tenantConfig?.baseCurrency || 'INR'}
@@ -272,6 +326,44 @@ export default function App() {
             <Button variant="ghost" size="icon" onClick={toggleDarkMode} title="Toggle theme">
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
+
+            {/* Profile Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2 px-2 h-9">
+                  <Avatar className="h-7 w-7">
+                    <AvatarImage src={session?.user?.image} alt={session?.user?.name} />
+                    <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                      {(session?.user?.name || session?.user?.email || 'U')[0].toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden md:inline text-sm font-medium max-w-[120px] truncate">
+                    {session?.user?.name || session?.user?.email}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground hidden md:inline" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1.5">
+                    <p className="text-sm font-medium">{session?.user?.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{session?.user?.email}</p>
+                    <Badge variant={getRoleBadgeVariant(userRole)} className="w-fit text-[10px] px-1.5 py-0">
+                      <Shield className="w-2.5 h-2.5 mr-1" />
+                      {getRoleLabel(userRole)}
+                    </Badge>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive cursor-pointer"
+                  onClick={() => signOut({ callbackUrl: '/login' })}
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 
