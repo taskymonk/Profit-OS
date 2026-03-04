@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import {
   Plus, Trash2, Edit, Zap, UserCheck, Search, X, Info,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Package,
-  TrendingUp, TrendingDown, DollarSign, Truck, MapPin, ReceiptText, ShoppingBag
+  TrendingUp, TrendingDown, DollarSign, Truck, MapPin, ReceiptText, ShoppingBag,
+  Copy, ExternalLink, Clock, CheckCircle2, Circle, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -66,6 +67,20 @@ export default function OrdersView() {
   const [assignForm, setAssignForm] = useState({ employeeId: '' });
   const [trackingEdits, setTrackingEdits] = useState({});
   const [savingTracking, setSavingTracking] = useState({});
+  const [trackingEvents, setTrackingEvents] = useState([]);
+  const [trackingEventsLoading, setTrackingEventsLoading] = useState(false);
+
+  // Fetch tracking events for drawer order
+  const fetchTrackingEvents = async (trackingNumber) => {
+    if (!trackingNumber) { setTrackingEvents([]); return; }
+    setTrackingEventsLoading(true);
+    try {
+      const res = await fetch(`/api/indiapost/tracking-events?trackingNumber=${encodeURIComponent(trackingNumber)}`);
+      const data = await res.json();
+      setTrackingEvents(data.events || []);
+    } catch { setTrackingEvents([]); }
+    setTrackingEventsLoading(false);
+  };
 
   const saveTrackingNumber = async (orderId, value) => {
     setSavingTracking(prev => ({ ...prev, [orderId]: true }));
@@ -197,6 +212,8 @@ export default function OrdersView() {
 
   const openDrawer = async (order) => {
     setDrawerOrder(order);
+    if (order.trackingNumber) fetchTrackingEvents(order.trackingNumber);
+    else setTrackingEvents([]);
     if (!profitData[order._id]) {
       setDrawerLoading(true);
       try {
@@ -623,6 +640,118 @@ export default function OrdersView() {
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground text-center py-4">Could not calculate profit data</p>
+                  )}
+                </div>
+
+                <Separator />
+
+                {/* Shipment Tracking */}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground mb-1">SHIPMENT TRACKING</p>
+
+                  {/* Tracking Number Input */}
+                  {(() => {
+                    const isEditing = trackingEdits[drawerOrder._id] !== undefined;
+                    const currentVal = isEditing ? trackingEdits[drawerOrder._id] : (drawerOrder.trackingNumber || '');
+                    return (
+                      <div className="flex gap-2">
+                        <Input
+                          value={currentVal}
+                          onChange={e => setTrackingEdits(prev => ({ ...prev, [drawerOrder._id]: e.target.value }))}
+                          placeholder="Enter tracking / AWB number"
+                          className="h-8 text-xs font-mono"
+                        />
+                        {isEditing && (
+                          <Button size="sm" className="h-8 text-xs shrink-0" disabled={savingTracking[drawerOrder._id]}
+                            onClick={async () => {
+                              setSavingTracking(prev => ({ ...prev, [drawerOrder._id]: true }));
+                              try {
+                                const res = await fetch(`/api/orders/${drawerOrder._id}/tracking`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trackingNumber: trackingEdits[drawerOrder._id] }) });
+                                const updated = await res.json();
+                                setDrawerOrder(updated);
+                                setTrackingEdits(prev => { const n = {...prev}; delete n[drawerOrder._id]; return n; });
+                                fetchOrders();
+                                if (trackingEdits[drawerOrder._id]) fetchTrackingEvents(trackingEdits[drawerOrder._id]);
+                                toast.success('Tracking number saved');
+                              } catch { toast.error('Failed'); }
+                              setSavingTracking(prev => ({ ...prev, [drawerOrder._id]: false }));
+                            }}>
+                            {savingTracking[drawerOrder._id] ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+                          </Button>
+                        )}
+                        {drawerOrder.trackingNumber && !isEditing && (
+                          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0"
+                            onClick={() => { navigator.clipboard.writeText(drawerOrder.trackingNumber); toast.success('Copied!'); }}>
+                            <Copy className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Last Event */}
+                  {drawerOrder.indiaPostLastEvent && (
+                    <div className="flex items-center gap-2 p-2 rounded bg-muted/50 border border-border/50">
+                      <Truck className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-medium truncate">{drawerOrder.indiaPostLastEvent}</p>
+                        {drawerOrder.indiaPostLastEventAt && (
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(drawerOrder.indiaPostLastEventAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tracking Timeline */}
+                  {drawerOrder.trackingNumber && (
+                    <div className="mt-1">
+                      {trackingEventsLoading ? (
+                        <div className="flex items-center justify-center py-3">
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                          <span className="text-[11px] text-muted-foreground ml-2">Loading events...</span>
+                        </div>
+                      ) : trackingEvents.length > 0 ? (
+                        <div className="relative ml-2">
+                          {/* Timeline line */}
+                          <div className="absolute left-[5px] top-2 bottom-2 w-px bg-border" />
+                          <div className="space-y-0">
+                            {trackingEvents.slice(0, 8).map((ev, i) => {
+                              const isDelivered = (ev.event || '').toLowerCase().includes('delivered');
+                              const isRTO = (ev.event || '').toLowerCase().includes('return') || (ev.eventCode || '').toUpperCase() === 'RT';
+                              const isLatest = i === 0;
+                              return (
+                                <div key={ev._id || i} className="flex items-start gap-3 py-1.5 relative">
+                                  <div className={`w-[11px] h-[11px] rounded-full border-2 mt-0.5 shrink-0 z-10 ${isDelivered ? 'bg-emerald-500 border-emerald-500' : isRTO ? 'bg-red-500 border-red-500' : isLatest ? 'bg-primary border-primary' : 'bg-background border-muted-foreground/40'}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className={`text-[11px] leading-tight ${isLatest ? 'font-semibold' : 'text-muted-foreground'}`}>{ev.event || 'Status update'}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      {ev.location && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><MapPin className="w-2.5 h-2.5" />{ev.location}</span>}
+                                      {ev.timestamp && <span className="text-[10px] text-muted-foreground">{new Date(ev.timestamp).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {trackingEvents.length > 8 && (
+                              <p className="text-[10px] text-muted-foreground text-center ml-4">+{trackingEvents.length - 8} more events</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground text-center py-2">
+                          No tracking events yet. Run "Bulk Tracking" in Integrations or events will arrive via webhook.
+                        </p>
+                      )}
+
+                      {/* Track on India Post link */}
+                      <a href={`https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx`}
+                        target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-[10px] text-primary hover:underline mt-1.5">
+                        <ExternalLink className="w-3 h-3" /> Track on India Post website
+                      </a>
+                    </div>
                   )}
                 </div>
 
