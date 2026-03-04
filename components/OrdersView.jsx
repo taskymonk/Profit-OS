@@ -14,7 +14,7 @@ import {
   Plus, Trash2, Edit, Zap, UserCheck, Search, X, Info,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Package,
   TrendingUp, TrendingDown, DollarSign, Truck, MapPin, ReceiptText, ShoppingBag,
-  Copy, ExternalLink, Clock, CheckCircle2, Circle, AlertTriangle, ScanLine
+  Copy, ExternalLink, Clock, CheckCircle2, Circle, AlertTriangle, ScanLine, MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getCarrierInfo, getTrackingUrl, getCarrierOptions } from '@/lib/shipping';
@@ -969,6 +969,31 @@ export default function OrdersView() {
                   </Button>
                   <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs" onClick={() => { setSelectedOrder(drawerOrder); setAssignForm({ employeeId: '' }); setAssignDialogOpen(true); }}>
                     <UserCheck className="w-3.5 h-3.5 mr-2 text-blue-500" /> Assign Employee
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs text-green-600 hover:text-green-700" onClick={async () => {
+                    const phone = drawerOrder.customerPhone || drawerOrder.customer?.phone || drawerOrder.shippingAddress?.phone;
+                    if (!phone) { toast.error('No phone number on this order'); return; }
+                    try {
+                      const tplRes = await fetch('/api/whatsapp/templates');
+                      const templates = await tplRes.json();
+                      const enabled = templates.filter(t => t.enabled);
+                      if (enabled.length === 0) { toast.error('No enabled WhatsApp templates. Go to WhatsApp page to set them up.'); return; }
+                      // Show quick select
+                      const templateName = prompt(`Send WhatsApp to ${phone}\n\nAvailable templates:\n${enabled.map((t, i) => `${i + 1}. ${t.name}`).join('\n')}\n\nEnter template number (1-${enabled.length}):`);
+                      if (!templateName) return;
+                      const idx = parseInt(templateName) - 1;
+                      if (idx < 0 || idx >= enabled.length) { toast.error('Invalid template number'); return; }
+                      const res = await fetch('/api/whatsapp/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ orderId: drawerOrder._id, phone, templateId: enabled[idx]._id, triggerEvent: 'manual' }),
+                      });
+                      const data = await res.json();
+                      if (res.ok) toast.success(data.queued ? 'WhatsApp queued (quiet hours)' : 'WhatsApp sent!');
+                      else toast.error(data.error || 'Failed to send');
+                    } catch (e) { toast.error('Error sending WhatsApp'); }
+                  }}>
+                    <MessageSquare className="w-3.5 h-3.5 mr-2" /> Send WhatsApp Update
                   </Button>
                   <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs text-destructive hover:text-destructive" onClick={() => deleteOrder(drawerOrder._id)}>
                     <Trash2 className="w-3.5 h-3.5 mr-2" /> Delete Order

@@ -1,338 +1,380 @@
 #!/usr/bin/env python3
 """
-Backend Testing Script for Phase 3: Shipping & Tracking Enhancement
-Profit OS Application - Backend API Testing
-
-Tests the following APIs:
-1. POST /api/parcel-images - Save parcel image
-2. GET /api/parcel-images?orderId=xxx - Retrieve parcel images  
-3. PUT /api/orders/{orderId} - Update order with tracking number and carrier
-4. GET /api/orders/{orderId} - Verify updated order has tracking info
+Phase 4: WhatsApp Automation Backend API Testing
+Tests all WhatsApp API endpoints as per review requirements.
+Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api
 """
 
-import json
 import requests
-import sys
-import os
-import time
-import base64
+import json
 from datetime import datetime
 
-# Configuration from environment
-BASE_URL = os.getenv('NEXT_PUBLIC_BASE_URL', 'https://whatsapp-comms-next.preview.emergentagent.com')
-API_BASE_URL = f"{BASE_URL}/api"
+# Base URL for the application
+BASE_URL = "https://whatsapp-comms-next.preview.emergentagent.com/api"
 
-# Test configuration
-TEST_ORDER_ID = "test-order-123"
-SAMPLE_IMAGE_DATA = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-
-def log_test_step(step_name, status, message="", details=None):
-    """Log test step results"""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    status_icon = "✅" if status == "PASS" else "❌" if status == "FAIL" else "ℹ️"
-    print(f"[{timestamp}] {status_icon} {step_name}: {message}")
-    if details:
-        print(f"    Details: {details}")
-
-def make_request(method, url, **kwargs):
-    """Make HTTP request with error handling"""
+def test_whatsapp_apis():
+    """Test all WhatsApp automation backend APIs"""
+    
+    print("🚀 Starting Phase 4: WhatsApp Automation Backend API Testing")
+    print("=" * 60)
+    
+    # Test results tracking
+    results = []
+    
     try:
-        response = requests.request(method, url, timeout=30, **kwargs)
-        return response
-    except requests.exceptions.RequestException as e:
-        log_test_step("REQUEST_ERROR", "FAIL", f"Request failed: {str(e)}")
-        return None
-
-def test_parcel_images_save():
-    """Test POST /api/parcel-images - Save parcel image"""
-    print(f"\n🎯 Testing POST /api/parcel-images - Save parcel image")
-    
-    test_data = {
-        "orderId": TEST_ORDER_ID,
-        "imageData": SAMPLE_IMAGE_DATA,
-        "extractedTrackingNo": "EE123456789IN",
-        "extractedCarrier": "indiapost"
-    }
-    
-    response = make_request(
-        "POST", 
-        f"{API_BASE_URL}/parcel-images",
-        json=test_data,
-        headers={'Content-Type': 'application/json'}
-    )
-    
-    if not response:
-        return False
+        # 1. Test GET /api/whatsapp/templates - should auto-seed 5 defaults
+        print("\n1️⃣ Testing GET /api/whatsapp/templates (auto-seed 5 defaults)")
+        response = requests.get(f"{BASE_URL}/whatsapp/templates")
+        print(f"   Status: {response.status_code}")
         
-    success = response.status_code == 200
-    
-    if success:
-        try:
-            data = response.json()
-            has_id = "_id" in data and data["_id"]
-            has_message = "message" in data and data["message"] == "Parcel image saved"
+        if response.status_code == 200:
+            templates = response.json()
+            print(f"   Templates found: {len(templates)}")
             
-            if has_id and has_message:
-                log_test_step("POST /api/parcel-images", "PASS", 
-                            f"Parcel image saved successfully with ID: {data['_id']}")
-                return data["_id"]  # Return the ID for later tests
-            else:
-                log_test_step("POST /api/parcel-images", "FAIL", 
-                            f"Response missing expected fields: {data}")
-                return False
-        except json.JSONDecodeError:
-            log_test_step("POST /api/parcel-images", "FAIL", 
-                        f"Invalid JSON response: {response.text}")
-            return False
-    else:
-        log_test_step("POST /api/parcel-images", "FAIL", 
-                    f"Status: {response.status_code}, Body: {response.text}")
-        return False
-
-def test_parcel_images_retrieve():
-    """Test GET /api/parcel-images?orderId=xxx - Retrieve parcel images"""
-    print(f"\n🎯 Testing GET /api/parcel-images?orderId={TEST_ORDER_ID}")
-    
-    response = make_request(
-        "GET", 
-        f"{API_BASE_URL}/parcel-images",
-        params={"orderId": TEST_ORDER_ID}
-    )
-    
-    if not response:
-        return False
-        
-    success = response.status_code == 200
-    
-    if success:
-        try:
-            data = response.json()
-            is_array = isinstance(data, list)
-            
-            if is_array:
-                if len(data) > 0:
-                    # Check if the images are sorted by createdAt desc
-                    image = data[0]
-                    has_required_fields = all(field in image for field in 
-                                            ['_id', 'orderId', 'imageData', 'createdAt'])
-                    
-                    if has_required_fields and image['orderId'] == TEST_ORDER_ID:
-                        log_test_step("GET /api/parcel-images", "PASS", 
-                                    f"Retrieved {len(data)} parcel image(s) for order {TEST_ORDER_ID}")
-                        return True
-                    else:
-                        log_test_step("GET /api/parcel-images", "FAIL", 
-                                    f"Image missing required fields or wrong orderId: {image}")
-                        return False
-                else:
-                    log_test_step("GET /api/parcel-images", "PASS", 
-                                f"No parcel images found for order {TEST_ORDER_ID} (empty array)")
-                    return True
-            else:
-                log_test_step("GET /api/parcel-images", "FAIL", 
-                            f"Expected array response, got: {type(data)}")
-                return False
-        except json.JSONDecodeError:
-            log_test_step("GET /api/parcel-images", "FAIL", 
-                        f"Invalid JSON response: {response.text}")
-            return False
-    else:
-        log_test_step("GET /api/parcel-images", "FAIL", 
-                    f"Status: {response.status_code}, Body: {response.text}")
-        return False
-
-def get_actual_order_for_testing():
-    """Get an actual order ID from the system for testing"""
-    print(f"\n🎯 Getting actual order for tracking update test")
-    
-    response = make_request("GET", f"{API_BASE_URL}/orders", params={"page": 1, "limit": 1})
-    
-    if response and response.status_code == 200:
-        try:
-            data = response.json()
-            if data.get("orders") and len(data["orders"]) > 0:
-                order = data["orders"][0]
-                order_id = order.get("_id")
-                log_test_step("GET_ACTUAL_ORDER", "PASS", 
-                            f"Found order ID: {order_id} (Order: {order.get('orderId', 'N/A')})")
-                return order_id
-            else:
-                log_test_step("GET_ACTUAL_ORDER", "FAIL", "No orders found in system")
-                return None
-        except json.JSONDecodeError:
-            log_test_step("GET_ACTUAL_ORDER", "FAIL", f"Invalid JSON response: {response.text}")
-            return None
-    else:
-        log_test_step("GET_ACTUAL_ORDER", "FAIL", 
-                    f"Failed to get orders. Status: {response.status_code if response else 'No response'}")
-        return None
-
-def test_order_tracking_update(order_id):
-    """Test PUT /api/orders/{orderId} - Update order with tracking number and carrier"""
-    print(f"\n🎯 Testing PUT /api/orders/{order_id} - Update tracking info")
-    
-    test_data = {
-        "trackingNumber": "EE123456789IN",
-        "shippingCarrier": "indiapost"
-    }
-    
-    response = make_request(
-        "PUT", 
-        f"{API_BASE_URL}/orders/{order_id}",
-        json=test_data,
-        headers={'Content-Type': 'application/json'}
-    )
-    
-    if not response:
-        return False
-        
-    success = response.status_code == 200
-    
-    if success:
-        try:
-            data = response.json()
-            has_tracking = "trackingNumber" in data and data["trackingNumber"] == test_data["trackingNumber"]
-            has_carrier = "shippingCarrier" in data and data["shippingCarrier"] == test_data["shippingCarrier"]
-            
-            if has_tracking and has_carrier:
-                log_test_step("PUT /api/orders/{id}", "PASS", 
-                            f"Successfully updated order with tracking: {test_data['trackingNumber']}")
-                return True
-            elif has_tracking and not has_carrier:
-                log_test_step("PUT /api/orders/{id}", "PASS", 
-                            f"Updated tracking number: {test_data['trackingNumber']} (shippingCarrier field not supported)")
-                return True
-            else:
-                log_test_step("PUT /api/orders/{id}", "FAIL", 
-                            f"Tracking info not updated properly. Response: {data}")
-                return False
-        except json.JSONDecodeError:
-            log_test_step("PUT /api/orders/{id}", "FAIL", 
-                        f"Invalid JSON response: {response.text}")
-            return False
-    else:
-        log_test_step("PUT /api/orders/{id}", "FAIL", 
-                    f"Status: {response.status_code}, Body: {response.text}")
-        return False
-
-def test_order_details_verification(order_id):
-    """Test GET /api/orders/{orderId} - Verify updated order has tracking info"""
-    print(f"\n🎯 Testing GET /api/orders/{order_id} - Verify tracking info")
-    
-    response = make_request("GET", f"{API_BASE_URL}/orders/{order_id}")
-    
-    if not response:
-        return False
-        
-    success = response.status_code == 200
-    
-    if success:
-        try:
-            data = response.json()
-            has_tracking = "trackingNumber" in data and data["trackingNumber"] == "EE123456789IN"
-            
-            if has_tracking:
-                carrier_info = ""
-                if "shippingCarrier" in data:
-                    carrier_info = f", Carrier: {data['shippingCarrier']}"
+            if len(templates) >= 5:
+                # Verify template structure
+                template = templates[0]
+                required_fields = ['name', 'triggerEvent', 'body', 'enabled', 'metaApprovalStatus']
+                has_required_fields = all(field in template for field in required_fields)
                 
-                log_test_step("GET /api/orders/{id}", "PASS", 
-                            f"Order tracking verified - Tracking: {data['trackingNumber']}{carrier_info}")
-                return True
+                if has_required_fields:
+                    print("   ✅ Templates auto-seeded with proper structure")
+                    results.append("✅ Templates CRUD (auto-seed)")
+                else:
+                    print("   ❌ Templates missing required fields")
+                    results.append("❌ Templates CRUD (missing fields)")
             else:
-                log_test_step("GET /api/orders/{id}", "FAIL", 
-                            f"Tracking number not found or incorrect. Current tracking: {data.get('trackingNumber', 'None')}")
-                return False
-        except json.JSONDecodeError:
-            log_test_step("GET /api/orders/{id}", "FAIL", 
-                        f"Invalid JSON response: {response.text}")
-            return False
-    else:
-        log_test_step("GET /api/orders/{id}", "FAIL", 
-                    f"Status: {response.status_code}, Body: {response.text}")
-        return False
-
-def cleanup_test_data():
-    """Clean up test data created during testing"""
-    print(f"\n🧹 Cleaning up test data...")
-    
-    # Try to clean up parcel images for test order
-    try:
-        # Note: The API doesn't have a DELETE endpoint for parcel images based on the code review,
-        # so we'll just note the cleanup limitation
-        log_test_step("CLEANUP", "INFO", 
-                    f"Test parcel images for {TEST_ORDER_ID} will remain in database (no DELETE endpoint available)")
-    except Exception as e:
-        log_test_step("CLEANUP", "FAIL", f"Cleanup error: {str(e)}")
-
-def main():
-    """Main test execution"""
-    print("=" * 80)
-    print("🚀 PHASE 3: SHIPPING & TRACKING ENHANCEMENT - BACKEND API TESTING")
-    print("=" * 80)
-    print(f"Base URL: {API_BASE_URL}")
-    print(f"Test Order ID: {TEST_ORDER_ID}")
-    
-    test_results = {
-        "parcel_image_save": False,
-        "parcel_image_retrieve": False,
-        "order_tracking_update": False,
-        "order_details_verification": False
-    }
-    
-    try:
-        # Test 1: Save parcel image
-        parcel_image_id = test_parcel_images_save()
-        test_results["parcel_image_save"] = bool(parcel_image_id)
-        
-        # Test 2: Retrieve parcel images
-        if test_results["parcel_image_save"]:
-            test_results["parcel_image_retrieve"] = test_parcel_images_retrieve()
+                print("   ❌ Expected 5+ templates, got", len(templates))
+                results.append("❌ Templates CRUD (count)")
         else:
-            log_test_step("SKIP", "INFO", "Skipping parcel images retrieve test due to save failure")
+            print(f"   ❌ Failed to get templates: {response.text}")
+            results.append("❌ Templates CRUD (failed)")
         
-        # Test 3: Get an actual order ID for tracking tests
-        actual_order_id = get_actual_order_for_testing()
+        # Store template ID for further tests
+        template_id = None
         
-        if actual_order_id:
-            # Test 4: Update order with tracking number
-            test_results["order_tracking_update"] = test_order_tracking_update(actual_order_id)
+        # 2. Test POST /api/whatsapp/templates - create new template
+        print("\n2️⃣ Testing POST /api/whatsapp/templates (create new template)")
+        new_template = {
+            "name": "Test Template",
+            "triggerEvent": "manual", 
+            "body": "Hello {customer_name}, this is a test.",
+            "enabled": True
+        }
+        
+        response = requests.post(f"{BASE_URL}/whatsapp/templates", json=new_template)
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 201 or response.status_code == 200:
+            created_template = response.json()
+            template_id = created_template.get('_id')
+            print(f"   ✅ Template created with ID: {template_id}")
+            results.append("✅ Template Creation")
+        else:
+            print(f"   ❌ Failed to create template: {response.text}")
+            results.append("❌ Template Creation")
+        
+        # 3. Test PUT /api/whatsapp/templates/{id} - update template
+        if template_id:
+            print("\n3️⃣ Testing PUT /api/whatsapp/templates/{id} (update template)")
+            update_data = {
+                "name": "Updated Test Template",
+                "body": "Updated body text"
+            }
             
-            # Test 5: Verify order tracking info
-            if test_results["order_tracking_update"]:
-                test_results["order_details_verification"] = test_order_details_verification(actual_order_id)
+            response = requests.put(f"{BASE_URL}/whatsapp/templates/{template_id}", json=update_data)
+            print(f"   Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                print("   ✅ Template updated successfully")
+                results.append("✅ Template Update")
             else:
-                log_test_step("SKIP", "INFO", "Skipping order verification test due to update failure")
-        else:
-            log_test_step("SKIP", "INFO", "Skipping tracking tests - no orders available")
+                print(f"   ❌ Failed to update template: {response.text}")
+                results.append("❌ Template Update")
         
-        # Cleanup
-        cleanup_test_data()
+        # 4. Test DELETE /api/whatsapp-templates/{id} - delete template (note different path)
+        if template_id:
+            print("\n4️⃣ Testing DELETE /api/whatsapp-templates/{id} (delete template)")
+            response = requests.delete(f"{BASE_URL}/whatsapp-templates/{template_id}")
+            print(f"   Status: {response.status_code}")
+            
+            if response.status_code == 200 or response.status_code == 204:
+                print("   ✅ Template deleted successfully")
+                results.append("✅ Template Deletion")
+            else:
+                print(f"   ❌ Failed to delete template: {response.text}")
+                results.append("❌ Template Deletion")
+        
+        # 5. Test GET /api/whatsapp/stats - dashboard stats
+        print("\n5️⃣ Testing GET /api/whatsapp/stats (dashboard stats)")
+        response = requests.get(f"{BASE_URL}/whatsapp/stats")
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            stats = response.json()
+            required_stats = ['today', 'thisWeek', 'total', 'failed', 'deliveryRate', 'readRate']
+            has_required_stats = all(stat in stats for stat in required_stats)
+            
+            if has_required_stats:
+                print("   ✅ Stats returned with proper structure")
+                results.append("✅ WhatsApp Stats")
+            else:
+                print("   ❌ Stats missing required fields")
+                results.append("❌ WhatsApp Stats (missing fields)")
+        else:
+            print(f"   ❌ Failed to get stats: {response.text}")
+            results.append("❌ WhatsApp Stats")
+        
+        # 6. Test GET /api/whatsapp/messages - message log
+        print("\n6️⃣ Testing GET /api/whatsapp/messages (message log)")
+        response = requests.get(f"{BASE_URL}/whatsapp/messages")
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            messages = response.json()
+            if isinstance(messages, list):
+                print(f"   ✅ Message log returned (count: {len(messages)})")
+                results.append("✅ Message Log")
+            else:
+                print("   ❌ Expected array response")
+                results.append("❌ Message Log (format)")
+        else:
+            print(f"   ❌ Failed to get messages: {response.text}")
+            results.append("❌ Message Log")
+        
+        # 7. Test POST /api/whatsapp/send - should fail gracefully (EXPECTED BEHAVIOR)
+        print("\n7️⃣ Testing POST /api/whatsapp/send (expected error - no credentials)")
+        send_data = {
+            "phone": "919876543210",
+            "customMessage": "Test"
+        }
+        
+        response = requests.post(f"{BASE_URL}/whatsapp/send", json=send_data)
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 400:
+            error_text = response.text
+            if "WhatsApp not configured" in error_text or "inactive" in error_text:
+                print("   ✅ Expected error received (no credentials configured)")
+                results.append("✅ Send Message (expected error)")
+            else:
+                print(f"   ❌ Unexpected error message: {error_text}")
+                results.append("❌ Send Message (wrong error)")
+        else:
+            print(f"   ❌ Expected 400 error, got {response.status_code}: {response.text}")
+            results.append("❌ Send Message (wrong status)")
+        
+        # 8. Test POST /api/whatsapp/test-connection - should fail gracefully (EXPECTED BEHAVIOR)
+        print("\n8️⃣ Testing POST /api/whatsapp/test-connection (expected error - no credentials)")
+        test_data = {
+            "testPhone": "919876543210"
+        }
+        
+        response = requests.post(f"{BASE_URL}/whatsapp/test-connection", json=test_data)
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 400:
+            error_text = response.text
+            if "WhatsApp not configured" in error_text or "inactive" in error_text:
+                print("   ✅ Expected error received (no credentials configured)")
+                results.append("✅ Test Connection (expected error)")
+            else:
+                print(f"   ❌ Unexpected error message: {error_text}")
+                results.append("❌ Test Connection (wrong error)")
+        else:
+            print(f"   ❌ Expected 400 error, got {response.status_code}: {response.text}")
+            results.append("❌ Test Connection (wrong status)")
+        
+        # 9. Test GET /api/whatsapp/opt-outs - opt-out list
+        print("\n9️⃣ Testing GET /api/whatsapp/opt-outs (opt-out list)")
+        response = requests.get(f"{BASE_URL}/whatsapp/opt-outs")
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            opt_outs = response.json()
+            if isinstance(opt_outs, list):
+                print(f"   ✅ Opt-out list returned (count: {len(opt_outs)})")
+                results.append("✅ Opt-outs GET")
+            else:
+                print("   ❌ Expected array response")
+                results.append("❌ Opt-outs GET (format)")
+        else:
+            print(f"   ❌ Failed to get opt-outs: {response.text}")
+            results.append("❌ Opt-outs GET")
+        
+        # 10. Test POST /api/whatsapp/opt-outs - add opt-out
+        print("\n🔟 Testing POST /api/whatsapp/opt-outs (add opt-out)")
+        opt_out_data = {
+            "phone": "919876543210",
+            "reason": "test"
+        }
+        
+        response = requests.post(f"{BASE_URL}/whatsapp/opt-outs", json=opt_out_data)
+        print(f"   Status: {response.status_code}")
+        
+        opt_out_id = None
+        if response.status_code == 201 or response.status_code == 200:
+            opt_out = response.json()
+            opt_out_id = opt_out.get('_id')
+            print(f"   ✅ Opt-out added with ID: {opt_out_id}")
+            results.append("✅ Opt-outs POST")
+        else:
+            print(f"   ❌ Failed to add opt-out: {response.text}")
+            results.append("❌ Opt-outs POST")
+        
+        # 11. Test PUT /api/whatsapp/opt-outs/{id} - remove opt-out (re-opt-in)
+        if opt_out_id:
+            print("\n1️⃣1️⃣ Testing PUT /api/whatsapp/opt-outs/{id} (re-opt-in)")
+            response = requests.put(f"{BASE_URL}/whatsapp/opt-outs/{opt_out_id}")
+            print(f"   Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                print("   ✅ Re-opt-in successful")
+                results.append("✅ Opt-outs PUT (re-opt-in)")
+            else:
+                print(f"   ❌ Failed to re-opt-in: {response.text}")
+                results.append("❌ Opt-outs PUT")
+        
+        # 12. Test webhook verification with wrong token
+        print("\n1️⃣2️⃣ Testing GET /api/webhooks/whatsapp (webhook verification)")
+        verify_params = {
+            "hub.mode": "subscribe",
+            "hub.verify_token": "wrong_token",
+            "hub.challenge": "test123"
+        }
+        
+        response = requests.get(f"{BASE_URL}/webhooks/whatsapp", params=verify_params)
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 403:
+            print("   ✅ Webhook verification failed as expected (wrong token)")
+            results.append("✅ Webhook Verification")
+        else:
+            print(f"   ❌ Expected 403, got {response.status_code}: {response.text}")
+            results.append("❌ Webhook Verification")
+        
+        # 13. Test POST /api/webhooks/whatsapp - webhook event processing
+        print("\n1️⃣3️⃣ Testing POST /api/webhooks/whatsapp (webhook events)")
+        webhook_data = {
+            "entry": [{
+                "changes": [{
+                    "value": {
+                        "statuses": [{
+                            "id": "test-msg-id",
+                            "status": "delivered",
+                            "timestamp": "1709596800"
+                        }]
+                    }
+                }]
+            }]
+        }
+        
+        response = requests.post(f"{BASE_URL}/webhooks/whatsapp", json=webhook_data)
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('status') == 'ok':
+                print("   ✅ Webhook event processed successfully")
+                results.append("✅ Webhook Events")
+            else:
+                print(f"   ❌ Unexpected response: {result}")
+                results.append("❌ Webhook Events (response)")
+        else:
+            print(f"   ❌ Failed to process webhook: {response.text}")
+            results.append("❌ Webhook Events")
+        
+        # 14. Test POST /api/whatsapp/retry - retry failed messages
+        print("\n1️⃣4️⃣ Testing POST /api/whatsapp/retry (retry failed)")
+        retry_data = {
+            "limit": 5
+        }
+        
+        response = requests.post(f"{BASE_URL}/whatsapp/retry", json=retry_data)
+        print(f"   Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            retry_result = response.json()
+            if 'retried' in retry_result and 'total' in retry_result:
+                print(f"   ✅ Retry response: retried={retry_result.get('retried', 0)}, total={retry_result.get('total', 0)}")
+                results.append("✅ Retry Failed Messages")
+            else:
+                print(f"   ❌ Missing fields in response: {retry_result}")
+                results.append("❌ Retry Failed Messages (fields)")
+        else:
+            print(f"   ❌ Failed to retry messages: {response.text}")
+            results.append("❌ Retry Failed Messages")
+        
+        # 15. Test integrations save with WhatsApp config
+        print("\n1️⃣5️⃣ Testing PUT /api/integrations (WhatsApp config save)")
+        whatsapp_config = {
+            "whatsapp": {
+                "phoneNumberId": "test123",
+                "businessAccountId": "test456", 
+                "accessToken": "testtoken",
+                "webhookVerifyToken": "myverify",
+                "active": False
+            }
+        }
+        
+        # First save the config
+        response = requests.put(f"{BASE_URL}/integrations", json=whatsapp_config)
+        print(f"   PUT Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            # Now verify it's saved and accessToken is masked
+            response = requests.get(f"{BASE_URL}/integrations")
+            print(f"   GET Status: {response.status_code}")
+            
+            if response.status_code == 200:
+                integrations = response.json()
+                whatsapp = integrations.get('whatsapp', {})
+                
+                if whatsapp.get('phoneNumberId') == 'test123':
+                    # Check if accessToken is masked
+                    access_token = whatsapp.get('accessToken', '')
+                    if '*' in access_token:
+                        print("   ✅ WhatsApp integration saved with token masking")
+                        results.append("✅ Integration Save & Masking")
+                    else:
+                        print("   ⚠️ Integration saved but token not masked")
+                        results.append("⚠️ Integration Save (no masking)")
+                else:
+                    print("   ❌ WhatsApp config not saved properly")
+                    results.append("❌ Integration Save")
+            else:
+                print(f"   ❌ Failed to verify integration: {response.text}")
+                results.append("❌ Integration Verification")
+        else:
+            print(f"   ❌ Failed to save integration: {response.text}")
+            results.append("❌ Integration Save")
         
     except Exception as e:
-        log_test_step("CRITICAL_ERROR", "FAIL", f"Test execution failed: {str(e)}")
+        print(f"❌ Test execution failed: {str(e)}")
+        results.append("❌ Test execution failed")
     
-    # Final Results
-    print("\n" + "=" * 80)
-    print("📊 FINAL TEST RESULTS")
-    print("=" * 80)
+    # Summary
+    print("\n" + "=" * 60)
+    print("📊 PHASE 4 WHATSAPP AUTOMATION TEST RESULTS")
+    print("=" * 60)
     
-    passed_tests = sum(test_results.values())
-    total_tests = len(test_results)
+    passed = len([r for r in results if r.startswith("✅")])
+    total = len(results)
     
-    for test_name, result in test_results.items():
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} {test_name.replace('_', ' ').title()}")
+    for result in results:
+        print(f"   {result}")
     
-    print(f"\n🎯 Overall Result: {passed_tests}/{total_tests} tests passed")
+    print(f"\n🎯 SUMMARY: {passed}/{total} tests passed")
     
-    if passed_tests == total_tests:
-        print("🎉 ALL TESTS PASSED! Phase 3 Shipping & Tracking Enhancement APIs are working correctly.")
-        return 0
+    if passed == total:
+        print("🎉 ALL WHATSAPP AUTOMATION APIs WORKING!")
     else:
-        print(f"⚠️  {total_tests - passed_tests} test(s) failed. Please check the API implementations.")
-        return 1
+        print("⚠️ Some tests failed - review above for details")
+    
+    print("\n📝 IMPORTANT NOTES:")
+    print("   • Send/Test-Connection errors are EXPECTED (no credentials configured)")
+    print("   • Templates should auto-seed 5 defaults on first GET")
+    print("   • Integration masking protects sensitive tokens")
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    test_whatsapp_apis()

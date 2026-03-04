@@ -45,6 +45,7 @@ export default function IntegrationsView() {
   const [razorpay, setRazorpay] = useState({ keyId: '', keySecret: '', active: false });
   const [exchangeRate, setExchangeRate] = useState({ apiKey: '', active: false });
   const [google, setGoogle] = useState({ clientId: '', clientSecret: '', active: false });
+  const [whatsapp, setWhatsapp] = useState({ phoneNumberId: '', businessAccountId: '', accessToken: '', webhookVerifyToken: '', supportNumber: '', supportEmail: '', testPhone: '', active: false });
   const [syncing, setSyncing] = useState({});
   const [syncResults, setSyncResults] = useState({});
   const [syncHistory, setSyncHistory] = useState([]);
@@ -68,6 +69,7 @@ export default function IntegrationsView() {
           if (data.razorpay) setRazorpay(prev => ({ ...prev, ...data.razorpay }));
           if (data.exchangeRate) setExchangeRate(prev => ({ ...prev, ...data.exchangeRate }));
           if (data.google) setGoogle(prev => ({ ...prev, ...data.google }));
+          if (data.whatsapp) setWhatsapp(prev => ({ ...prev, ...data.whatsapp }));
         }
         setSyncHistory(Array.isArray(histData) ? histData : []);
       } catch (err) { console.error(err); }
@@ -82,7 +84,7 @@ export default function IntegrationsView() {
       await fetch('/api/integrations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopify, indiaPost, metaAds, razorpay, exchangeRate, google }),
+        body: JSON.stringify({ shopify, indiaPost, metaAds, razorpay, exchangeRate, google, whatsapp }),
       });
       toast.success('Integrations saved securely!');
     } catch (err) { toast.error('Failed to save'); }
@@ -141,6 +143,7 @@ export default function IntegrationsView() {
           { name: 'Razorpay', key: 'razorpay', active: razorpay.active && razorpay.keyId, desc: razorpay.active ? 'Payment fees reconciled' : 'Connect for exact gateway fees' },
           { name: 'Meta Ads', key: 'metaAds', active: metaAds.active && metaAds.token, desc: metaAds.active ? 'Ad spend tracked' : 'Connect for ad spend tracking' },
           { name: 'India Post', key: 'indiaPost', active: indiaPost.active, desc: indiaPost.active ? 'RTO tracking enabled' : 'Connect for shipment tracking' },
+          { name: 'WhatsApp', key: 'whatsapp', active: whatsapp.active, desc: whatsapp.active ? 'Auto-notifications enabled' : 'Connect for order notifications' },
         ].map(i => {
           const lastSync = getLastSync(i.key);
           return (
@@ -508,6 +511,97 @@ export default function IntegrationsView() {
       </Card>
 
       {/* Exchange Rate */}
+
+      {/* WhatsApp Business */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#25D366">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+              </div>
+              <div>
+                <CardTitle className="text-base">WhatsApp Business</CardTitle>
+                <CardDescription>Automated order notifications via WhatsApp Cloud API</CardDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant={whatsapp.active ? 'default' : 'secondary'}>{whatsapp.active ? 'Active' : 'Inactive'}</Badge>
+              <Switch checked={whatsapp.active} onCheckedChange={v => setWhatsapp({...whatsapp, active: v})} />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Phone Number ID</Label>
+              <Input value={whatsapp.phoneNumberId} onChange={e => setWhatsapp({...whatsapp, phoneNumberId: e.target.value})} placeholder="e.g., 123456789012345" />
+            </div>
+            <div>
+              <Label>Business Account ID</Label>
+              <Input value={whatsapp.businessAccountId} onChange={e => setWhatsapp({...whatsapp, businessAccountId: e.target.value})} placeholder="e.g., 123456789012345" />
+            </div>
+          </div>
+          <div>
+            <Label>Permanent Access Token</Label>
+            <div className="flex gap-2">
+              <Input type={showSecrets.waToken ? 'text' : 'password'} value={whatsapp.accessToken} onChange={e => setWhatsapp({...whatsapp, accessToken: e.target.value})} placeholder="EAAG..." />
+              <Button variant="outline" size="icon" onClick={() => toggleSecret('waToken')}>
+                {showSecrets.waToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Webhook Verify Token</Label>
+              <Input value={whatsapp.webhookVerifyToken} onChange={e => setWhatsapp({...whatsapp, webhookVerifyToken: e.target.value})} placeholder="Your custom verify token" />
+            </div>
+            <div>
+              <Label>Test Phone Number</Label>
+              <Input value={whatsapp.testPhone} onChange={e => setWhatsapp({...whatsapp, testPhone: e.target.value})} placeholder="e.g., 919876543210" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Support Phone (for auto-replies)</Label>
+              <Input value={whatsapp.supportNumber} onChange={e => setWhatsapp({...whatsapp, supportNumber: e.target.value})} placeholder="+91-XXXXX-XXXXX" />
+            </div>
+            <div>
+              <Label>Support Email</Label>
+              <Input value={whatsapp.supportEmail} onChange={e => setWhatsapp({...whatsapp, supportEmail: e.target.value})} placeholder="support@yourbrand.com" />
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-100 dark:border-green-900/30">
+            <p className="text-xs text-green-700 dark:text-green-400 font-medium mb-1">Setup Guide</p>
+            <ol className="text-[11px] text-green-600 dark:text-green-300 space-y-1 list-decimal list-inside">
+              <li>Go to <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" className="underline">Meta Developer Portal</a> → Create or select your app</li>
+              <li>Add the <strong>WhatsApp</strong> product to your app</li>
+              <li>In WhatsApp {'>'} API Setup, find your <strong>Phone Number ID</strong> and <strong>Business Account ID</strong></li>
+              <li>Generate a <strong>Permanent Access Token</strong> via System Users in Meta Business Settings</li>
+              <li>Set the Webhook URL to: <code className="text-[10px] bg-green-100 dark:bg-green-900/50 px-1 rounded">{typeof window !== 'undefined' ? `${window.location.origin}/api/webhooks/whatsapp` : '/api/webhooks/whatsapp'}</code></li>
+              <li>Use the Webhook Verify Token you set above when configuring the webhook in Meta</li>
+            </ol>
+          </div>
+          {whatsapp.active && whatsapp.phoneNumberId && (
+            <Button variant="outline" size="sm" className="w-full" onClick={async () => {
+              try {
+                const res = await fetch('/api/whatsapp/test-connection', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ testPhone: whatsapp.testPhone }),
+                });
+                const data = await res.json();
+                if (res.ok) toast.success('Test message sent! Check your WhatsApp.');
+                else toast.error(data.error || 'Test failed');
+              } catch (e) { toast.error('Connection test failed'); }
+            }}>
+              Test Connection — Send Test Message
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Google OAuth */}
       <Card>

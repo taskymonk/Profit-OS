@@ -2282,6 +2282,89 @@ export async function GET(request) {
         return json(images);
       }
 
+      case 'whatsapp': {
+        const db = await getDb();
+        switch (subResource) {
+          case 'templates': {
+            // GET /api/whatsapp/templates
+            const templates = await db.collection('whatsappTemplates').find({}).sort({ createdAt: -1 }).toArray();
+            // If no templates exist, seed defaults
+            if (templates.length === 0) {
+              const { DEFAULT_TEMPLATES } = await import('@/lib/whatsapp');
+              const now = new Date().toISOString();
+              const defaults = DEFAULT_TEMPLATES.map(t => ({ _id: uuidv4(), ...t, createdAt: now, updatedAt: now }));
+              await db.collection('whatsappTemplates').insertMany(defaults);
+              return json(defaults);
+            }
+            return json(templates);
+          }
+          case 'messages': {
+            // GET /api/whatsapp/messages?orderId=xxx
+            const msgQuery = {};
+            if (params.orderId) msgQuery.orderId = params.orderId;
+            if (params.phone) msgQuery.customerPhone = params.phone;
+            const messages = await db.collection('whatsappMessages')
+              .find(msgQuery)
+              .sort({ sentAt: -1 })
+              .limit(params.limit ? parseInt(params.limit) : 50)
+              .toArray();
+            return json(messages);
+          }
+          case 'stats': {
+            // GET /api/whatsapp/stats — dashboard widget data
+            const now = new Date();
+            const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+            const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7);
+            
+            const [todayMsgs, weekMsgs, failedMsgs, totalMsgs] = await Promise.all([
+              db.collection('whatsappMessages').countDocuments({ sentAt: { $gte: todayStart.toISOString() } }),
+              db.collection('whatsappMessages').countDocuments({ sentAt: { $gte: weekStart.toISOString() } }),
+              db.collection('whatsappMessages').countDocuments({ deliveryStatus: 'failed' }),
+              db.collection('whatsappMessages').countDocuments({}),
+            ]);
+            const delivered = await db.collection('whatsappMessages').countDocuments({ deliveryStatus: { $in: ['delivered', 'read'] } });
+            const read = await db.collection('whatsappMessages').countDocuments({ deliveryStatus: 'read' });
+            
+            return json({
+              today: todayMsgs,
+              thisWeek: weekMsgs,
+              total: totalMsgs,
+              failed: failedMsgs,
+              deliveryRate: totalMsgs > 0 ? Math.round((delivered / totalMsgs) * 100) : 0,
+              readRate: delivered > 0 ? Math.round((read / delivered) * 100) : 0,
+            });
+          }
+          case 'opt-outs': {
+            // GET /api/whatsapp/opt-outs
+            const optOuts = await db.collection('whatsappOptOuts').find({}).sort({ optedOutAt: -1 }).toArray();
+            return json(optOuts);
+          }
+          default:
+            return json({ error: 'Unknown whatsapp resource' }, 404);
+        }
+      }
+
+      case 'webhooks': {
+        // GET /api/webhooks/whatsapp — Webhook verification
+        if (subResource === 'whatsapp') {
+          const mode = params['hub.mode'];
+          const token = params['hub.verify_token'];
+          const challenge = params['hub.challenge'];
+          
+          if (mode === 'subscribe') {
+            const db = await getDb();
+            const config = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+            const verifyToken = config?.whatsapp?.webhookVerifyToken;
+            
+            if (token === verifyToken) {
+              return new Response(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } });
+            }
+          }
+          return new Response('Forbidden', { status: 403 });
+        }
+        return json({ error: 'Unknown webhook' }, 404);
+      }
+
       case 'dashboard':
         return json(await getDashboardData(params));
 
@@ -2747,6 +2830,7 @@ export async function GET(request) {
           if (masked.exchangeRate?.apiKey) masked.exchangeRate.apiKey = masked.exchangeRate.apiKey.replace(/.(?=.{4})/g, '*');
           if (masked.razorpay?.keySecret) masked.razorpay.keySecret = masked.razorpay.keySecret.replace(/.(?=.{4})/g, '*');
           if (masked.google?.clientSecret) masked.google.clientSecret = masked.google.clientSecret.replace(/.(?=.{4})/g, '*');
+          if (masked.whatsapp?.accessToken) masked.whatsapp.accessToken = masked.whatsapp.accessToken.replace(/.(?=.{4})/g, '*');
           return json(masked);
         }
         return json({});
@@ -3054,7 +3138,329 @@ export async function POST(request) {
         return json({ _id: parcelImage._id, message: 'Parcel image saved' });
       }
 
+      case 'whatsapp': {
+        const db = await getDb();
+        switch (subResource) {
+          case 'templates': {
+            // POST /api/whatsapp/templates — Create a template
+            const template = {
+              _id: uuidv4(),
+              name: body.name || 'Untitled Template',
+              triggerEvent: body.triggerEvent || 'manual',
+              metaTemplateName: body.metaTemplateName || '',
+              languageCode: body.languageCode || 'en',
+              body: body.body || '',
+              variables: body.variables || [],
+              enabled: body.enabled !== false,
+              metaApprovalStatus: body.metaApprovalStatus || 'pending',
+              useTextFallback: body.useTextFallback !== false,
+              delay: body.delay || 0,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            await db.collection('whatsappTemplates').insertOne(template);
+            return json(template);
+          }
+          case 'send': {
+            // POST /api/whatsapp/send — Send a WhatsApp message
+            const { getWhatsAppConfig, sendTextMessage, sendTemplateMessage, resolveTemplateVariables, formatPhone, isOptedOut, isQuietHours } = await import('@/lib/whatsapp');
+            const waConfig = await getWhatsAppConfig(db);
+            if (!waConfig) return json({ error: 'WhatsApp not configured or inactive' }, 400);
+            
+            const { orderId, phone, templateId, customMessage, skipOptOutCheck, skipQuietHours } = body;
+            
+            // Resolve phone number
+            let targetPhone = phone;
+            let order = null;
+            if (orderId) {
+              order = await db.collection('orders').findOne({ _id: orderId });
+              if (!order) return json({ error: 'Order not found' }, 404);
+              if (!targetPhone) {
+                targetPhone = order.customerPhone || order.customer?.phone || order.shippingAddress?.phone;
+              }
+            }
+            
+            if (!targetPhone) return json({ error: 'No phone number provided or found on order' }, 400);
+            
+            // Check opt-out
+            if (!skipOptOutCheck) {
+              const optedOut = await isOptedOut(db, targetPhone);
+              if (optedOut) return json({ error: 'Customer has opted out of WhatsApp messages', optedOut: true }, 400);
+            }
+            
+            // Check quiet hours
+            if (!skipQuietHours && isQuietHours()) {
+              // Queue the message instead of sending now
+              const queuedMsg = {
+                _id: uuidv4(),
+                orderId: orderId || null,
+                customerPhone: formatPhone(targetPhone),
+                templateId: templateId || null,
+                customMessage: customMessage || null,
+                deliveryStatus: 'queued',
+                queuedReason: 'quiet_hours',
+                sentAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+              };
+              await db.collection('whatsappMessages').insertOne(queuedMsg);
+              return json({ message: 'Message queued (quiet hours: 9PM-9AM IST)', queued: true, _id: queuedMsg._id });
+            }
+            
+            let messageText = customMessage;
+            let templateName = null;
+            let templateRecord = null;
+            
+            // If a template is specified, resolve it
+            if (templateId) {
+              templateRecord = await db.collection('whatsappTemplates').findOne({ _id: templateId });
+              if (!templateRecord) return json({ error: 'Template not found' }, 404);
+              
+              const tenantConfig = await db.collection('tenantConfig').findOne({ _id: 'tenant-config' });
+              messageText = resolveTemplateVariables(templateRecord.body, order || {}, {
+                businessName: tenantConfig?.businessName || 'GiftSugar',
+                supportNumber: waConfig.supportNumber || '',
+              });
+              templateName = templateRecord.metaTemplateName;
+            }
+            
+            if (!messageText && !templateName) {
+              return json({ error: 'Either customMessage or templateId is required' }, 400);
+            }
+            
+            try {
+              let apiResponse;
+              if (templateName && !templateRecord?.useTextFallback) {
+                // Send as Meta template
+                const bodyParams = order ? [
+                  order.customerName || 'Customer',
+                  order.orderId || '',
+                ] : [];
+                apiResponse = await sendTemplateMessage(waConfig, targetPhone, templateName, templateRecord?.languageCode || 'en', bodyParams);
+              } else {
+                // Send as text message
+                apiResponse = await sendTextMessage(waConfig, targetPhone, messageText);
+              }
+              
+              const waMessageId = apiResponse?.messages?.[0]?.id || null;
+              
+              // Log message
+              const messageLog = {
+                _id: uuidv4(),
+                orderId: orderId || null,
+                customerPhone: formatPhone(targetPhone),
+                templateId: templateId || null,
+                templateName: templateRecord?.name || 'Custom Message',
+                triggerEvent: body.triggerEvent || 'manual',
+                messageBody: messageText,
+                waMessageId,
+                deliveryStatus: 'sent',
+                sentAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+              };
+              await db.collection('whatsappMessages').insertOne(messageLog);
+              
+              return json({ success: true, messageId: waMessageId, _id: messageLog._id });
+            } catch (err) {
+              // Log failed message
+              const failedLog = {
+                _id: uuidv4(),
+                orderId: orderId || null,
+                customerPhone: formatPhone(targetPhone),
+                templateId: templateId || null,
+                templateName: templateRecord?.name || 'Custom Message',
+                triggerEvent: body.triggerEvent || 'manual',
+                messageBody: messageText,
+                deliveryStatus: 'failed',
+                failedReason: err.message,
+                sentAt: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+              };
+              await db.collection('whatsappMessages').insertOne(failedLog);
+              return json({ error: err.message, _id: failedLog._id }, 500);
+            }
+          }
+          case 'test-connection': {
+            // POST /api/whatsapp/test-connection — Test WhatsApp connection
+            const { getWhatsAppConfig, sendTextMessage } = await import('@/lib/whatsapp');
+            const waConfig = await getWhatsAppConfig(db);
+            if (!waConfig) return json({ error: 'WhatsApp not configured or inactive' }, 400);
+            
+            const testPhone = body.testPhone || waConfig.testPhone;
+            if (!testPhone) return json({ error: 'Please provide a test phone number' }, 400);
+            
+            try {
+              const result = await sendTextMessage(waConfig, testPhone, '✅ Profit OS WhatsApp connection test successful! Your integration is working.');
+              return json({ success: true, message: 'Test message sent!', messageId: result?.messages?.[0]?.id });
+            } catch (err) {
+              return json({ error: `Connection failed: ${err.message}` }, 500);
+            }
+          }
+          case 'opt-outs': {
+            // POST /api/whatsapp/opt-outs — Add opt-out
+            const { formatPhone: fmtP } = await import('@/lib/whatsapp');
+            const phone = fmtP(body.phone);
+            if (!phone) return json({ error: 'Phone number required' }, 400);
+            await db.collection('whatsappOptOuts').updateOne(
+              { phone },
+              { $set: { phone, optedOutAt: new Date().toISOString(), reason: body.reason || 'manual' } },
+              { upsert: true }
+            );
+            return json({ message: 'Phone opted out' });
+          }
+          case 'retry': {
+            // POST /api/whatsapp/retry — Retry failed messages
+            const { getWhatsAppConfig: getWAC, sendTextMessage: sendTxt } = await import('@/lib/whatsapp');
+            const waCfg = await getWAC(db);
+            if (!waCfg) return json({ error: 'WhatsApp not configured' }, 400);
+            
+            const failedMessages = await db.collection('whatsappMessages')
+              .find({ deliveryStatus: 'failed', retryCount: { $lt: 3 } })
+              .limit(body.limit || 10)
+              .toArray();
+            
+            let retried = 0;
+            for (const msg of failedMessages) {
+              try {
+                if (msg.messageBody) {
+                  await sendTxt(waCfg, msg.customerPhone, msg.messageBody);
+                  await db.collection('whatsappMessages').updateOne(
+                    { _id: msg._id },
+                    { $set: { deliveryStatus: 'sent', retriedAt: new Date().toISOString() }, $inc: { retryCount: 1 } }
+                  );
+                  retried++;
+                }
+              } catch (err) {
+                await db.collection('whatsappMessages').updateOne(
+                  { _id: msg._id },
+                  { $set: { failedReason: err.message }, $inc: { retryCount: 1 } }
+                );
+              }
+            }
+            return json({ retried, total: failedMessages.length });
+          }
+          default:
+            return json({ error: 'Unknown whatsapp action' }, 404);
+        }
+      }
 
+      case 'webhooks': {
+        // POST /api/webhooks/whatsapp — Handle incoming webhook events
+        if (subResource === 'whatsapp') {
+          const db = await getDb();
+          
+          // Process the webhook payload
+          try {
+            const entry = body?.entry;
+            if (!entry) return json({ status: 'ok' });
+            
+            for (const e of entry) {
+              const changes = e.changes || [];
+              for (const change of changes) {
+                const value = change.value || {};
+                
+                // Handle delivery status updates
+                if (value.statuses) {
+                  for (const status of value.statuses) {
+                    const msgId = status.id;
+                    const statusVal = status.status; // sent, delivered, read, failed
+                    const timestamp = status.timestamp;
+                    
+                    if (msgId) {
+                      await db.collection('whatsappMessages').updateOne(
+                        { waMessageId: msgId },
+                        {
+                          $set: {
+                            deliveryStatus: statusVal,
+                            [`${statusVal}At`]: timestamp ? new Date(parseInt(timestamp) * 1000).toISOString() : new Date().toISOString(),
+                          },
+                        }
+                      );
+                    }
+                  }
+                }
+                
+                // Handle incoming messages (customer replies)
+                if (value.messages) {
+                  const { formatPhone: fmtPh, isOptedOut: checkOpt } = await import('@/lib/whatsapp');
+                  
+                  for (const msg of value.messages) {
+                    const fromPhone = msg.from;
+                    const msgType = msg.type;
+                    const msgText = msg.text?.body || '';
+                    const msgId = msg.id;
+                    
+                    // Store incoming message
+                    await db.collection('whatsappIncoming').insertOne({
+                      _id: uuidv4(),
+                      fromPhone,
+                      messageId: msgId,
+                      type: msgType,
+                      text: msgText,
+                      timestamp: msg.timestamp,
+                      payload: msg,
+                      read: false,
+                      createdAt: new Date().toISOString(),
+                    });
+                    
+                    // Handle STOP/opt-out
+                    if (msgText.toUpperCase().trim() === 'STOP') {
+                      await db.collection('whatsappOptOuts').updateOne(
+                        { phone: fmtPh(fromPhone) },
+                        { $set: { phone: fmtPh(fromPhone), optedOutAt: new Date().toISOString(), reason: 'customer_stop' } },
+                        { upsert: true }
+                      );
+                    }
+                    
+                    // Handle STATUS query (auto-reply)
+                    if (msgText.toUpperCase().trim() === 'STATUS' || /^(SH-?\d+|#\d+)$/i.test(msgText.trim())) {
+                      const config = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+                      const waConfig = config?.whatsapp;
+                      if (waConfig?.active && waConfig?.accessToken) {
+                        // Find latest order for this phone
+                        const { sendTextMessage: sendTxtMsg } = await import('@/lib/whatsapp');
+                        const customerOrders = await db.collection('orders')
+                          .find({ $or: [
+                            { 'shippingAddress.phone': { $regex: fromPhone.slice(-10) } },
+                            { customerPhone: { $regex: fromPhone.slice(-10) } },
+                          ]})
+                          .sort({ createdAt: -1 })
+                          .limit(1)
+                          .toArray();
+                        
+                        if (customerOrders.length > 0) {
+                          const ord = customerOrders[0];
+                          const statusMsg = `Order #${ord.orderId}: Status - ${ord.kdsStatus || ord.status || 'Processing'}${ord.trackingNumber ? `\nTracking: ${ord.trackingNumber}` : ''}`;
+                          try { await sendTxtMsg(waConfig, fromPhone, statusMsg); } catch (e) { console.error('Auto-reply failed:', e); }
+                        } else {
+                          try { await sendTxtMsg(waConfig, fromPhone, 'We couldn\'t find a recent order for your number. Please contact our support team for assistance.'); } catch (e) { console.error('Auto-reply failed:', e); }
+                        }
+                      }
+                    }
+                    
+                    // Handle HELP keyword
+                    if (msgText.toUpperCase().trim() === 'HELP') {
+                      const config = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+                      const waConfig = config?.whatsapp;
+                      if (waConfig?.active && waConfig?.accessToken) {
+                        const { sendTextMessage: sendTxtHelp } = await import('@/lib/whatsapp');
+                        const tenant = await db.collection('tenantConfig').findOne({ _id: 'tenant-config' });
+                        const helpMsg = `Need help? Contact ${tenant?.businessName || 'us'}:\n📧 Email: ${waConfig.supportEmail || 'support@example.com'}\n📞 Phone: ${waConfig.supportNumber || 'N/A'}\n\nReply STOP to opt out of messages.`;
+                        try { await sendTxtHelp(waConfig, fromPhone, helpMsg); } catch (e) { console.error('Help auto-reply failed:', e); }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error('Webhook processing error:', err);
+          }
+          
+          // Always return 200 to acknowledge webhook
+          return json({ status: 'ok' });
+        }
+        return json({ error: 'Unknown webhook' }, 404);
+      }
 
       case 'kds': {
         const db = await getDb();
@@ -3690,21 +4096,38 @@ export async function PUT(request) {
         mergeSection('razorpay', ['keySecret']);
         mergeSection('exchangeRate', ['apiKey']);
         mergeSection('google', ['clientSecret']);
+        mergeSection('whatsapp', ['accessToken']);
 
         await db.collection('integrations').updateOne({ _id: 'integrations-config' }, { $set: updateData }, { upsert: true });
         return json({ message: 'Integrations updated successfully' });
       }
 
-      case 'kds': {
+      case 'whatsapp': {
         const db = await getDb();
-        // PUT /api/kds/assignments/{assignmentId}/status
-        // segments: ['kds', 'assignments', '{id}', 'status']
-        // In PUT handler: resource=kds, id=assignments, action={assignmentId}
-        // We need to re-parse for deeper paths
-        const kdsSegments = getSegments(request);
-        const kdsSubResource = kdsSegments[1]; // 'assignments' or 'material-requests'
-        const kdsId = kdsSegments[2]; // assignment or request UUID
-        const kdsAction = kdsSegments[3]; // 'status' or undefined
+        const waSegments = getSegments(request);
+        const waSubResource = waSegments[1]; // 'templates' or 'opt-outs'
+        const waId = waSegments[2]; // template ID
+        
+        if (waSubResource === 'templates' && waId) {
+          // PUT /api/whatsapp/templates/{id}
+          const existing = await db.collection('whatsappTemplates').findOne({ _id: waId });
+          if (!existing) return json({ error: 'Template not found' }, 404);
+          const updates = { ...body, updatedAt: new Date().toISOString() };
+          delete updates._id;
+          await db.collection('whatsappTemplates').updateOne({ _id: waId }, { $set: updates });
+          return json(await db.collection('whatsappTemplates').findOne({ _id: waId }));
+        }
+        
+        if (waSubResource === 'opt-outs' && waId) {
+          // PUT /api/whatsapp/opt-outs/{id} — Remove opt-out (re-opt-in)
+          await db.collection('whatsappOptOuts').deleteOne({ _id: waId });
+          return json({ message: 'Opt-out removed' });
+        }
+        
+        return json({ error: 'Invalid whatsapp endpoint' }, 400);
+      }
+
+      case 'kds': {
 
         if (kdsSubResource === 'assignments' && kdsId) {
           const assignment = await db.collection('kdsAssignments').findOne({ _id: kdsId });
@@ -3922,6 +4345,7 @@ export async function DELETE(request) {
       'stock-batches': 'stockBatches',
       'recipe-templates': 'recipeTemplates',
       'users': 'users',
+      'whatsapp-templates': 'whatsappTemplates',
     };
 
     const collection = collectionMap[resource];
