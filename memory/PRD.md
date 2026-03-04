@@ -89,3 +89,38 @@ A white-labeled SaaS application that calculates true profit per e-commerce orde
 - Free, no-auth, live rates from ECB
 - 1-hour caching for performance
 - Live USD/INR rate shown on dashboard
+
+
+## Phase 3 Features (Complete)
+
+### 1. Authentication & RBAC (Phase 1 of v3.0 Blueprint)
+- **NextAuth.js** integration with JWT sessions (30-day expiry)
+- **Email/Password authentication**: Registration + login with bcryptjs hashing
+- **Google OAuth**: Credentials (Client ID/Secret) entered via Integration Panel
+  - Dynamic credential loading from `integrations` collection
+  - Setup guide with redirect URI in Integrations page
+- **First user auto-promoted** to `master_admin` role
+- **Role-Based Access Control (RBAC)**:
+  | Role | Access |
+  |------|--------|
+  | Master Admin | Full access — all pages including Settings & Integrations |
+  | Admin | Everything except Settings & Integrations |
+  | Employee | Dashboard only (KDS in Phase 2 of v3.0) |
+- **Login page** at `/login` with branded UI (tenant logo, theme)
+- **Profile dropdown** in header (name, avatar, role badge, sign out)
+- **User Management** in Settings page (role change, delete user)
+- **Protected routes** — unauthenticated users redirected to `/login`
+- **Sidebar filtering** — nav items hidden based on user role
+
+### API Endpoints (Phase 3)
+- GET /api/auth-config — Returns { googleConfigured: boolean }
+- GET /api/auth/session — Returns current JWT session
+- GET /api/users — List all users (passwordHash stripped)
+- GET /api/users/{id} — Get specific user
+- PUT /api/users/{id}/role — Change user role
+- PUT /api/users/{id} — Update user name/avatar
+- DELETE /api/users/{id} — Remove user
+- PUT /api/integrations (google section) — Save Google OAuth credentials
+
+### New Collections
+- `users`: { _id (UUID), email, name, avatar, role, googleId, passwordHash, createdAt, updatedAt }
