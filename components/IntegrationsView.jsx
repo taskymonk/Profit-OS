@@ -371,11 +371,21 @@ export default function IntegrationsView() {
             )}
           </div>
           {(syncResults.indiaPostTest || syncResults.indiaPost) && (
-            <div className="text-xs p-2 rounded bg-muted space-y-1">
+            <div className="text-xs p-2.5 rounded bg-muted space-y-1.5">
               {syncResults.indiaPostTest && (
-                <div className="flex items-center gap-1.5">
-                  {syncResults.indiaPostTest.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
-                  <span>{syncResults.indiaPostTest.error || syncResults.indiaPostTest.message}</span>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    {syncResults.indiaPostTest.error ? <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" /> : <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                    <span>{syncResults.indiaPostTest.error || syncResults.indiaPostTest.message}</span>
+                  </div>
+                  {syncResults.indiaPostTest.serverIp && (
+                    <p className="text-[10px] text-muted-foreground mt-1 ml-5">
+                      Server IP: <code className="bg-background px-1 py-0.5 rounded font-mono">{syncResults.indiaPostTest.serverIp}</code>
+                      {syncResults.indiaPostTest.action === 'whitelist_ip' && (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium"> ← Add this IP to India Post portal</span>
+                      )}
+                    </p>
+                  )}
                 </div>
               )}
               {syncResults.indiaPost && (

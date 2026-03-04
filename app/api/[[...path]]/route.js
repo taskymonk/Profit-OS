@@ -1334,24 +1334,31 @@ async function shopifySyncOrders() {
 // ==================== INDIA POST AUTH & TRACKING ====================
 
 async function indiaPostAuth(username, password, baseUrl) {
-  const loginRes = await fetch(`${baseUrl}/access/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
+  try {
+    const loginRes = await fetch(`${baseUrl}/access/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
 
-  if (!loginRes.ok) {
-    const errText = await loginRes.text();
-    throw new Error(`India Post login failed (${loginRes.status}): ${errText}`);
-  }
+    if (!loginRes.ok) {
+      const errText = await loginRes.text();
+      throw new Error(`India Post login failed (${loginRes.status}): ${errText}`);
+    }
 
-  const loginData = await loginRes.json();
-  // Handle both response shapes: { access_token } or { data: { access_token } }
-  const accessToken = loginData?.data?.access_token || loginData?.access_token;
-  if (!accessToken) {
-    throw new Error('No access_token received from India Post. Check credentials.');
+    const loginData = await loginRes.json();
+    // Handle both response shapes: { access_token } or { data: { access_token } }
+    const accessToken = loginData?.data?.access_token || loginData?.access_token;
+    if (!accessToken) {
+      throw new Error('No access_token received from India Post. Check credentials.');
+    }
+    return accessToken;
+  } catch (err) {
+    if (err.cause?.code === 'ECONNRESET' || err.message?.includes('fetch failed') || err.message?.includes('ECONNREFUSED') || err.message?.includes('ECONNRESET')) {
+      throw new Error(`Connection refused by India Post. Your server IP must be whitelisted in India Post's portal. Go to IP Address Whitelisting in your India Post account and add your server IP. Current server IP: will be shown in the error details.`);
+    }
+    throw err;
   }
-  return accessToken;
 }
 
 async function indiaPostSyncTracking() {
@@ -1513,6 +1520,13 @@ async function indiaPostTestConnection() {
     ? 'https://test.cept.gov.in/beextcustomer/v1'
     : 'https://cept.gov.in/beextcustomer/v1';
 
+  // Get our server's public IP for helpful error messages
+  let serverIp = 'unknown';
+  try {
+    const ipRes = await fetch('https://api.ipify.org?format=text');
+    if (ipRes.ok) serverIp = (await ipRes.text()).trim();
+  } catch {}
+
   try {
     const accessToken = await indiaPostAuth(username, password, baseUrl);
     // Store token for future use
@@ -1523,15 +1537,24 @@ async function indiaPostTestConnection() {
         'indiaPost.tokenValid': true,
       }}
     );
-    await logSyncEvent(db, 'indiaPost', 'test-connection', 'success', { baseUrl });
+    await logSyncEvent(db, 'indiaPost', 'test-connection', 'success', { baseUrl, serverIp });
     return {
       message: `Connection successful! Authenticated with India Post ${sandboxMode !== false ? 'Sandbox' : 'Production'} API.`,
       baseUrl,
+      serverIp,
       tokenReceived: true,
     };
   } catch (err) {
-    await logSyncEvent(db, 'indiaPost', 'test-connection', 'error', { error: err.message });
-    return { error: `Connection failed: ${err.message}` };
+    await logSyncEvent(db, 'indiaPost', 'test-connection', 'error', { error: err.message, serverIp });
+    const isConnRefused = err.message?.includes('Connection refused') || err.message?.includes('fetch failed') || err.message?.includes('ECONNRESET');
+    if (isConnRefused) {
+      return {
+        error: `Connection refused by India Post. Your server IP (${serverIp}) must be whitelisted in India Post's portal → IP Address Whitelisting → UAT Environment. Add IP: ${serverIp}`,
+        serverIp,
+        action: 'whitelist_ip',
+      };
+    }
+    return { error: `Connection failed: ${err.message}`, serverIp };
   }
 }
 
