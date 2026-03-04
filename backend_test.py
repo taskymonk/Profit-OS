@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Backend Test for Branding & Theme Features
-Base URL: https://settings-overhaul-5.preview.emergentagent.com/api
+Base URL: https://kds-ops.preview.emergentagent.com/api
 
 Tests:
 1. ICON UPLOAD (POST /api/upload-icon)
@@ -13,7 +13,7 @@ import json
 import sys
 
 # Base URL from .env file
-BASE_URL = "https://settings-overhaul-5.preview.emergentagent.com/api"
+BASE_URL = "https://kds-ops.preview.emergentagent.com/api"
 
 def test_icon_upload():
     """Test icon upload functionality"""
