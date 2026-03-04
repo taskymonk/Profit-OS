@@ -159,7 +159,7 @@ export default function OrdersView() {
         setEmployees(Array.isArray(empData) ? empData : []);
         // KDS users = all users with employee role
         if (Array.isArray(usersData)) {
-          setKdsUsers(usersData.filter(u => u.role === 'employee' || u.role === 'admin'));
+          setKdsUsers(usersData);
         }
       } catch (err) { console.error(err); }
     }

@@ -56,13 +56,16 @@ export default function KDSView() {
 
   // Wastage dialog
   const [wastageDialogOpen, setWastageDialogOpen] = useState(false);
-  const [wastageForm, setWastageForm] = useState({ ingredient: '', quantity: '', unit: 'pcs', reason: 'Damaged', orderId: '' });
+  const [wastageForm, setWastageForm] = useState({ ingredient: '', quantity: '', reason: 'Damaged', orderId: '' });
   const [submittingWastage, setSubmittingWastage] = useState(false);
 
   // Material request dialog
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
-  const [requestForm, setRequestForm] = useState({ ingredient: '', quantity: '', unit: 'pcs', orderId: '' });
+  const [requestForm, setRequestForm] = useState({ ingredient: '', quantity: '', orderId: '' });
   const [submittingRequest, setSubmittingRequest] = useState(false);
+
+  // Inventory items for material dropdowns
+  const [inventoryItems, setInventoryItems] = useState([]);
 
   const userId = session?.user?.id;
   const userName = session?.user?.name;
@@ -83,6 +86,26 @@ export default function KDSView() {
   }, [userId, filterStatus]);
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+
+  // Fetch inventory items for wastage/request dropdowns
+  useEffect(() => {
+    async function loadInventory() {
+      try {
+        const res = await fetch('/api/inventory-items');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setInventoryItems(data.map(item => ({
+            id: item._id,
+            name: item.name,
+            category: item.category || '',
+            unit: item.unit || 'pcs',
+            stock: item.currentStock || 0,
+          })));
+        }
+      } catch (err) { console.error('Failed to load inventory:', err); }
+    }
+    loadInventory();
+  }, []);
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -113,23 +136,25 @@ export default function KDSView() {
 
   const submitWastage = async () => {
     if (!wastageForm.ingredient || !wastageForm.quantity) {
-      toast.error('Ingredient and quantity are required');
+      toast.error('Select an item and enter quantity');
       return;
     }
     setSubmittingWastage(true);
     try {
+      const item = inventoryItems.find(i => i.name === wastageForm.ingredient);
       await fetch('/api/kds/wastage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...wastageForm,
+          unit: item?.unit || 'pcs',
           employeeId: userId,
           employeeName: userName,
         }),
       });
       toast.success('Wastage reported');
       setWastageDialogOpen(false);
-      setWastageForm({ ingredient: '', quantity: '', unit: 'pcs', reason: 'Damaged', orderId: '' });
+      setWastageForm({ ingredient: '', quantity: '', reason: 'Damaged', orderId: '' });
     } catch (err) {
       toast.error('Failed to report wastage');
     }
@@ -138,23 +163,25 @@ export default function KDSView() {
 
   const submitMaterialRequest = async () => {
     if (!requestForm.ingredient || !requestForm.quantity) {
-      toast.error('Ingredient and quantity are required');
+      toast.error('Select an item and enter quantity');
       return;
     }
     setSubmittingRequest(true);
     try {
+      const item = inventoryItems.find(i => i.name === requestForm.ingredient);
       await fetch('/api/kds/material-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...requestForm,
+          unit: item?.unit || 'pcs',
           employeeId: userId,
           employeeName: userName,
         }),
       });
       toast.success('Material request submitted');
       setRequestDialogOpen(false);
-      setRequestForm({ ingredient: '', quantity: '', unit: 'pcs', orderId: '' });
+      setRequestForm({ ingredient: '', quantity: '', orderId: '' });
     } catch (err) {
       toast.error('Failed to submit request');
     }
@@ -286,6 +313,11 @@ export default function KDSView() {
                   {/* Product Info */}
                   <div>
                     <p className="text-sm font-medium">{order.productName || order.sku}</p>
+                    {order.variantName && (
+                      <p className="text-xs text-primary/80 font-medium mt-0.5">
+                        Variant: {order.variantName}
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground font-mono">SKU: {order.sku}</p>
                     {order.quantity && order.quantity > 1 && (
                       <p className="text-xs text-primary font-medium mt-0.5">Qty: {order.quantity}</p>
@@ -366,28 +398,24 @@ export default function KDSView() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Ingredient/Material</Label>
-              <Input value={wastageForm.ingredient} onChange={e => setWastageForm({...wastageForm, ingredient: e.target.value})} placeholder="e.g., Red Roses" />
+              <Label>Item</Label>
+              <Select value={wastageForm.ingredient} onValueChange={v => setWastageForm({...wastageForm, ingredient: v})}>
+                <SelectTrigger><SelectValue placeholder="Select item..." /></SelectTrigger>
+                <SelectContent>
+                  {inventoryItems.map(item => (
+                    <SelectItem key={item.id} value={item.name}>
+                      <span className="flex items-center gap-2">
+                        {item.name}
+                        <span className="text-muted-foreground text-[10px]">({item.category}) — Stock: {item.stock} {item.unit}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Quantity</Label>
-                <Input type="number" value={wastageForm.quantity} onChange={e => setWastageForm({...wastageForm, quantity: e.target.value})} placeholder="5" />
-              </div>
-              <div>
-                <Label>Unit</Label>
-                <Select value={wastageForm.unit} onValueChange={v => setWastageForm({...wastageForm, unit: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pcs">Pieces</SelectItem>
-                    <SelectItem value="kg">Kilograms</SelectItem>
-                    <SelectItem value="g">Grams</SelectItem>
-                    <SelectItem value="l">Liters</SelectItem>
-                    <SelectItem value="ml">Milliliters</SelectItem>
-                    <SelectItem value="m">Meters</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Quantity {wastageForm.ingredient && inventoryItems.find(i => i.name === wastageForm.ingredient)?.unit ? `(${inventoryItems.find(i => i.name === wastageForm.ingredient).unit})` : ''}</Label>
+              <Input type="number" value={wastageForm.quantity} onChange={e => setWastageForm({...wastageForm, quantity: e.target.value})} placeholder="5" />
             </div>
             <div>
               <Label>Reason</Label>
@@ -420,28 +448,24 @@ export default function KDSView() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Ingredient/Material</Label>
-              <Input value={requestForm.ingredient} onChange={e => setRequestForm({...requestForm, ingredient: e.target.value})} placeholder="e.g., Red Roses" />
+              <Label>Item</Label>
+              <Select value={requestForm.ingredient} onValueChange={v => setRequestForm({...requestForm, ingredient: v})}>
+                <SelectTrigger><SelectValue placeholder="Select item..." /></SelectTrigger>
+                <SelectContent>
+                  {inventoryItems.map(item => (
+                    <SelectItem key={item.id} value={item.name}>
+                      <span className="flex items-center gap-2">
+                        {item.name}
+                        <span className="text-muted-foreground text-[10px]">({item.category}) — Stock: {item.stock} {item.unit}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Quantity Needed</Label>
-                <Input type="number" value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: e.target.value})} placeholder="10" />
-              </div>
-              <div>
-                <Label>Unit</Label>
-                <Select value={requestForm.unit} onValueChange={v => setRequestForm({...requestForm, unit: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pcs">Pieces</SelectItem>
-                    <SelectItem value="kg">Kilograms</SelectItem>
-                    <SelectItem value="g">Grams</SelectItem>
-                    <SelectItem value="l">Liters</SelectItem>
-                    <SelectItem value="ml">Milliliters</SelectItem>
-                    <SelectItem value="m">Meters</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Quantity Needed {requestForm.ingredient && inventoryItems.find(i => i.name === requestForm.ingredient)?.unit ? `(${inventoryItems.find(i => i.name === requestForm.ingredient).unit})` : ''}</Label>
+              <Input type="number" value={requestForm.quantity} onChange={e => setRequestForm({...requestForm, quantity: e.target.value})} placeholder="10" />
             </div>
           </div>
           <Button onClick={submitMaterialRequest} disabled={submittingRequest} className="w-full">
