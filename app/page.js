@@ -27,9 +27,11 @@ import ExpensesView from '@/components/ExpensesView';
 import IntegrationsView from '@/components/IntegrationsView';
 import SettingsView from '@/components/SettingsView';
 import ReportsView from '@/components/ReportsView';
+import KDSView from '@/components/KDSView';
 
 const ALL_NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'employee' },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'admin' },
+  { id: 'kds', label: 'Kitchen Display', icon: Boxes, minRole: 'employee' },
   { id: 'orders', label: 'Orders', icon: ShoppingCart, minRole: 'admin' },
   { id: 'products', label: 'SKU Recipes', icon: Package, minRole: 'admin' },
   { id: 'inventory', label: 'Inventory', icon: Boxes, minRole: 'admin' },
@@ -195,6 +197,7 @@ export default function App() {
   const renderView = () => {
     switch (activeView) {
       case 'dashboard': return <DashboardView />;
+      case 'kds': return <KDSView />;
       case 'orders': return <OrdersView />;
       case 'products': return <SkuRecipesView />;
       case 'inventory': return <InventoryView />;

@@ -2276,6 +2276,155 @@ export async function GET(request) {
       case 'dashboard':
         return json(await getDashboardData(params));
 
+      case 'kds': {
+        const db = await getDb();
+        switch (subResource) {
+          case 'assignments': {
+            // GET /api/kds/assignments?employeeId=xxx&status=xxx
+            const query = {};
+            if (params.employeeId) query.employeeId = params.employeeId;
+            if (params.status && params.status !== 'all') query.status = params.status;
+            if (params.batchId) query.batchId = params.batchId;
+            const assignments = await db.collection('kdsAssignments')
+              .find(query)
+              .sort({ assignedAt: -1 })
+              .limit(parseInt(params.limit || '200'))
+              .toArray();
+            
+            // Enrich with order data
+            const orderIds = assignments.map(a => a.orderId);
+            const orders = await db.collection('orders').find({ _id: { $in: orderIds } }).toArray();
+            const orderMap = {};
+            orders.forEach(o => { orderMap[o._id] = o; });
+
+            // Enrich with recipe data for material info
+            const enriched = assignments.map(a => ({
+              ...a,
+              order: orderMap[a.orderId] || null,
+            }));
+
+            return json(enriched);
+          }
+          case 'batches': {
+            // GET /api/kds/batches - list all assignment batches
+            const batches = await db.collection('kdsAssignments').aggregate([
+              { $group: {
+                _id: '$batchId',
+                employeeId: { $first: '$employeeId' },
+                employeeName: { $first: '$employeeName' },
+                assignedBy: { $first: '$assignedBy' },
+                assignedAt: { $first: '$assignedAt' },
+                count: { $sum: 1 },
+                statuses: { $push: '$status' },
+                materialsHandedOver: { $first: '$materialsHandedOver' },
+              }},
+              { $sort: { assignedAt: -1 } },
+              { $limit: 50 },
+            ]).toArray();
+            return json(batches);
+          }
+          case 'material-summary': {
+            // GET /api/kds/material-summary?batchId=xxx or ?orderIds=id1,id2
+            let orderIds = [];
+            if (params.batchId) {
+              const batchAssignments = await db.collection('kdsAssignments').find({ batchId: params.batchId }).toArray();
+              orderIds = batchAssignments.map(a => a.orderId);
+            } else if (params.orderIds) {
+              orderIds = params.orderIds.split(',');
+            }
+            if (orderIds.length === 0) return json({ materials: [], totalOrders: 0 });
+
+            const batchOrders = await db.collection('orders').find({ _id: { $in: orderIds } }).toArray();
+            const allRecipes = await db.collection('skuRecipes').find({}).toArray();
+            const recipeMap = {};
+            allRecipes.forEach(r => { recipeMap[r.sku] = r; });
+
+            // Aggregate materials
+            const materialTotals = {};
+            batchOrders.forEach(order => {
+              const recipe = recipeMap[order.sku];
+              if (!recipe) return;
+              const qty = order.quantity || 1;
+              (recipe.rawMaterials || []).forEach(m => {
+                const key = m.name || m.materialName;
+                if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'raw', quantity: 0, unit: m.unit || 'pcs' };
+                materialTotals[key].quantity += (m.quantity || 1) * qty;
+              });
+              (recipe.packagingMaterials || []).forEach(m => {
+                const key = m.name || m.materialName;
+                if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'packaging', quantity: 0, unit: m.unit || 'pcs' };
+                materialTotals[key].quantity += (m.quantity || 1) * qty;
+              });
+            });
+
+            return json({
+              materials: Object.values(materialTotals).sort((a, b) => b.quantity - a.quantity),
+              totalOrders: batchOrders.length,
+            });
+          }
+          case 'wastage': {
+            const query = {};
+            if (params.employeeId) query.employeeId = params.employeeId;
+            if (params.batchId) query.batchId = params.batchId;
+            const logs = await db.collection('wastageLog')
+              .find(query).sort({ createdAt: -1 }).limit(100).toArray();
+            return json(logs);
+          }
+          case 'material-requests': {
+            const query = {};
+            if (params.employeeId) query.employeeId = params.employeeId;
+            if (params.status) query.status = params.status;
+            const requests = await db.collection('materialRequests')
+              .find(query).sort({ createdAt: -1 }).limit(100).toArray();
+            return json(requests);
+          }
+          case 'performance': {
+            // GET /api/kds/performance — stats per employee
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStr = today.toISOString();
+            
+            const allAssignments = await db.collection('kdsAssignments').find({}).toArray();
+            const users = await db.collection('users').find({ role: 'employee' }).toArray();
+            
+            const perfByEmployee = {};
+            allAssignments.forEach(a => {
+              if (!perfByEmployee[a.employeeId]) {
+                perfByEmployee[a.employeeId] = { 
+                  employeeId: a.employeeId, 
+                  employeeName: a.employeeName || 'Unknown',
+                  totalAssigned: 0, completed: 0, inProgress: 0, todayCompleted: 0,
+                  avgTimeMinutes: 0, completionTimes: [],
+                };
+              }
+              const p = perfByEmployee[a.employeeId];
+              p.totalAssigned++;
+              if (a.status === 'completed' || a.status === 'packed') {
+                p.completed++;
+                if (a.completedAt && a.completedAt >= todayStr) p.todayCompleted++;
+                if (a.startedAt && a.completedAt) {
+                  const diff = (new Date(a.completedAt) - new Date(a.startedAt)) / 60000;
+                  if (diff > 0 && diff < 600) p.completionTimes.push(diff);
+                }
+              }
+              if (a.status === 'in_progress') p.inProgress++;
+            });
+
+            const perf = Object.values(perfByEmployee).map(p => ({
+              ...p,
+              avgTimeMinutes: p.completionTimes.length > 0
+                ? Math.round(p.completionTimes.reduce((a, b) => a + b, 0) / p.completionTimes.length)
+                : 0,
+              completionTimes: undefined,
+            }));
+
+            return json(perf);
+          }
+          default:
+            return json({ error: 'Unknown KDS endpoint' }, 404);
+        }
+      }
+
       case 'reports':
         switch (subResource) {
           case 'profitable-skus':
@@ -2877,6 +3026,113 @@ export async function POST(request) {
         });
       }
 
+
+      case 'kds': {
+        const db = await getDb();
+        switch (subResource) {
+          case 'assign': {
+            // POST /api/kds/assign — Assign orders to employee
+            const { orderIds, employeeId, employeeName, assignedBy } = body;
+            if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+              return json({ error: 'orderIds array required' }, 400);
+            }
+            if (!employeeId) return json({ error: 'employeeId required' }, 400);
+
+            const batchId = uuidv4();
+            const now = new Date().toISOString();
+            const assignments = [];
+
+            for (const orderId of orderIds) {
+              // Check if already assigned
+              const existing = await db.collection('kdsAssignments').findOne({ 
+                orderId, status: { $nin: ['packed', 'cancelled'] } 
+              });
+              if (existing) continue; // Skip already assigned
+
+              const assignment = {
+                _id: uuidv4(),
+                orderId,
+                employeeId,
+                employeeName: employeeName || 'Unknown',
+                assignedBy: assignedBy || 'admin',
+                batchId,
+                status: 'assigned', // assigned → in_progress → completed → packed
+                materialsHandedOver: false,
+                assignedAt: now,
+                startedAt: null,
+                completedAt: null,
+                packedAt: null,
+                createdAt: now,
+                updatedAt: now,
+              };
+              await db.collection('kdsAssignments').insertOne(assignment);
+              assignments.push(assignment);
+
+              // Update order with kds status
+              await db.collection('orders').updateOne({ _id: orderId }, {
+                $set: { kdsStatus: 'assigned', kdsEmployeeId: employeeId, kdsEmployeeName: employeeName, kdsBatchId: batchId, updatedAt: now }
+              });
+            }
+
+            return json({
+              message: `${assignments.length} order(s) assigned to ${employeeName}`,
+              batchId,
+              assignmentCount: assignments.length,
+              skippedCount: orderIds.length - assignments.length,
+            });
+          }
+          case 'handover': {
+            // POST /api/kds/handover — Confirm materials handed over for a batch
+            const { batchId: hoBatchId } = body;
+            if (!hoBatchId) return json({ error: 'batchId required' }, 400);
+            await db.collection('kdsAssignments').updateMany(
+              { batchId: hoBatchId },
+              { $set: { materialsHandedOver: true, updatedAt: new Date().toISOString() } }
+            );
+            return json({ message: 'Materials handover confirmed', batchId: hoBatchId });
+          }
+          case 'wastage': {
+            // POST /api/kds/wastage — Report wastage
+            const wastage = {
+              _id: uuidv4(),
+              employeeId: body.employeeId,
+              employeeName: body.employeeName || '',
+              ingredient: body.ingredient,
+              quantity: parseFloat(body.quantity) || 0,
+              unit: body.unit || 'pcs',
+              reason: body.reason || 'Other',
+              orderId: body.orderId || null,
+              batchId: body.batchId || null,
+              createdAt: new Date().toISOString(),
+            };
+            await db.collection('wastageLog').insertOne(wastage);
+            return json(wastage);
+          }
+          case 'material-request': {
+            // POST /api/kds/material-request — Request more materials
+            const req = {
+              _id: uuidv4(),
+              employeeId: body.employeeId,
+              employeeName: body.employeeName || '',
+              ingredient: body.ingredient,
+              quantity: parseFloat(body.quantity) || 0,
+              unit: body.unit || 'pcs',
+              status: 'pending', // pending → approved → denied
+              orderId: body.orderId || null,
+              batchId: body.batchId || null,
+              createdAt: new Date().toISOString(),
+              respondedAt: null,
+              respondedBy: null,
+            };
+            await db.collection('materialRequests').insertOne(req);
+            return json(req);
+          }
+          default:
+            return json({ error: 'Unknown KDS action' }, 400);
+        }
+      }
+
+
       case 'upload-logo': {
         // Handle logo upload as base64
         const db = await getDb();
@@ -3409,6 +3665,60 @@ export async function PUT(request) {
         await db.collection('integrations').updateOne({ _id: 'integrations-config' }, { $set: updateData }, { upsert: true });
         return json({ message: 'Integrations updated successfully' });
       }
+
+      case 'kds': {
+        const db = await getDb();
+        // PUT /api/kds/assignments/{assignmentId}/status
+        // segments: ['kds', 'assignments', '{id}', 'status']
+        // In PUT handler: resource=kds, id=assignments, action={assignmentId}
+        // We need to re-parse for deeper paths
+        const kdsSegments = getSegments(request);
+        const kdsSubResource = kdsSegments[1]; // 'assignments' or 'material-requests'
+        const kdsId = kdsSegments[2]; // assignment or request UUID
+        const kdsAction = kdsSegments[3]; // 'status' or undefined
+
+        if (kdsSubResource === 'assignments' && kdsId) {
+          const assignment = await db.collection('kdsAssignments').findOne({ _id: kdsId });
+          if (!assignment) return json({ error: 'Assignment not found' }, 404);
+
+          if (kdsAction === 'status') {
+            const validStatuses = ['assigned', 'in_progress', 'completed', 'packed', 'cancelled'];
+            if (!body.status || !validStatuses.includes(body.status)) {
+              return json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` }, 400);
+            }
+            const now = new Date().toISOString();
+            const updates = { status: body.status, updatedAt: now };
+            if (body.status === 'in_progress' && !assignment.startedAt) updates.startedAt = now;
+            if (body.status === 'completed' && !assignment.completedAt) updates.completedAt = now;
+            if (body.status === 'packed') { updates.packedAt = now; if (!assignment.completedAt) updates.completedAt = now; }
+            
+            await db.collection('kdsAssignments').updateOne({ _id: kdsId }, { $set: updates });
+            
+            // Also update the order's kdsStatus
+            await db.collection('orders').updateOne({ _id: assignment.orderId }, {
+              $set: { kdsStatus: body.status, updatedAt: now }
+            });
+
+            return json(await db.collection('kdsAssignments').findOne({ _id: kdsId }));
+          }
+
+          return json({ error: 'Unknown KDS assignment action' }, 400);
+        }
+        if (kdsSubResource === 'material-requests' && kdsId) {
+          const request2 = await db.collection('materialRequests').findOne({ _id: kdsId });
+          if (!request2) return json({ error: 'Request not found' }, 404);
+          const validStatuses = ['approved', 'denied'];
+          if (!body.status || !validStatuses.includes(body.status)) {
+            return json({ error: 'Status must be approved or denied' }, 400);
+          }
+          await db.collection('materialRequests').updateOne({ _id: kdsId }, {
+            $set: { status: body.status, respondedAt: new Date().toISOString(), respondedBy: body.respondedBy || 'admin' }
+          });
+          return json(await db.collection('materialRequests').findOne({ _id: kdsId }));
+        }
+        return json({ error: 'Unknown KDS update action' }, 400);
+      }
+
 
       case 'users': {
         if (!id) return json({ error: 'User ID required' }, 400);

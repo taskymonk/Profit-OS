@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Plus, Trash2, Edit, Zap, UserCheck, Search, X, Info,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2, Package,
@@ -69,6 +70,15 @@ export default function OrdersView() {
   const [savingTracking, setSavingTracking] = useState({});
   const [trackingEvents, setTrackingEvents] = useState([]);
   const [trackingEventsLoading, setTrackingEventsLoading] = useState(false);
+
+  // Bulk selection for KDS assignment
+  const [selectedOrders, setSelectedOrders] = useState(new Set());
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
+  const [bulkAssignEmployee, setBulkAssignEmployee] = useState('');
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [kdsUsers, setKdsUsers] = useState([]);
+  const [materialSummary, setMaterialSummary] = useState(null);
+  const [loadingMaterials, setLoadingMaterials] = useState(false);
 
   // Fetch tracking events for drawer order
   const fetchTrackingEvents = async (trackingNumber) => {
@@ -137,14 +147,20 @@ export default function OrdersView() {
   useEffect(() => {
     async function loadMeta() {
       try {
-        const [skuRes, empRes] = await Promise.all([
+        const [skuRes, empRes, usersRes] = await Promise.all([
           fetch('/api/sku-recipes'),
           fetch('/api/employees'),
+          fetch('/api/users'),
         ]);
         const skuData = await skuRes.json();
         const empData = await empRes.json();
+        const usersData = await usersRes.json();
         setSkuRecipes(Array.isArray(skuData) ? skuData : (skuData.orders || []));
         setEmployees(Array.isArray(empData) ? empData : []);
+        // KDS users = all users with employee role
+        if (Array.isArray(usersData)) {
+          setKdsUsers(usersData.filter(u => u.role === 'employee' || u.role === 'admin'));
+        }
       } catch (err) { console.error(err); }
     }
     loadMeta();
@@ -208,6 +224,74 @@ export default function OrdersView() {
       toast.success(`Order assigned to ${emp?.name}`);
       setAssignDialogOpen(false); setSelectedOrder(null); fetchOrders();
     } catch (err) { toast.error('Failed'); }
+  };
+
+  // Bulk select helpers
+  const toggleOrderSelect = (orderId) => {
+    setSelectedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOrders.size === orders.length) {
+      setSelectedOrders(new Set());
+    } else {
+      setSelectedOrders(new Set(orders.map(o => o._id)));
+    }
+  };
+
+  const selectPending = () => {
+    const pending = orders.filter(o => ['Unfulfilled', 'In Transit'].includes(o.status) && !o.kdsStatus);
+    setSelectedOrders(new Set(pending.map(o => o._id)));
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedOrders.size === 0 || !bulkAssignEmployee) return;
+    setBulkAssigning(true);
+    try {
+      const emp = kdsUsers.find(u => u._id === bulkAssignEmployee);
+      const res = await fetch('/api/kds/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderIds: Array.from(selectedOrders),
+          employeeId: bulkAssignEmployee,
+          employeeName: emp?.name || 'Unknown',
+          assignedBy: 'admin',
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        toast.error(data.error);
+      } else {
+        toast.success(data.message);
+        setSelectedOrders(new Set());
+        setBulkAssignOpen(false);
+        setBulkAssignEmployee('');
+        setMaterialSummary(null);
+        fetchOrders();
+      }
+    } catch (err) {
+      toast.error('Failed to assign orders');
+    }
+    setBulkAssigning(false);
+  };
+
+  const fetchMaterialSummary = async () => {
+    if (selectedOrders.size === 0) return;
+    setLoadingMaterials(true);
+    try {
+      const res = await fetch(`/api/kds/material-summary?orderIds=${Array.from(selectedOrders).join(',')}`);
+      const data = await res.json();
+      setMaterialSummary(data);
+    } catch (err) {
+      console.error('Failed to load material summary:', err);
+    }
+    setLoadingMaterials(false);
   };
 
   const openDrawer = async (order) => {
@@ -393,6 +477,70 @@ export default function OrdersView() {
         </DialogContent>
       </Dialog>
 
+      {/* Bulk KDS Assignment Toolbar */}
+      {selectedOrders.size > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-xl border-2 border-primary/30 bg-primary/5 animate-in slide-in-from-top-2">
+          <Badge variant="default" className="text-sm px-3 py-1">{selectedOrders.size} selected</Badge>
+          <Button size="sm" variant="outline" onClick={selectPending}>Select Pending</Button>
+          <Button size="sm" variant="outline" onClick={() => setSelectedOrders(new Set())}>
+            <X className="w-3 h-3 mr-1" /> Clear
+          </Button>
+          <Separator orientation="vertical" className="h-6" />
+          <Select value={bulkAssignEmployee} onValueChange={setBulkAssignEmployee}>
+            <SelectTrigger className="w-[180px] h-8 text-xs">
+              <SelectValue placeholder="Assign to employee..." />
+            </SelectTrigger>
+            <SelectContent>
+              {kdsUsers.map(u => (
+                <SelectItem key={u._id} value={u._id}>{u.name} ({u.role})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            disabled={!bulkAssignEmployee || bulkAssigning}
+            onClick={handleBulkAssign}
+          >
+            {bulkAssigning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <UserCheck className="w-4 h-4 mr-1" />}
+            Assign to KDS
+          </Button>
+          <Button size="sm" variant="outline" onClick={fetchMaterialSummary} disabled={loadingMaterials}>
+            {loadingMaterials ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Package className="w-3 h-3 mr-1" />}
+            Material Summary
+          </Button>
+        </div>
+      )}
+
+      {/* Material Summary Panel */}
+      {materialSummary && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <Package className="w-4 h-4 text-blue-500" />
+                Material Summary for {materialSummary.totalOrders} orders
+              </h4>
+              <Button size="sm" variant="ghost" onClick={() => setMaterialSummary(null)}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            {materialSummary.materials.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recipes found for selected orders. Ensure SKU recipes are configured.</p>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {materialSummary.materials.map((m, i) => (
+                  <div key={i} className="p-2 rounded-lg bg-white dark:bg-background border text-sm">
+                    <span className="font-medium">{m.name}</span>
+                    <span className="text-muted-foreground ml-1">×{m.quantity} {m.unit}</span>
+                    <Badge variant="outline" className="ml-1 text-[9px] px-1">{m.type}</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Main Content: Table + Drawer */}
       <div className="flex gap-0">
         {/* Orders Table */}
@@ -401,6 +549,12 @@ export default function OrdersView() {
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead><tr className="border-b bg-muted/50">
+                  <th className="py-3 px-2 w-10" onClick={e => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedOrders.size > 0 && selectedOrders.size === orders.length}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </th>
                   <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Order ID</th>
                   <th className="py-3 px-4 text-xs font-medium text-muted-foreground hidden lg:table-cell">Product</th>
                   <th className="py-3 px-4 text-xs font-medium text-muted-foreground">Customer</th>
@@ -413,12 +567,19 @@ export default function OrdersView() {
                 <tbody>
                   {orders.map(order => (
                     <tr key={order._id}
-                      className={`border-b hover:bg-muted/30 group cursor-pointer transition-colors ${drawerOrder?._id === order._id ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
+                      className={`border-b hover:bg-muted/30 group cursor-pointer transition-colors ${drawerOrder?._id === order._id ? 'bg-primary/5 border-l-2 border-l-primary' : ''} ${selectedOrders.has(order._id) ? 'bg-primary/10' : ''}`}
                       onClick={() => openDrawer(order)}>
+                      <td className="py-2.5 px-2" onClick={e => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedOrders.has(order._id)}
+                          onCheckedChange={() => toggleOrderSelect(order._id)}
+                        />
+                      </td>
                       <td className="py-2.5 px-4 text-sm font-medium">
                         <div className="flex items-center gap-1.5">
                           <span className="font-mono text-xs">{order.orderId}</span>
                           {order.isUrgent && <Badge variant="destructive" className="text-[10px] px-1 py-0"><Zap className="w-2.5 h-2.5" /></Badge>}
+                          {order.kdsStatus && <Badge variant="outline" className="text-[9px] px-1 py-0">{order.kdsStatus}</Badge>}
                         </div>
                         <span className="text-[11px] text-muted-foreground font-mono lg:hidden">{order.sku}</span>
                       </td>
