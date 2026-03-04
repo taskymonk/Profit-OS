@@ -9,7 +9,7 @@ import {
   Settings, Plug, ChevronLeft, ChevronRight, Menu, X,
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
   Boxes, Moon, Sun, BarChart3, LogOut, UserCircle, Shield,
-  ChevronDown
+  ChevronDown, ClipboardList
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +35,7 @@ const ALL_NAV_ITEMS = [
   { id: 'orders', label: 'Orders', icon: ShoppingCart, minRole: 'admin' },
   { id: 'products', label: 'SKU Recipes', icon: Package, minRole: 'admin' },
   { id: 'inventory', label: 'Inventory', icon: Boxes, minRole: 'admin' },
-  { id: 'employees', label: 'Employees', icon: Users, minRole: 'admin' },
+  { id: 'employees', label: 'KDS Overview', icon: ClipboardList, minRole: 'admin' },
   { id: 'expenses', label: 'Expenses', icon: Receipt, minRole: 'admin' },
   { id: 'reports', label: 'Reports', icon: BarChart3, minRole: 'admin' },
   { id: 'integrations', label: 'Integrations', icon: Plug, minRole: 'master_admin' },

@@ -1,219 +1,424 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Trash2, Edit, Users, Clock, ScanLine, CheckCircle, Package } from 'lucide-react';
+import {
+  ClipboardList, Users, Package, CheckCircle2, Truck, Play,
+  Clock, AlertOctagon, PlusCircle, RefreshCw, Loader2, Timer,
+  TrendingUp, BarChart3, Check, X, ChevronRight
+} from 'lucide-react';
 import { toast } from 'sonner';
 
-const fmt = (val) => `\u20B9${(val || 0).toLocaleString('en-IN')}`;
+const STATUS_LABELS = {
+  assigned: 'Assigned', in_progress: 'In Progress',
+  completed: 'Completed', packed: 'Packed', cancelled: 'Cancelled',
+};
+const STATUS_COLORS = {
+  assigned: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  packed: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+};
 
 export default function EmployeesView() {
-  const [employees, setEmployees] = useState([]);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [claimDialogOpen, setClaimDialogOpen] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: '', role: '', monthlySalary: '', shiftStart: '09:00', shiftEnd: '18:00' });
-  const [claimForm, setClaimForm] = useState({ employeeId: '', orderIds: '' });
-  const [claimResult, setClaimResult] = useState(null);
-  const [claiming, setClaiming] = useState(false);
+  const [activeTab, setActiveTab] = useState('assignments');
+  const [loading, setLoading] = useState(true);
+  const [assignments, setAssignments] = useState([]);
+  const [performance, setPerformance] = useState([]);
+  const [materialRequests, setMaterialRequests] = useState([]);
+  const [wastageLogs, setWastageLogs] = useState([]);
+  const [filterEmployee, setFilterEmployee] = useState('all');
+  const [users, setUsers] = useState([]);
+  const [respondingTo, setRespondingTo] = useState({});
 
-  const fetchData = async () => {
-    const res = await fetch('/api/employees');
-    setEmployees(await res.json());
-  };
-  useEffect(() => { fetchData(); }, []);
-
-  const handleSubmit = async () => {
-    const data = { ...form, monthlySalary: Number(form.monthlySalary) };
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
     try {
-      if (editing) {
-        await fetch(`/api/employees/${editing._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        toast.success('Employee updated');
-      } else {
-        await fetch('/api/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        toast.success('Employee added');
-      }
-      setDialogOpen(false); setEditing(null); fetchData();
-    } catch (err) { toast.error('Failed to save'); }
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this employee?')) return;
-    await fetch(`/api/employees/${id}`, { method: 'DELETE' });
-    toast.success('Deleted'); fetchData();
-  };
-
-  const handleClaim = async () => {
-    if (!claimForm.employeeId || !claimForm.orderIds.trim()) {
-      toast.error('Select employee and enter at least one Order ID'); return;
+      const [assignRes, perfRes, reqRes, wastRes, usersRes] = await Promise.all([
+        fetch('/api/kds/assignments'),
+        fetch('/api/kds/performance'),
+        fetch('/api/kds/material-requests'),
+        fetch('/api/kds/wastage'),
+        fetch('/api/users'),
+      ]);
+      const [assignData, perfData, reqData, wastData, usersData] = await Promise.all([
+        assignRes.json(), perfRes.json(), reqRes.json(), wastRes.json(), usersRes.json(),
+      ]);
+      setAssignments(Array.isArray(assignData) ? assignData : []);
+      setPerformance(Array.isArray(perfData) ? perfData : []);
+      setMaterialRequests(Array.isArray(reqData) ? reqData : []);
+      setWastageLogs(Array.isArray(wastData) ? wastData : []);
+      setUsers(Array.isArray(usersData) ? usersData : []);
+    } catch (err) {
+      toast.error('Failed to load KDS data');
     }
-    setClaiming(true);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const handleRespondRequest = async (requestId, status) => {
+    setRespondingTo(prev => ({ ...prev, [requestId]: true }));
     try {
-      const res = await fetch('/api/employee-claim', {
-        method: 'POST',
+      const res = await fetch(`/api/kds/material-requests/${requestId}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employeeId: claimForm.employeeId, orderId: claimForm.orderIds }),
+        body: JSON.stringify({ status, respondedBy: 'admin' }),
       });
-      const data = await res.json();
-      if (data.error) {
-        toast.error(data.error); setClaimResult(null);
-      } else {
-        toast.success(data.message);
-        setClaimResult(data);
-        setClaimForm(prev => ({ ...prev, orderIds: '' }));
-        fetchData();
+      if (res.ok) {
+        toast.success(`Request ${status}`);
+        setMaterialRequests(prev => prev.map(r => r._id === requestId ? { ...r, status } : r));
       }
-    } catch (err) { toast.error('Claim failed'); }
-    setClaiming(false);
+    } catch (err) { toast.error('Failed'); }
+    setRespondingTo(prev => ({ ...prev, [requestId]: false }));
   };
 
-  const openEdit = (emp) => {
-    setEditing(emp);
-    setForm({ name: emp.name, role: emp.role, monthlySalary: String(emp.monthlySalary), shiftStart: emp.shiftStart || '09:00', shiftEnd: emp.shiftEnd || '18:00' });
-    setDialogOpen(true);
+  // Group assignments by employee
+  const groupedByEmployee = {};
+  const filteredAssignments = filterEmployee === 'all'
+    ? assignments
+    : assignments.filter(a => a.employeeId === filterEmployee);
+
+  filteredAssignments.forEach(a => {
+    const key = a.employeeId;
+    if (!groupedByEmployee[key]) {
+      groupedByEmployee[key] = { name: a.employeeName || 'Unknown', items: [], stats: { assigned: 0, in_progress: 0, completed: 0, packed: 0 } };
+    }
+    groupedByEmployee[key].items.push(a);
+    if (groupedByEmployee[key].stats[a.status] !== undefined) {
+      groupedByEmployee[key].stats[a.status]++;
+    }
+  });
+
+  // Summary stats
+  const totalAssigned = assignments.filter(a => a.status === 'assigned').length;
+  const totalInProgress = assignments.filter(a => a.status === 'in_progress').length;
+  const totalCompleted = assignments.filter(a => a.status === 'completed').length;
+  const totalPacked = assignments.filter(a => a.status === 'packed').length;
+  const pendingRequests = materialRequests.filter(r => r.status === 'pending').length;
+
+  const formatDate = (d) => {
+    if (!d) return '-';
+    try { return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+    catch { return d; }
   };
+
+  const uniqueEmployees = [...new Map(assignments.map(a => [a.employeeId, { id: a.employeeId, name: a.employeeName }])).values()];
 
   return (
-    <div className="space-y-6 max-w-[1200px] mx-auto">
-      {/* Order Claiming Station */}
-      <Card className="border-primary/30 bg-primary/5">
-        <CardHeader className="pb-3">
+    <div className="space-y-4 max-w-[1400px] mx-auto">
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+            <Package className="w-4 h-4 text-blue-500" /> Assigned
+          </div>
+          <p className="text-2xl font-bold">{totalAssigned}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+            <Play className="w-4 h-4 text-amber-500" /> In Progress
+          </div>
+          <p className="text-2xl font-bold">{totalInProgress}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Completed
+          </div>
+          <p className="text-2xl font-bold">{totalCompleted}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+            <Truck className="w-4 h-4 text-purple-500" /> Packed
+          </div>
+          <p className="text-2xl font-bold">{totalPacked}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
+            <PlusCircle className="w-4 h-4 text-red-500" /> Pending Requests
+          </div>
+          <p className="text-2xl font-bold">{pendingRequests}</p>
+        </Card>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="assignments" className="gap-1.5">
+              <ClipboardList className="w-4 h-4" /> Assignments
+            </TabsTrigger>
+            <TabsTrigger value="performance" className="gap-1.5">
+              <BarChart3 className="w-4 h-4" /> Performance
+            </TabsTrigger>
+            <TabsTrigger value="requests" className="gap-1.5">
+              <PlusCircle className="w-4 h-4" /> Requests
+              {pendingRequests > 0 && <Badge variant="destructive" className="ml-1 text-[10px] px-1.5 py-0">{pendingRequests}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="wastage" className="gap-1.5">
+              <AlertOctagon className="w-4 h-4" /> Wastage
+            </TabsTrigger>
+          </TabsList>
           <div className="flex items-center gap-2">
-            <ScanLine className="w-5 h-5 text-primary" />
-            <div>
-              <CardTitle className="text-base">Bulk Order Claiming Station</CardTitle>
-              <CardDescription>Paste or scan multiple Order IDs (comma or newline separated)</CardDescription>
-            </div>
+            <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+              <SelectTrigger className="w-[180px] h-8 text-xs">
+                <SelectValue placeholder="All employees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employees</SelectItem>
+                {uniqueEmployees.map(e => (
+                  <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={fetchAll} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-1 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="sm:w-64">
-                <Select value={claimForm.employeeId} onValueChange={v => setClaimForm({...claimForm, employeeId: v})}>
-                  <SelectTrigger><SelectValue placeholder="Select Employee" /></SelectTrigger>
-                  <SelectContent>{employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name} ({e.role})</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <Button onClick={handleClaim} disabled={claiming} className="sm:self-start">
-                <CheckCircle className="w-4 h-4 mr-2" /> {claiming ? 'Claiming...' : 'Claim All Orders'}
-              </Button>
-            </div>
-            <textarea
-              className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono"
-              value={claimForm.orderIds}
-              onChange={e => setClaimForm({...claimForm, orderIds: e.target.value})}
-              placeholder={"Paste Order IDs here (comma or newline separated):\nGS-1005, GS-1006, GS-1007\nor\nGS-1005\nGS-1006\nGS-1007"}
-              rows={3}
-            />
-            {claimForm.orderIds.trim() && (
-              <p className="text-xs text-muted-foreground">
-                {claimForm.orderIds.split(/[,\n]+/).map(s => s.trim()).filter(Boolean).length} order(s) to claim
-              </p>
-            )}
-          </div>
-          {claimResult && (
-            <div className="mt-3 p-3 rounded-lg bg-background border space-y-1">
-              <div className="flex items-center gap-2 text-sm font-medium text-emerald-600">
-                <CheckCircle className="w-4 h-4" />
-                <span>{claimResult.message}</span>
-              </div>
-              {claimResult.claimed?.length > 0 && (
-                <p className="text-xs text-muted-foreground">Claimed: {claimResult.claimed.join(', ')}</p>
-              )}
-              {claimResult.notFound?.length > 0 && (
-                <p className="text-xs text-red-500">Not found: {claimResult.notFound.join(', ')}</p>
-              )}
+        </div>
+
+        {/* Assignments Tab */}
+        <TabsContent value="assignments" className="space-y-4 mt-4">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+          ) : Object.keys(groupedByEmployee).length === 0 ? (
+            <Card className="p-12 text-center text-muted-foreground">
+              <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No active KDS assignments</p>
+              <p className="text-sm mt-1">Go to Orders page → select orders → assign to KDS</p>
+            </Card>
+          ) : (
+            Object.entries(groupedByEmployee).map(([empId, group]) => (
+              <Card key={empId}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-sm font-bold text-primary">{group.name[0]}</span>
+                      </div>
+                      <div>
+                        <CardTitle className="text-base">{group.name}</CardTitle>
+                        <CardDescription>{group.items.length} orders assigned</CardDescription>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {group.stats.assigned > 0 && <Badge className={STATUS_COLORS.assigned}>{group.stats.assigned} assigned</Badge>}
+                      {group.stats.in_progress > 0 && <Badge className={STATUS_COLORS.in_progress}>{group.stats.in_progress} in progress</Badge>}
+                      {group.stats.completed > 0 && <Badge className={STATUS_COLORS.completed}>{group.stats.completed} completed</Badge>}
+                      {group.stats.packed > 0 && <Badge className={STATUS_COLORS.packed}>{group.stats.packed} packed</Badge>}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Order</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Product</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Variant</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Status</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Assigned</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Started</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Completed</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.items.sort((a, b) => {
+                          const order = { assigned: 0, in_progress: 1, completed: 2, packed: 3 };
+                          return (order[a.status] || 9) - (order[b.status] || 9);
+                        }).map(a => (
+                          <tr key={a._id} className="border-b last:border-0 hover:bg-muted/20">
+                            <td className="py-2 px-3 font-mono text-xs">{a.order?.orderId || '-'}</td>
+                            <td className="py-2 px-3 text-xs max-w-[200px] truncate">{a.order?.productName || '-'}</td>
+                            <td className="py-2 px-3 text-xs text-primary/80">{a.order?.variantName || '-'}</td>
+                            <td className="py-2 px-3">
+                              <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[a.status] || ''}`}>
+                                {STATUS_LABELS[a.status] || a.status}
+                              </Badge>
+                            </td>
+                            <td className="py-2 px-3 text-xs text-muted-foreground">{formatDate(a.assignedAt)}</td>
+                            <td className="py-2 px-3 text-xs text-muted-foreground">{formatDate(a.startedAt)}</td>
+                            <td className="py-2 px-3 text-xs text-muted-foreground">{formatDate(a.completedAt)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        {/* Performance Tab */}
+        <TabsContent value="performance" className="space-y-4 mt-4">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+          ) : performance.length === 0 ? (
+            <Card className="p-12 text-center text-muted-foreground">
+              <BarChart3 className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No performance data yet</p>
+              <p className="text-sm mt-1">Stats appear after employees start completing orders</p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {performance.map(p => (
+                <Card key={p.employeeId} className="overflow-hidden">
+                  <div className="h-1 bg-primary" />
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="font-bold text-primary">{(p.employeeName || '?')[0]}</span>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm">{p.employeeName}</p>
+                        <p className="text-xs text-muted-foreground">{p.totalAssigned} total orders</p>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="grid grid-cols-2 gap-3 text-center">
+                      <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/20">
+                        <p className="text-lg font-bold text-emerald-600">{p.completed}</p>
+                        <p className="text-[10px] text-muted-foreground">Completed</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/20">
+                        <p className="text-lg font-bold text-blue-600">{p.todayCompleted}</p>
+                        <p className="text-[10px] text-muted-foreground">Today</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/20">
+                        <p className="text-lg font-bold text-amber-600">{p.inProgress}</p>
+                        <p className="text-[10px] text-muted-foreground">In Progress</p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-violet-50 dark:bg-violet-950/20">
+                        <p className="text-lg font-bold text-violet-600">{p.avgTimeMinutes > 0 ? `${p.avgTimeMinutes}m` : '-'}</p>
+                        <p className="text-[10px] text-muted-foreground">Avg Time</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
 
-      {/* Employee Management Header */}
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">Track team members, salaries, and daily output</p>
-        <Dialog open={dialogOpen} onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditing(null); }}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setForm({ name: '', role: '', monthlySalary: '', shiftStart: '09:00', shiftEnd: '18:00' })}>
-              <Plus className="w-4 h-4 mr-2" /> Add Employee
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>{editing ? 'Edit' : 'Add'} Employee</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Name</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} /></div>
-              <div><Label>Role</Label><Input value={form.role} onChange={e => setForm({...form, role: e.target.value})} placeholder="Packer, Chocolatier, etc." /></div>
-              <div><Label>Monthly Salary (INR)</Label><Input type="number" value={form.monthlySalary} onChange={e => setForm({...form, monthlySalary: e.target.value})} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>Shift Start</Label><Input type="time" value={form.shiftStart} onChange={e => setForm({...form, shiftStart: e.target.value})} /></div>
-                <div><Label>Shift End</Label><Input type="time" value={form.shiftEnd} onChange={e => setForm({...form, shiftEnd: e.target.value})} /></div>
-              </div>
-            </div>
-            <Button onClick={handleSubmit} className="w-full mt-2">{editing ? 'Update' : 'Add'} Employee</Button>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Employee Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {employees.map(emp => {
-          const todayOutput = (emp.dailyOutputs || []).find(d => d.date === new Date().toISOString().split('T')[0]);
-          const totalOrders = (emp.dailyOutputs || []).reduce((s, d) => s + (d.ordersPrepared || 0), 0);
-          return (
-            <Card key={emp._id}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Users className="w-5 h-5 text-primary" />
+        {/* Material Requests Tab */}
+        <TabsContent value="requests" className="space-y-3 mt-4">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+          ) : materialRequests.length === 0 ? (
+            <Card className="p-12 text-center text-muted-foreground">
+              <PlusCircle className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No material requests yet</p>
+              <p className="text-sm mt-1">Employees can request materials from their KDS dashboard</p>
+            </Card>
+          ) : (
+            materialRequests.map(req => (
+              <Card key={req._id} className={`transition-all ${req.status === 'pending' ? 'border-amber-300 dark:border-amber-700' : ''}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                        req.status === 'pending' ? 'bg-amber-100 dark:bg-amber-900/30' :
+                        req.status === 'approved' ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+                        'bg-red-100 dark:bg-red-900/30'
+                      }`}>
+                        {req.status === 'pending' ? <Clock className="w-4 h-4 text-amber-600" /> :
+                         req.status === 'approved' ? <Check className="w-4 h-4 text-emerald-600" /> :
+                         <X className="w-4 h-4 text-red-600" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {req.ingredient} <span className="text-muted-foreground">×{req.quantity} {req.unit || ''}</span>
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Requested by <span className="font-medium">{req.employeeName || 'Unknown'}</span> · {formatDate(req.createdAt)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-sm">{emp.name}</h3>
-                      <Badge variant="outline" className="text-xs">{emp.role}</Badge>
+                    <div className="flex items-center gap-2">
+                      {req.status === 'pending' ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                            onClick={() => handleRespondRequest(req._id, 'approved')}
+                            disabled={respondingTo[req._id]}
+                          >
+                            {respondingTo[req._id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3 mr-1" />}
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-red-600 border-red-300 hover:bg-red-50"
+                            onClick={() => handleRespondRequest(req._id, 'denied')}
+                            disabled={respondingTo[req._id]}
+                          >
+                            <X className="w-3 h-3 mr-1" /> Deny
+                          </Button>
+                        </>
+                      ) : (
+                        <Badge variant={req.status === 'approved' ? 'default' : 'destructive'} className="text-xs">
+                          {req.status === 'approved' ? 'Approved' : 'Denied'}
+                        </Badge>
+                      )}
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(emp)}><Edit className="w-3.5 h-3.5" /></Button>
-                    <Button size="icon" variant="ghost" className="text-destructive" onClick={() => handleDelete(emp._id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                  <div><span className="text-muted-foreground">Salary</span><p className="font-bold text-sm">{fmt(emp.monthlySalary)}</p></div>
-                  <div><span className="text-muted-foreground">Shift</span><p className="font-medium flex items-center gap-1"><Clock className="w-3 h-3" />{emp.shiftStart} - {emp.shiftEnd}</p></div>
-                  <div><span className="text-muted-foreground">Today</span><p className="font-bold text-sm text-primary">{todayOutput?.ordersPrepared || 0} orders</p></div>
-                  <div><span className="text-muted-foreground">All Time</span><p className="font-bold text-sm">{totalOrders} orders</p></div>
-                </div>
-                {/* Recent daily outputs */}
-                {(emp.dailyOutputs || []).length > 0 && (
-                  <>
-                    <Separator className="my-2" />
-                    <p className="text-xs font-semibold mb-1">Recent Output:</p>
-                    <div className="space-y-1 max-h-24 overflow-y-auto">
-                      {(emp.dailyOutputs || []).slice(-3).reverse().map((d, i) => (
-                        <div key={i} className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">{d.date}</span>
-                          <div className="flex items-center gap-1">
-                            <Package className="w-3 h-3 text-muted-foreground" />
-                            <span className="font-medium">{d.ordersPrepared} orders</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        {/* Wastage Tab */}
+        <TabsContent value="wastage" className="mt-4">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>
+          ) : wastageLogs.length === 0 ? (
+            <Card className="p-12 text-center text-muted-foreground">
+              <AlertOctagon className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">No wastage reports</p>
+              <p className="text-sm mt-1">Employees can report wastage from their KDS dashboard</p>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/30">
+                      <th className="py-2.5 px-4 text-xs font-medium text-muted-foreground text-left">Item</th>
+                      <th className="py-2.5 px-4 text-xs font-medium text-muted-foreground text-left">Qty</th>
+                      <th className="py-2.5 px-4 text-xs font-medium text-muted-foreground text-left">Reason</th>
+                      <th className="py-2.5 px-4 text-xs font-medium text-muted-foreground text-left">Reported By</th>
+                      <th className="py-2.5 px-4 text-xs font-medium text-muted-foreground text-left">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wastageLogs.map(w => (
+                      <tr key={w._id} className="border-b last:border-0 hover:bg-muted/20">
+                        <td className="py-2.5 px-4 font-medium">{w.ingredient}</td>
+                        <td className="py-2.5 px-4 text-muted-foreground">{w.quantity} {w.unit || ''}</td>
+                        <td className="py-2.5 px-4">
+                          <Badge variant="outline" className="text-[10px]">{w.reason}</Badge>
+                        </td>
+                        <td className="py-2.5 px-4 text-muted-foreground">{w.employeeName || '-'}</td>
+                        <td className="py-2.5 px-4 text-xs text-muted-foreground">{formatDate(w.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </CardContent>
             </Card>
-          );
-        })}
-      </div>
-      {employees.length === 0 && <Card><CardContent className="py-12 text-center text-muted-foreground">No employees added yet</CardContent></Card>}
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
