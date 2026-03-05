@@ -2654,6 +2654,21 @@ DO NOT test Shopify sync by calling the actual Shopify API."
         - working: true
           agent: "testing"
           comment: "FRONTEND UI TESTED - Phase 9F FIFO Inventory + Recipe Templates UI flows fully functional. (1) SKU Recipes Page: Quick Setup Guide with 4 steps visible, Recipe Coverage shows '115/115 products have recipes — 100% of orders costed', Recipe Templates section shows 2 templates (not empty state), Products section displays 115 products sorted by orders, top products are 'Customized Tin Mini Album' variants, search functionality working. (2) Inventory Page: 'Inventory & Stock' header with 'FIFO-based stock tracking' subtitle visible, summary cards (Total Items: 4, Total Stock Units: 600, Stock Value: ₹9,300, Low Stock Alerts: 0) displayed, 'Orders We Can Prepare' section showing product availability. (3) Expenses Page: 'Expenses & Overhead' header visible, 'Raw Material Purchases' category available for inventory bridge. (4) Settings Page: 'Shopify Txn Fee Rate (%)' field visible with value 2 and helper text. (5) Dashboard Page: All key metrics (Net Profit: ₹7,349.26, Total Orders: 34, RTO Rate: 0%, ROAS: 14.75x) loading without errors, charts and visualizations working. All Phase 9F UI elements working correctly."
+
+  - task: "Phase 5: Finance Module Refactor (Smart Approach)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "PHASE 5 FINANCE MODULE REFACTOR COMPLETE. Purchase Orders completely removed from backend using 'Smart Approach'. Implemented: 1) Bills CRUD with automated fields (totalAmount, totalPaid, outstanding, computedStatus), 2) Bill Payment Recording with status transitions (pending→partial→paid), 3) Sync from Expenses (KEY FEATURE) - auto-generates bills from overhead expenses with duplicate prevention, 4) Vendors CRUD with subCategory support, 5) Finance Analytics with cash flow summary (NO PO fields), 6) Complete removal of all Purchase Order endpoints. Collections: bills, vendors. APIs: /bills (CRUD), /bills/payment (record payments), /bills/sync-from-expenses (KEY), /vendors (CRUD with subCategory), /finance/cash-flow, /finance/priority. Purchase Order endpoints (/purchase-orders) completely removed and return 404."
+        - working: true
+          agent: "testing"
+          comment: "✅ PHASE 5 FINANCE MODULE REFACTOR TESTED - ALL 6 AREAS PASSED! (1) Bills CRUD: Found 7 bills with required fields (_id, vendorName, category, amount, taxAmount, totalAmount, totalPaid, outstanding, computedStatus, payments). Successfully created, updated, and deleted test bills. (2) Bill Payment Recording: Successfully recorded partial payment (₹500) and final payment (₹680), payment functionality working correctly. (3) Sync from Expenses (KEY FEATURE): Generated bills from 2 expenses, duplicate prevention working (second sync generated 0 duplicates). (4) Vendors CRUD with subCategory: Successfully created vendor with subCategory 'Boxes', updated email, deleted vendor. subCategory field properly saved and retrieved. (5) Finance Analytics (NO PO fields): Cash flow endpoint returns all required fields (totalBilled, totalPaid, totalOutstanding, overdueAmount, overdueCount, dueThisMonthAmount, dueThisMonthCount, totalBills, monthlyData). NO PO fields found (pendingPOAmount, pendingPOCount, totalPOs correctly removed). Priority endpoint returns array of 7 unpaid bills. (6) Purchase Orders REMOVED: All PO endpoints correctly return 404 (GET, PUT, DELETE /purchase-orders). Finance module refactor working correctly with complete PO removal."
     - agent: "main"
       message: "RECIPE TEMPLATES + SYNC FIX TESTING. Base URL: http://localhost:3000/api. Test these 6 areas:
 
@@ -3933,3 +3948,34 @@ test_instructions: |
 ✓ Test data cleanup successful (no residual test records)
 
 **PHASE 5: BILLS & FINANCE MODULE FULLY TESTED AND OPERATIONAL!** Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
+    - agent: "main"
+      message: "PHASE 5 REFACTOR COMPLETE — 'Smart Approach' applied. PURCHASE ORDERS REMOVED entirely from backend. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test the following 12 Finance APIs (POs are gone, should return 404):
+
+1. **Bills CRUD** (should still work):
+   - GET /api/bills — list all bills
+   - POST /api/bills — create manual bill with {vendorName, category, amount:1000, taxAmount:180, dueDate:'2026-04-01'}
+   - PUT /api/bills/{id} — update description
+   - DELETE /api/bills/{id} — remove bill
+
+2. **Bill Payment Recording** (should work):
+   - POST /api/bills/payment — record payment with {billId, amount:500, method:'UPI'}
+
+3. **Sync from Expenses** (key new feature):
+   - POST /api/bills/sync-from-expenses — auto-generate bills from overhead expenses
+
+4. **Vendors CRUD** (should work, now with subCategory):
+   - GET /api/vendors — list vendors
+   - POST /api/vendors — create vendor with {name:'Test Vendor', category:'Packaging', subCategory:'Boxes', phone:'+91-9999999999'}
+   - PUT /api/vendors/{id} — update vendor
+   - DELETE /api/vendors/{id} — remove vendor
+
+5. **Finance Analytics** (should work, no PO fields):
+   - GET /api/finance/cash-flow — verify response does NOT contain pendingPOAmount, pendingPOCount, totalPOs fields
+   - GET /api/finance/priority — payment priority list
+
+6. **REMOVED — Purchase Orders should return 404**:
+   - GET /api/purchase-orders — should return 404
+   - PUT /api/purchase-orders/{any-id} — should return 404
+   - DELETE /api/purchase-orders/{any-id} — should return 404
+
+Existing data: 5 bills, 2 vendors. Verify clean data after test."

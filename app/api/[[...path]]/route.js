@@ -2372,20 +2372,6 @@ export async function GET(request) {
         return json(enriched);
       }
 
-      case 'purchase-orders': {
-        const db = await getDb();
-        if (subResource) {
-          const po = await db.collection('purchaseOrders').findOne({ _id: subResource });
-          if (!po) return json({ error: 'PO not found' }, 404);
-          return json(po);
-        }
-        const poQuery = {};
-        if (params.status && params.status !== 'all') poQuery.status = params.status;
-        if (params.vendor) poQuery.vendorId = params.vendor;
-        const pos = await db.collection('purchaseOrders').find(poQuery).sort({ createdAt: -1 }).toArray();
-        return json(pos);
-      }
-
       case 'finance': {
         const db = await getDb();
         if (subResource === 'cash-flow') {
@@ -2419,11 +2405,6 @@ export async function GET(request) {
             return s + (b.amount || 0) + (b.taxAmount || 0) - (b.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0);
           }, 0);
 
-          // PO summary
-          const allPOs = await db.collection('purchaseOrders').find({}).toArray();
-          const pendingPOs = allPOs.filter(p => !['paid', 'cancelled'].includes(p.status));
-          const pendingPOAmount = pendingPOs.reduce((s, p) => s + (p.totalAmount || 0), 0);
-
           // Monthly inflows/outflows for chart (last 6 months)
           const monthlyData = [];
           for (let i = 5; i >= 0; i--) {
@@ -2451,10 +2432,7 @@ export async function GET(request) {
             overdueCount: overdueBills.length,
             dueThisMonthAmount,
             dueThisMonthCount: dueThisMonth.length,
-            pendingPOAmount,
-            pendingPOCount: pendingPOs.length,
             totalBills: allBills.length,
-            totalPOs: allPOs.length,
             monthlyData,
           });
         }
@@ -3638,6 +3616,7 @@ export async function POST(request) {
           _id: uuidv4(),
           name: body.name || '',
           category: body.category || '',
+          subCategory: body.subCategory || '',
           contactPerson: body.contactPerson || '',
           phone: body.phone || '',
           email: body.email || '',
@@ -4427,21 +4406,6 @@ export async function PUT(request) {
         return json(await db.collection('bills').findOne({ _id: billId }));
       }
 
-      case 'purchase-orders': {
-        const db = await getDb();
-        const poSegments = getSegments(request);
-        const poId = poSegments[1];
-        if (!poId) return json({ error: 'PO ID required' }, 400);
-        
-        const existingPO = await db.collection('purchaseOrders').findOne({ _id: poId });
-        if (!existingPO) return json({ error: 'PO not found' }, 404);
-        
-        const poUpdates = { ...body, updatedAt: new Date().toISOString() };
-        delete poUpdates._id;
-        await db.collection('purchaseOrders').updateOne({ _id: poId }, { $set: poUpdates });
-        return json(await db.collection('purchaseOrders').findOne({ _id: poId }));
-      }
-
       case 'vendors': {
         const db = await getDb();
         const vendorSegments = getSegments(request);
@@ -4698,7 +4662,6 @@ export async function DELETE(request) {
       'users': 'users',
       'whatsapp-templates': 'whatsappTemplates',
       'bills': 'bills',
-      'purchase-orders': 'purchaseOrders',
       'vendors': 'vendors',
     };
 
