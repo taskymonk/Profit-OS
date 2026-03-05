@@ -2344,6 +2344,149 @@ export async function GET(request) {
         }
       }
 
+      case 'bills': {
+        const db = await getDb();
+        if (subResource) {
+          // GET /api/bills/{id}
+          const bill = await db.collection('bills').findOne({ _id: subResource });
+          if (!bill) return json({ error: 'Bill not found' }, 404);
+          return json(bill);
+        }
+        // GET /api/bills?status=pending&vendor=xxx
+        const query = {};
+        if (params.status && params.status !== 'all') query.status = params.status;
+        if (params.vendor) query.vendorId = params.vendor;
+        if (params.category) query.category = params.category;
+        const bills = await db.collection('bills').find(query).sort({ dueDate: 1 }).toArray();
+        // Compute derived fields
+        const enriched = bills.map(b => {
+          const totalAmount = (b.amount || 0) + (b.taxAmount || 0);
+          const totalPaid = (b.payments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+          const outstanding = Math.max(0, totalAmount - totalPaid);
+          let computedStatus = b.status;
+          if (outstanding <= 0) computedStatus = 'paid';
+          else if ((b.payments || []).length > 0) computedStatus = 'partial';
+          else if (new Date(b.dueDate) < new Date()) computedStatus = 'overdue';
+          return { ...b, outstanding, totalAmount, totalPaid, computedStatus };
+        });
+        return json(enriched);
+      }
+
+      case 'purchase-orders': {
+        const db = await getDb();
+        if (subResource) {
+          const po = await db.collection('purchaseOrders').findOne({ _id: subResource });
+          if (!po) return json({ error: 'PO not found' }, 404);
+          return json(po);
+        }
+        const poQuery = {};
+        if (params.status && params.status !== 'all') poQuery.status = params.status;
+        if (params.vendor) poQuery.vendorId = params.vendor;
+        const pos = await db.collection('purchaseOrders').find(poQuery).sort({ createdAt: -1 }).toArray();
+        return json(pos);
+      }
+
+      case 'finance': {
+        const db = await getDb();
+        if (subResource === 'cash-flow') {
+          // GET /api/finance/cash-flow — Cash flow summary
+          const now = new Date();
+          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          
+          // Bills data
+          const allBills = await db.collection('bills').find({}).toArray();
+          const totalBilled = allBills.reduce((s, b) => s + (b.amount || 0) + (b.taxAmount || 0), 0);
+          const totalPaidBills = allBills.reduce((s, b) => s + (b.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0), 0);
+          const totalOutstanding = totalBilled - totalPaidBills;
+          
+          // Overdue
+          const overdueBills = allBills.filter(b => {
+            const outstanding = (b.amount || 0) + (b.taxAmount || 0) - (b.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+            return outstanding > 0 && new Date(b.dueDate) < now;
+          });
+          const overdueAmount = overdueBills.reduce((s, b) => {
+            return s + (b.amount || 0) + (b.taxAmount || 0) - (b.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0);
+          }, 0);
+
+          // Due this month
+          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+          const dueThisMonth = allBills.filter(b => {
+            const dd = new Date(b.dueDate);
+            const outstanding = (b.amount || 0) + (b.taxAmount || 0) - (b.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+            return outstanding > 0 && dd >= monthStart && dd <= monthEnd;
+          });
+          const dueThisMonthAmount = dueThisMonth.reduce((s, b) => {
+            return s + (b.amount || 0) + (b.taxAmount || 0) - (b.payments || []).reduce((ps, p) => ps + (p.amount || 0), 0);
+          }, 0);
+
+          // PO summary
+          const allPOs = await db.collection('purchaseOrders').find({}).toArray();
+          const pendingPOs = allPOs.filter(p => !['paid', 'cancelled'].includes(p.status));
+          const pendingPOAmount = pendingPOs.reduce((s, p) => s + (p.totalAmount || 0), 0);
+
+          // Monthly inflows/outflows for chart (last 6 months)
+          const monthlyData = [];
+          for (let i = 5; i >= 0; i--) {
+            const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const mEnd = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+            const mLabel = m.toLocaleString('en-IN', { month: 'short', year: '2-digit' });
+            
+            // Outflows = payments made this month
+            let outflows = 0;
+            allBills.forEach(b => {
+              (b.payments || []).forEach(p => {
+                const pd = new Date(p.date);
+                if (pd >= m && pd <= mEnd) outflows += (p.amount || 0);
+              });
+            });
+            
+            monthlyData.push({ month: mLabel, outflows });
+          }
+
+          return json({
+            totalBilled,
+            totalPaid: totalPaidBills,
+            totalOutstanding,
+            overdueAmount,
+            overdueCount: overdueBills.length,
+            dueThisMonthAmount,
+            dueThisMonthCount: dueThisMonth.length,
+            pendingPOAmount,
+            pendingPOCount: pendingPOs.length,
+            totalBills: allBills.length,
+            totalPOs: allPOs.length,
+            monthlyData,
+          });
+        }
+        
+        if (subResource === 'priority') {
+          // GET /api/finance/priority — Payment priority recommendations
+          const now = new Date();
+          const allBills = await db.collection('bills').find({}).toArray();
+          const unpaid = allBills.filter(b => {
+            const outstanding = (b.amount || 0) + (b.taxAmount || 0) - (b.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+            return outstanding > 0;
+          }).sort((a, b) => {
+            const aOverdue = new Date(a.dueDate) < now;
+            const bOverdue = new Date(b.dueDate) < now;
+            if (aOverdue && !bOverdue) return -1;
+            if (!aOverdue && bOverdue) return 1;
+            const statutory = ['gst', 'tds', 'tax'];
+            const aS = statutory.some(s => (a.category || '').toLowerCase().includes(s));
+            const bS = statutory.some(s => (b.category || '').toLowerCase().includes(s));
+            if (aS && !bS) return -1;
+            if (!aS && bS) return 1;
+            return new Date(a.dueDate) - new Date(b.dueDate);
+          }).map(b => ({
+            ...b,
+            outstanding: (b.amount || 0) + (b.taxAmount || 0) - (b.payments || []).reduce((s, p) => s + (p.amount || 0), 0),
+          }));
+          return json(unpaid.slice(0, 10));
+        }
+        
+        return json({ error: 'Unknown finance resource' }, 404);
+      }
+
       case 'webhooks': {
         // GET /api/webhooks/whatsapp — Webhook verification
         if (subResource === 'whatsapp') {
@@ -3343,6 +3486,154 @@ export async function POST(request) {
         }
       }
 
+      case 'bills': {
+        const db = await getDb();
+        if (subResource === 'payment') {
+          // POST /api/bills/payment — Record a payment against a bill
+          const { billId, amount, date, method, notes } = body;
+          if (!billId || !amount) return json({ error: 'billId and amount required' }, 400);
+          const bill = await db.collection('bills').findOne({ _id: billId });
+          if (!bill) return json({ error: 'Bill not found' }, 404);
+          
+          const payment = {
+            _id: uuidv4(),
+            amount: parseFloat(amount),
+            date: date || new Date().toISOString(),
+            method: method || 'Bank Transfer',
+            notes: notes || '',
+            recordedAt: new Date().toISOString(),
+          };
+          
+          await db.collection('bills').updateOne(
+            { _id: billId },
+            { $push: { payments: payment }, $set: { updatedAt: new Date().toISOString() } }
+          );
+          
+          // Check if fully paid
+          const updated = await db.collection('bills').findOne({ _id: billId });
+          const totalAmount = (updated.amount || 0) + (updated.taxAmount || 0);
+          const totalPaid = (updated.payments || []).reduce((s, p) => s + (p.amount || 0), 0);
+          if (totalPaid >= totalAmount) {
+            await db.collection('bills').updateOne({ _id: billId }, { $set: { status: 'paid' } });
+          } else if (totalPaid > 0) {
+            await db.collection('bills').updateOne({ _id: billId }, { $set: { status: 'partial' } });
+          }
+          
+          return json({ message: 'Payment recorded', payment });
+        }
+        
+        // POST /api/bills — Create a new bill
+        const newBill = {
+          _id: uuidv4(),
+          vendorId: body.vendorId || null,
+          vendorName: body.vendorName || '',
+          category: body.category || 'Other',
+          description: body.description || '',
+          amount: parseFloat(body.amount) || 0,
+          taxAmount: parseFloat(body.taxAmount) || 0,
+          taxType: body.taxType || 'GST',
+          dueDate: body.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: 'pending',
+          payments: [],
+          recurring: body.recurring || false,
+          recurringFrequency: body.recurringFrequency || 'monthly',
+          autoGenerated: body.autoGenerated || false,
+          source: body.source || 'manual',
+          notes: body.notes || '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await db.collection('bills').insertOne(newBill);
+        return json(newBill);
+      }
+
+      case 'purchase-orders': {
+        const db = await getDb();
+        
+        if (subResource === 'receive') {
+          // POST /api/purchase-orders/receive — Mark PO as received + update inventory
+          const { poId } = body;
+          if (!poId) return json({ error: 'poId required' }, 400);
+          const po = await db.collection('purchaseOrders').findOne({ _id: poId });
+          if (!po) return json({ error: 'PO not found' }, 404);
+          
+          await db.collection('purchaseOrders').updateOne(
+            { _id: poId },
+            { $set: { status: 'received', receivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }
+          );
+          
+          // Auto-add to inventory if items are linked
+          if (po.items && po.items.length > 0) {
+            for (const item of po.items) {
+              if (item.inventoryItemId) {
+                const batch = {
+                  _id: uuidv4(),
+                  inventoryItemId: item.inventoryItemId,
+                  purchaseDate: new Date().toISOString(),
+                  quantity: item.quantity || 0,
+                  costPerUnit: item.unitPrice || 0,
+                  totalCost: (item.quantity || 0) * (item.unitPrice || 0),
+                  supplier: po.vendorName || '',
+                  notes: `From PO #${po.poNumber || po._id}`,
+                  remainingQty: item.quantity || 0,
+                  createdAt: new Date().toISOString(),
+                };
+                await db.collection('stockBatches').insertOne(batch);
+              }
+            }
+          }
+          
+          return json({ message: 'PO marked as received', updated: true });
+        }
+        
+        // POST /api/purchase-orders — Create a new PO
+        const poCount = await db.collection('purchaseOrders').countDocuments({});
+        const newPO = {
+          _id: uuidv4(),
+          poNumber: `PO-${String(poCount + 1).padStart(4, '0')}`,
+          vendorId: body.vendorId || null,
+          vendorName: body.vendorName || '',
+          items: (body.items || []).map(item => ({
+            _id: uuidv4(),
+            name: item.name || '',
+            inventoryItemId: item.inventoryItemId || null,
+            quantity: parseFloat(item.quantity) || 0,
+            unit: item.unit || 'pcs',
+            unitPrice: parseFloat(item.unitPrice) || 0,
+            total: (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0),
+          })),
+          totalAmount: parseFloat(body.totalAmount) || 0,
+          taxAmount: parseFloat(body.taxAmount) || 0,
+          status: body.status || 'draft',
+          expectedDelivery: body.expectedDelivery || null,
+          notes: body.notes || '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await db.collection('purchaseOrders').insertOne(newPO);
+        return json(newPO);
+      }
+
+      case 'vendors': {
+        const db = await getDb();
+        const newVendor = {
+          _id: uuidv4(),
+          name: body.name || '',
+          category: body.category || '',
+          contactPerson: body.contactPerson || '',
+          phone: body.phone || '',
+          email: body.email || '',
+          address: body.address || '',
+          gstin: body.gstin || '',
+          bankDetails: body.bankDetails || '',
+          notes: body.notes || '',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await db.collection('vendors').insertOne(newVendor);
+        return json(newVendor);
+      }
+
       case 'webhooks': {
         // POST /api/webhooks/whatsapp — Handle incoming webhook events
         if (subResource === 'whatsapp') {
@@ -4102,11 +4393,53 @@ export async function PUT(request) {
         return json({ message: 'Integrations updated successfully' });
       }
 
-      case 'whatsapp': {
+      case 'bills': {
         const db = await getDb();
-        const waSegments = getSegments(request);
-        const waSubResource = waSegments[1]; // 'templates' or 'opt-outs'
-        const waId = waSegments[2]; // template ID
+        const billSegments = getSegments(request);
+        const billId = billSegments[1];
+        if (!billId) return json({ error: 'Bill ID required' }, 400);
+        
+        const existingBill = await db.collection('bills').findOne({ _id: billId });
+        if (!existingBill) return json({ error: 'Bill not found' }, 404);
+        
+        const billUpdates = { ...body, updatedAt: new Date().toISOString() };
+        delete billUpdates._id;
+        delete billUpdates.payments; // Payments are managed via POST /api/bills/payment
+        await db.collection('bills').updateOne({ _id: billId }, { $set: billUpdates });
+        return json(await db.collection('bills').findOne({ _id: billId }));
+      }
+
+      case 'purchase-orders': {
+        const db = await getDb();
+        const poSegments = getSegments(request);
+        const poId = poSegments[1];
+        if (!poId) return json({ error: 'PO ID required' }, 400);
+        
+        const existingPO = await db.collection('purchaseOrders').findOne({ _id: poId });
+        if (!existingPO) return json({ error: 'PO not found' }, 404);
+        
+        const poUpdates = { ...body, updatedAt: new Date().toISOString() };
+        delete poUpdates._id;
+        await db.collection('purchaseOrders').updateOne({ _id: poId }, { $set: poUpdates });
+        return json(await db.collection('purchaseOrders').findOne({ _id: poId }));
+      }
+
+      case 'vendors': {
+        const db = await getDb();
+        const vendorSegments = getSegments(request);
+        const vendorId = vendorSegments[1];
+        if (!vendorId) return json({ error: 'Vendor ID required' }, 400);
+        
+        const existingVendor = await db.collection('vendors').findOne({ _id: vendorId });
+        if (!existingVendor) return json({ error: 'Vendor not found' }, 404);
+        
+        const vendorUpdates = { ...body, updatedAt: new Date().toISOString() };
+        delete vendorUpdates._id;
+        await db.collection('vendors').updateOne({ _id: vendorId }, { $set: vendorUpdates });
+        return json(await db.collection('vendors').findOne({ _id: vendorId }));
+      }
+
+      case 'whatsapp': {
         
         if (waSubResource === 'templates' && waId) {
           // PUT /api/whatsapp/templates/{id}
@@ -4346,6 +4679,9 @@ export async function DELETE(request) {
       'recipe-templates': 'recipeTemplates',
       'users': 'users',
       'whatsapp-templates': 'whatsappTemplates',
+      'bills': 'bills',
+      'purchase-orders': 'purchaseOrders',
+      'vendors': 'vendors',
     };
 
     const collection = collectionMap[resource];

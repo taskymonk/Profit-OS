@@ -9,7 +9,7 @@ import {
   Settings, Plug, ChevronLeft, ChevronRight, Menu, X,
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
   Boxes, Moon, Sun, BarChart3, LogOut, UserCircle, Shield,
-  ChevronDown, ClipboardList, MessageSquare
+  ChevronDown, ClipboardList, MessageSquare, Banknote
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +29,7 @@ import SettingsView from '@/components/SettingsView';
 import ReportsView from '@/components/ReportsView';
 import KDSView from '@/components/KDSView';
 import WhatsAppView from '@/components/WhatsAppView';
+import FinanceView from '@/components/FinanceView';
 
 const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'admin' },
@@ -38,6 +39,7 @@ const ALL_NAV_ITEMS = [
   { id: 'inventory', label: 'Inventory', icon: Boxes, minRole: 'admin' },
   { id: 'employees', label: 'KDS Overview', icon: ClipboardList, minRole: 'admin' },
   { id: 'expenses', label: 'Expenses', icon: Receipt, minRole: 'admin' },
+  { id: 'finance', label: 'Finance', icon: Banknote, minRole: 'admin' },
   { id: 'reports', label: 'Reports', icon: BarChart3, minRole: 'admin' },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, minRole: 'admin' },
   { id: 'integrations', label: 'Integrations', icon: Plug, minRole: 'master_admin' },
@@ -205,6 +207,7 @@ export default function App() {
       case 'inventory': return <InventoryView />;
       case 'employees': return <EmployeesView />;
       case 'expenses': return <ExpensesView />;
+      case 'finance': return <FinanceView />;
       case 'reports': return <ReportsView />;
       case 'whatsapp': return <WhatsAppView />;
       case 'integrations': return <IntegrationsView />;
