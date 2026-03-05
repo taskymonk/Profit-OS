@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Razorpay API Endpoints Testing
-Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api
+Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api
 
 Tests 3 new Razorpay API endpoints:
 1. GET /api/razorpay/reconciliation-summary - Reconciliation Summary
@@ -14,7 +14,7 @@ import json
 import sys
 
 # Base URL from review request
-BASE_URL = "https://whatsapp-comms-next.preview.emergentagent.com/api"
+BASE_URL = "https://smart-finance-hub-41.preview.emergentagent.com/api"
 
 def test_reconciliation_summary():
     """Test GET /api/razorpay/reconciliation-summary endpoint"""

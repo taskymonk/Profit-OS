@@ -3,7 +3,7 @@
 Backend Test Suite for Phase 5: Bills & Finance Module
 Profit OS Application - Testing all 16 Bills & Finance APIs
 
-Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api
+Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api
 """
 
 import requests
@@ -11,7 +11,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 
-BASE_URL = "https://whatsapp-comms-next.preview.emergentagent.com/api"
+BASE_URL = "https://smart-finance-hub-41.preview.emergentagent.com/api"
 
 def test_api(method, endpoint, data=None, expected_status=None):
     """Helper function to test API endpoints"""

@@ -697,7 +697,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -745,7 +745,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -784,7 +784,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -1739,7 +1739,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -1787,7 +1787,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -1826,7 +1826,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -2487,7 +2487,7 @@ Test these endpoints:
 
 **PHASE 9F FIFO INVENTORY + RECIPE TEMPLATES UI TESTING COMPLETE - ALL SYSTEMS FULLY FUNCTIONAL!** Frontend perfectly integrated with backend FIFO system, ready for production use."
     - agent: "main"
-      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
+      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
     - agent: "testing"
       message: "🎉 ICON UPLOAD & BRANDING SETTINGS TESTING COMPLETE - BOTH FEATURES FULLY FUNCTIONAL!
 
@@ -2526,7 +2526,7 @@ Test these endpoints:
 - ✅ Status validation confirmed - using valid status values (created, initiated, processed, failed)
 - ✅ Sample settlement verified: ID setl_SMD5fQBVgtJkzE, Amount ₹465.60, Status: processed
 
-**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api"
+**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
     - agent: "main"
       message: "PHASE 9F: FIFO INVENTORY COSTING TESTING NEEDED. Base URL: http://localhost:3000/api. Test these 8 areas:
 
@@ -2754,7 +2754,7 @@ Clean up: Reset the 3 test recipes back to needsCostInput=true, ingredients=[] u
 **MINOR ISSUE IDENTIFIED:**
 The GET /api/recipe-templates/{id} endpoint returns 200 with null for missing templates instead of 404. This is a minor API implementation issue - the deletion functionality works correctly (template is removed from database), but the HTTP status code should be 404 for missing resources.
 
-**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api"
+**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 9G COMPREHENSIVE UX OPTIMIZATION TESTING COMPLETE - ALL 7 BACKEND FEATURES FULLY TESTED!
 
@@ -3263,7 +3263,7 @@ backend:
 
 
 test_instructions: |
-  Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api
+  Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api
   
   NEW Auth Tests (Phase 1):
   1. GET /api/auth-config - should return { googleConfigured: boolean }
@@ -3770,7 +3770,7 @@ test_instructions: |
 - Role-based permission system functional ✓
 - First user auto-promotion to master_admin ✓
 
-**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api"
+**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 4: WHATSAPP AUTOMATION BACKEND TESTING COMPLETE - ALL 15 ENDPOINTS FULLY FUNCTIONAL!
 
@@ -3811,7 +3811,7 @@ test_instructions: |
 
 **PHASE 4 WHATSAPP AUTOMATION SYSTEM STATUS:** 🎉 ALL 15 CRITICAL ENDPOINTS PRODUCTION-READY
 **Test Results:** 15/15 endpoints passed (100% success rate)
-**Base URL:** https://whatsapp-comms-next.preview.emergentagent.com/api
+**Base URL:** https://smart-finance-hub-41.preview.emergentagent.com/api
 
 **PHASE 4: WHATSAPP AUTOMATION BACKEND FULLY TESTED AND OPERATIONAL!**"
 
@@ -3855,11 +3855,11 @@ test_instructions: |
 **KDS SYSTEM STATUS**: 🎉 ALL 10 CRITICAL ENDPOINTS PRODUCTION-READY
 **Test Results**: 8/8 test suites passed (100% success rate)  
 **Existing Data**: 6 KDS assignments, 2057+ orders, verified users system
-**Base URL**: https://whatsapp-comms-next.preview.emergentagent.com/api
+**Base URL**: https://smart-finance-hub-41.preview.emergentagent.com/api
 
 **PHASE 2: EMPLOYEE KDS + ERP SYSTEM FULLY TESTED AND OPERATIONAL!**"
     - agent: "main"
-      message: "PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Test these 4 APIs: 1) POST /api/parcel-images - Save parcel image, 2) GET /api/parcel-images?orderId=xxx - Retrieve parcel images, 3) PUT /api/orders/{orderId} - Update order with tracking number and carrier, 4) GET /api/orders/{orderId} - Verify updated order has tracking info"
+      message: "PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test these 4 APIs: 1) POST /api/parcel-images - Save parcel image, 2) GET /api/parcel-images?orderId=xxx - Retrieve parcel images, 3) PUT /api/orders/{orderId} - Update order with tracking number and carrier, 4) GET /api/orders/{orderId} - Verify updated order has tracking info"
     - agent: "testing"
       message: "🎉 PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING COMPLETE - ALL 4 APIS PASSED!
 
@@ -3883,7 +3883,7 @@ test_instructions: |
 
 **PHASE 3 SHIPPING & TRACKING ENHANCEMENT APIS FULLY FUNCTIONAL!** All 4 critical endpoints working correctly with proper data persistence and retrieval. Real order data tested with successful tracking number updates."
     - agent: "main"
-      message: "PHASE 5: BILLS & FINANCE MODULE TESTING NEEDED. Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api. Test all 16 Bills & Finance APIs: Bills CRUD (GET/POST/PUT/DELETE), Payment recording, Vendors CRUD, Purchase Orders CRUD with receive workflow, Cash Flow Summary, Payment Priority. Existing data: 3 bills, 1 vendor (Sunrise Packaging), 1 PO (PO-0001). Verify cash flow stats update correctly after creating/paying bills."
+      message: "PHASE 5: BILLS & FINANCE MODULE TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test all 16 Bills & Finance APIs: Bills CRUD (GET/POST/PUT/DELETE), Payment recording, Vendors CRUD, Purchase Orders CRUD with receive workflow, Cash Flow Summary, Payment Priority. Existing data: 3 bills, 1 vendor (Sunrise Packaging), 1 PO (PO-0001). Verify cash flow stats update correctly after creating/paying bills."
     - agent: "testing"
       message: "🎉 PHASE 5: BILLS & FINANCE MODULE TESTING COMPLETE - ALL 16 APIS PASSED!
 
@@ -3932,4 +3932,4 @@ test_instructions: |
 ✓ Existing data preserved (3 bills, 1 vendor, 1 PO)
 ✓ Test data cleanup successful (no residual test records)
 
-**PHASE 5: BILLS & FINANCE MODULE FULLY TESTED AND OPERATIONAL!** Base URL: https://whatsapp-comms-next.preview.emergentagent.com/api"
+**PHASE 5: BILLS & FINANCE MODULE FULLY TESTED AND OPERATIONAL!** Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
