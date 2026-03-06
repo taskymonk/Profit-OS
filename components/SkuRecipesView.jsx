@@ -163,6 +163,28 @@ export default function SkuRecipesView() {
     setForm({ ...form, ingredients: arr });
   };
 
+  const updateIngredientYield = (form, setForm, idx, yieldCount) => {
+    const arr = [...form.ingredients];
+    const yc = Number(yieldCount);
+    arr[idx] = { ...arr[idx], yieldPerUnit: yc, quantityUsed: yc > 0 ? Math.round((1 / yc) * 10000) / 10000 : 0 };
+    setForm({ ...form, ingredients: arr });
+  };
+
+  const toggleYieldMode = (form, setForm, idx) => {
+    const arr = [...form.ingredients];
+    const current = arr[idx];
+    if (current.yieldPerUnit) {
+      // Switch back to direct qty mode
+      arr[idx] = { ...current, yieldPerUnit: null };
+    } else {
+      // Switch to yield mode - calculate yieldPerUnit from current quantityUsed
+      const qtyUsed = current.quantityUsed || 0;
+      const yieldVal = qtyUsed > 0 ? Math.round(1 / qtyUsed) : 1;
+      arr[idx] = { ...current, yieldPerUnit: yieldVal };
+    }
+    setForm({ ...form, ingredients: arr });
+  };
+
   // ===== Handlers =====
   const handleSaveRecipe = async () => {
     const ingredients = recipeForm.ingredients.map(ing => ({
@@ -170,6 +192,7 @@ export default function SkuRecipesView() {
       inventoryItemName: ing.name,
       category: ing.category, quantityUsed: Number(ing.quantityUsed) || 0,
       baseCostPerUnit: ing.baseCostPerUnit, unit: ing.unit,
+      ...(ing.yieldPerUnit ? { yieldPerUnit: Number(ing.yieldPerUnit) } : {}),
     }));
     const data = {
       sku: recipeForm.sku, productName: recipeForm.productName,
@@ -198,6 +221,7 @@ export default function SkuRecipesView() {
       inventoryItemName: ing.name,
       category: ing.category, quantityUsed: Number(ing.quantityUsed) || 0,
       baseCostPerUnit: ing.baseCostPerUnit, unit: ing.unit,
+      ...(ing.yieldPerUnit ? { yieldPerUnit: Number(ing.yieldPerUnit) } : {}),
     }));
     const data = {
       name: templateForm.name, description: templateForm.description,
@@ -339,7 +363,7 @@ export default function SkuRecipesView() {
               {catIngredients.length > 0 && (
                 <div className="flex gap-2 items-center pl-5 text-[10px] text-muted-foreground font-medium mb-0.5">
                   <span className="flex-1">Item</span>
-                  <span className="w-24 text-center">Qty per unit</span>
+                  <span className="w-40 text-center">Qty / Yield per unit</span>
                   <span className="w-16 text-right">Line Cost</span>
                   <span className="w-7"></span>
                 </div>
@@ -347,17 +371,35 @@ export default function SkuRecipesView() {
               {catIngredients.map(ing => {
                 const idx = f.ingredients.indexOf(ing);
                 const lineCost = (ing.baseCostPerUnit || 0) * (ing.quantityUsed || 0);
+                const isYieldMode = !!ing.yieldPerUnit;
                 return (
                   <div key={idx} className="flex gap-2 items-center pl-5">
                     <div className="flex-1 h-8 px-2 border rounded bg-muted/30 flex items-center text-sm truncate">
                       {ing.name}
                       <Badge variant="secondary" className="ml-auto text-[10px]">{fmt(ing.baseCostPerUnit)}/{ing.unit}</Badge>
                     </div>
-                    <div className="w-24 flex items-center gap-1">
-                      <Input type="number" min="0" step="0.01" className="h-8 text-sm text-center" placeholder="e.g. 0.5"
-                        value={ing.quantityUsed}
-                        onChange={e => updateIngredientQty(f, sf, idx, e.target.value)} />
-                      <span className="text-[10px] text-muted-foreground shrink-0">{ing.unit}</span>
+                    <div className="w-40 flex items-center gap-1">
+                      {isYieldMode ? (
+                        <>
+                          <span className="text-[9px] text-muted-foreground shrink-0">1 {ing.unit} →</span>
+                          <Input type="number" min="1" step="1" className="h-8 text-sm text-center w-14" placeholder="6"
+                            value={ing.yieldPerUnit || ''}
+                            onChange={e => updateIngredientYield(f, sf, idx, e.target.value)} />
+                          <span className="text-[9px] text-muted-foreground shrink-0">pcs</span>
+                          <span className="text-[9px] text-muted-foreground ml-0.5">=&nbsp;{ing.quantityUsed}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Input type="number" min="0" step="0.01" className="h-8 text-sm text-center" placeholder="e.g. 0.5"
+                            value={ing.quantityUsed}
+                            onChange={e => updateIngredientQty(f, sf, idx, e.target.value)} />
+                          <span className="text-[10px] text-muted-foreground shrink-0">{ing.unit}</span>
+                        </>
+                      )}
+                      <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" title={isYieldMode ? 'Switch to direct qty' : 'Switch to yield mode (e.g. 1 sheet → 6 pcs)'}
+                        onClick={() => toggleYieldMode(f, sf, idx)}>
+                        <RefreshCw className="w-2.5 h-2.5 text-muted-foreground" />
+                      </Button>
                     </div>
                     <span className="text-xs font-medium w-16 text-right">{fmt(lineCost)}</span>
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive shrink-0"

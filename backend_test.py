@@ -1,464 +1,455 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for PHASE 5 FINANCE MODULE REFACTOR
-Testing the "Smart Approach" refactor where Purchase Orders have been completely removed.
-
-Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api
-
-Test Scenarios:
-1. Bills CRUD (should work)
-2. Bill Payment Recording 
-3. Sync from Expenses (KEY FEATURE)
-4. Vendors CRUD (with subCategory)
-5. Finance Analytics (NO PO fields)
-6. REMOVED — Purchase Orders should be GONE
+Backend API Testing Script for Bug Fixes Batch Testing
+Tests 5 specific bug fix scenarios as requested in the review.
 """
 
 import requests
 import json
 import time
-import pymongo
-from datetime import datetime, timedelta
-import uuid
 import sys
+from typing import Dict, List, Any
 
-# Base configuration
+# Base URL from environment
 BASE_URL = "https://smart-finance-hub-41.preview.emergentagent.com/api"
-headers = {"Content-Type": "application/json"}
 
-# MongoDB connection for verification
-MONGO_URL = "mongodb://localhost:27017"
-DB_NAME = "profitos"
+class TestLogger:
+    def __init__(self):
+        self.results = []
+        
+    def log(self, message: str, status: str = "INFO"):
+        print(f"[{status}] {message}")
+        self.results.append({"message": message, "status": status})
+    
+    def log_test_start(self, test_name: str):
+        print(f"\n🧪 TESTING: {test_name}")
+        print("=" * 60)
+    
+    def log_test_result(self, test_name: str, passed: bool, details: str = ""):
+        status = "PASS" if passed else "FAIL"
+        emoji = "✅" if passed else "❌"
+        print(f"\n{emoji} {test_name}: {status}")
+        if details:
+            print(f"   Details: {details}")
+        self.results.append({"test": test_name, "status": status, "details": details})
 
-def log_test(test_name, status, details=""):
-    """Log test results with status indicator"""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    status_icon = "✅" if status == "PASS" else "❌"
-    print(f"[{timestamp}] {status_icon} {test_name}")
-    if details:
-        print(f"    {details}")
-
-def make_request(method, endpoint, data=None, expected_status=200):
+def make_request(method: str, endpoint: str, data: Dict = None, params: Dict = None) -> Dict:
     """Make HTTP request with error handling"""
     url = f"{BASE_URL}{endpoint}"
     try:
         if method.upper() == "GET":
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, params=params, timeout=30)
         elif method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=data)
+            response = requests.post(url, json=data, timeout=30)
         elif method.upper() == "PUT":
-            response = requests.put(url, headers=headers, json=data)
+            response = requests.put(url, json=data, timeout=30)
         elif method.upper() == "DELETE":
-            response = requests.delete(url, headers=headers)
-        
-        if response.status_code != expected_status:
-            log_test(f"Request {method} {endpoint}", "FAIL", 
-                    f"Expected {expected_status}, got {response.status_code}: {response.text[:200]}")
-            return None
-        
-        if response.headers.get('content-type', '').startswith('application/json'):
-            return response.json()
-        return response.text
-    
-    except Exception as e:
-        log_test(f"Request {method} {endpoint}", "FAIL", f"Exception: {str(e)}")
-        return None
-
-def get_mongo_connection():
-    """Get MongoDB connection"""
-    try:
-        client = pymongo.MongoClient(MONGO_URL)
-        return client[DB_NAME]
-    except Exception as e:
-        log_test("MongoDB Connection", "FAIL", f"Cannot connect to MongoDB: {e}")
-        return None
-
-def cleanup_test_data():
-    """Clean up any test data created during testing"""
-    db = get_mongo_connection()
-    if db is None:
-        return
-    
-    try:
-        # Clean up test bills
-        db.bills.delete_many({"vendorName": {"$regex": "Test"}})
-        # Clean up test vendors 
-        db.vendors.delete_many({"name": {"$regex": "Test"}})
-        log_test("Test Data Cleanup", "PASS", "Cleaned up test bills and vendors")
-    except Exception as e:
-        log_test("Test Data Cleanup", "FAIL", f"Error: {e}")
-
-def test_bills_crud():
-    """Test Bills CRUD operations"""
-    print("\n🎯 TESTING BILLS CRUD OPERATIONS")
-    
-    # 1. GET /api/bills — list all bills
-    bills_data = make_request("GET", "/bills")
-    if bills_data is None:
-        return False
-        
-    # Verify each bill has required fields
-    required_fields = ["_id", "vendorName", "category", "amount", "taxAmount", 
-                      "totalAmount", "totalPaid", "outstanding", "computedStatus", "payments"]
-    
-    if isinstance(bills_data, list) and len(bills_data) > 0:
-        first_bill = bills_data[0]
-        missing_fields = [field for field in required_fields if field not in first_bill]
-        if missing_fields:
-            log_test("Bills GET Structure", "FAIL", f"Missing fields: {missing_fields}")
-            return False
+            response = requests.delete(url, timeout=30)
         else:
-            log_test("Bills GET Structure", "PASS", f"Found {len(bills_data)} bills with all required fields")
-    else:
-        log_test("Bills GET Data", "PASS", "Bills collection is empty (expected for fresh install)")
-    
-    # 2. POST /api/bills — create manual bill
-    test_bill_data = {
-        "vendorName": "Test Vendor",
-        "category": "Testing", 
-        "amount": 1000,
-        "taxAmount": 180,
-        "dueDate": "2026-04-01",
-        "description": "Test manual bill"
-    }
-    
-    created_bill = make_request("POST", "/bills", test_bill_data, 200)
-    if created_bill is None:
-        return False
+            raise ValueError(f"Unsupported method: {method}")
         
-    bill_id = created_bill.get("_id")
-    if not bill_id:
-        log_test("Bill Creation", "FAIL", "No _id returned in created bill")
+        response.raise_for_status()
+        return {"status": response.status_code, "data": response.json() if response.text else {}}
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e), "status": getattr(e.response, 'status_code', 0)}
+    except json.JSONDecodeError as e:
+        return {"error": f"JSON decode error: {e}", "status": response.status_code, "raw": response.text[:500]}
+    except Exception as e:
+        return {"error": str(e), "status": 0}
+
+def test_tip_cleanup_verification(logger: TestLogger):
+    """Test 1: Tip cleanup verification"""
+    logger.log_test_start("TIP CLEANUP VERIFICATION")
+    
+    # Test 1a: GET /api/orders?page=1&limit=50 — verify NO orders have productName='Tip'
+    logger.log("Fetching orders to check for Tip items...")
+    response = make_request("GET", "/orders", params={"page": 1, "limit": 50})
+    
+    if "error" in response:
+        logger.log_test_result("Tip cleanup verification", False, f"Failed to fetch orders: {response['error']}")
         return False
-        
-    log_test("Bill Creation", "PASS", f"Created bill with ID: {bill_id}")
     
-    # 3. PUT /api/bills/{bill_id} — update description
-    update_data = {"description": "Updated test bill"}
-    updated_bill = make_request("PUT", f"/bills/{bill_id}", update_data)
+    orders = response["data"].get("orders", [])
+    logger.log(f"Found {len(orders)} orders to check")
     
-    if updated_bill and updated_bill.get("description") == "Updated test bill":
-        log_test("Bill Update", "PASS", "Bill description updated successfully")
+    # Check for Tip items
+    tip_orders = [o for o in orders if o.get("productName", "").lower() == "tip"]
+    
+    if tip_orders:
+        logger.log_test_result("No Tip orders", False, f"Found {len(tip_orders)} orders with productName='Tip'")
+        return False
     else:
-        log_test("Bill Update", "FAIL", "Bill update failed or description not changed")
-        return False
+        logger.log_test_result("No Tip orders", True, f"✅ No orders with productName='Tip' found in {len(orders)} orders")
     
-    # 4. DELETE /api/bills/{bill_id} — remove the test bill
-    delete_result = make_request("DELETE", f"/bills/{bill_id}")
-    if delete_result is not None:
-        log_test("Bill Deletion", "PASS", f"Test bill deleted successfully")
+    # Test 1b: Verify all orders have tipAmount and quantity fields
+    missing_tipAmount = [o for o in orders if "tipAmount" not in o or not isinstance(o.get("tipAmount"), (int, float))]
+    missing_quantity = [o for o in orders if "quantity" not in o or not isinstance(o.get("quantity"), int) or o.get("quantity", 0) < 1]
+    
+    if missing_tipAmount:
+        logger.log_test_result("tipAmount field check", False, f"{len(missing_tipAmount)} orders missing tipAmount field")
+        return False
     else:
-        log_test("Bill Deletion", "FAIL", "Failed to delete test bill")
-        return False
+        logger.log_test_result("tipAmount field check", True, f"All {len(orders)} orders have tipAmount field")
     
+    if missing_quantity:
+        logger.log_test_result("quantity field check", False, f"{len(missing_quantity)} orders missing valid quantity field (≥1)")
+        return False
+    else:
+        logger.log_test_result("quantity field check", True, f"All {len(orders)} orders have quantity field ≥ 1")
+    
+    logger.log("🎯 TIP CLEANUP VERIFICATION: ALL CHECKS PASSED")
     return True
 
-def test_bill_payment_recording():
-    """Test Bill Payment Recording functionality"""
-    print("\n🎯 TESTING BILL PAYMENT RECORDING")
+def test_material_summary_fix(logger: TestLogger):
+    """Test 2: Material Summary Fix (CRITICAL)"""
+    logger.log_test_start("MATERIAL SUMMARY FIX (CRITICAL)")
     
-    # First create a test bill
-    test_bill_data = {
-        "vendorName": "Payment Test Vendor",
-        "category": "Testing", 
-        "amount": 1000,
-        "taxAmount": 180,
-        "dueDate": "2026-04-01",
-        "description": "Bill for payment testing"
-    }
+    # Step 1: Find recipes with ingredients and orders, using a smarter approach
+    logger.log("Finding SKU recipes with ingredients and matching orders...")
     
-    created_bill = make_request("POST", "/bills", test_bill_data, 200)
-    if created_bill is None:
-        return False
-        
-    bill_id = created_bill.get("_id")
-    log_test("Payment Test Bill Created", "PASS", f"Created bill: {bill_id}")
-    
-    # Record partial payment
-    payment_data = {
-        "billId": bill_id,
-        "amount": 500,
-        "method": "UPI",
-        "date": "2026-03-05",
-        "notes": "Partial payment test"
-    }
-    
-    payment_result = make_request("POST", "/bills/payment", payment_data)
-    if payment_result is None:
-        return False
-        
-    log_test("Partial Payment Recording", "PASS", "Recorded ₹500 partial payment")
-    
-    # Verify bill status is 'partial'
-    updated_bill = make_request("GET", f"/bills/{bill_id}")
-    if updated_bill and updated_bill.get("computedStatus") == "partial":
-        log_test("Partial Status Check", "PASS", "Bill status correctly changed to 'partial'")
-    else:
-        log_test("Partial Status Check", "FAIL", f"Expected 'partial', got: {updated_bill.get('computedStatus') if updated_bill else 'None'}")
-    
-    # Record remaining payment to mark as paid
-    remaining_payment = {
-        "billId": bill_id,
-        "amount": 680,  # 1000 + 180 - 500 = 680
-        "method": "Bank Transfer", 
-        "date": "2026-03-10",
-        "notes": "Final payment"
-    }
-    
-    final_payment_result = make_request("POST", "/bills/payment", remaining_payment)
-    if final_payment_result is None:
+    # Get orders first
+    response = make_request("GET", "/orders", params={"page": 1, "limit": 100})
+    if "error" in response:
+        logger.log_test_result("Material summary fix", False, f"Failed to fetch orders: {response['error']}")
         return False
     
-    log_test("Final Payment Recording", "PASS", "Recorded ₹680 final payment")
+    orders = response["data"].get("orders", [])
+    order_skus = set(order.get("sku") for order in orders if order.get("sku"))
+    logger.log(f"Found {len(orders)} orders with {len(order_skus)} unique SKUs")
     
-    # Verify bill status is 'paid'
-    final_bill = make_request("GET", f"/bills/{bill_id}")
-    if final_bill and final_bill.get("computedStatus") == "paid":
-        log_test("Paid Status Check", "PASS", "Bill status correctly changed to 'paid'")
-    else:
-        log_test("Paid Status Check", "FAIL", f"Expected 'paid', got: {final_bill.get('computedStatus') if final_bill else 'None'}")
+    # Get recipes with ingredients
+    response = make_request("GET", "/sku-recipes")
+    if "error" in response:
+        logger.log_test_result("Material summary fix", False, f"Failed to fetch SKU recipes: {response['error']}")
+        return False
     
-    # Clean up test bill
-    make_request("DELETE", f"/bills/{bill_id}")
-    log_test("Payment Test Cleanup", "PASS", "Cleaned up payment test bill")
+    recipes = response["data"]
+    logger.log(f"Found {len(recipes)} SKU recipes")
     
+    # Find a recipe that has ingredients AND has orders
+    matching_recipe = None
+    matching_order = None
+    
+    for recipe in recipes:
+        if (recipe.get("ingredients") and len(recipe["ingredients"]) > 0 and 
+            recipe.get("sku") in order_skus):
+            
+            # Find the first order with this SKU
+            for order in orders:
+                if order.get("sku") == recipe["sku"]:
+                    matching_recipe = recipe
+                    matching_order = order
+                    break
+            
+            if matching_recipe:
+                break
+    
+    if not matching_recipe or not matching_order:
+        logger.log_test_result("Material summary fix", False, "No recipe found with both ingredients and matching orders")
+        return False
+    
+    target_sku = matching_recipe["sku"]
+    order_id = matching_order["_id"]
+    logger.log(f"Found matching pair - SKU: {target_sku} ({len(matching_recipe['ingredients'])} ingredients), Order: {order_id}")
+    
+    # Step 2: Test material summary API
+    logger.log("Testing KDS material summary API...")
+    response = make_request("GET", "/kds/material-summary", params={"orderIds": order_id})
+    
+    if "error" in response:
+        logger.log_test_result("Material summary fix", False, f"KDS material summary API failed: {response['error']}")
+        return False
+    
+    material_data = response["data"]
+    materials = material_data.get("materials", [])
+    
+    if not materials or len(materials) == 0:
+        logger.log_test_result("Material summary fix", False, f"Material summary returned empty materials array")
+        return False
+    
+    # Verify material structure
+    valid_materials = True
+    for material in materials:
+        required_fields = ["name", "type", "quantity", "unit"]
+        for field in required_fields:
+            if field not in material:
+                logger.log_test_result("Material summary fix", False, f"Material missing required field: {field}")
+                valid_materials = False
+                break
+    
+    if not valid_materials:
+        return False
+    
+    logger.log_test_result("Material summary fix", True, f"✅ Material summary returned {len(materials)} materials with valid structure")
+    logger.log("🎯 MATERIAL SUMMARY FIX: CRITICAL TEST PASSED")
     return True
 
-def test_sync_from_expenses():
-    """Test Sync from Expenses (KEY FEATURE)"""
-    print("\n🎯 TESTING SYNC FROM EXPENSES (KEY FEATURE)")
+def test_recipe_template_deletion_unlinks(logger: TestLogger):
+    """Test 3: Recipe Template Deletion Unlinks Products"""
+    logger.log_test_start("RECIPE TEMPLATE DELETION UNLINKS PRODUCTS")
     
-    # POST /api/bills/sync-from-expenses
-    sync_result = make_request("POST", "/bills/sync-from-expenses", {})
-    
-    if sync_result is None:
-        return False
-        
-    required_fields = ["generated", "totalExpenses", "message"]
-    missing_fields = [field for field in required_fields if field not in sync_result]
-    
-    if missing_fields:
-        log_test("Sync Response Structure", "FAIL", f"Missing fields: {missing_fields}")
-        return False
-    
-    log_test("Sync Response Structure", "PASS", "Response has all required fields")
-    log_test("Sync Execution", "PASS", 
-            f"Generated: {sync_result['generated']}, Total Expenses: {sync_result['totalExpenses']}")
-    
-    # Test duplicate prevention - run sync again
-    sync_result2 = make_request("POST", "/bills/sync-from-expenses", {})
-    if sync_result2 is None:
-        return False
-        
-    if sync_result2.get("generated", -1) == 0:
-        log_test("Duplicate Prevention", "PASS", "Second sync generated 0 duplicates (correct behavior)")
-    else:
-        log_test("Duplicate Prevention", "FAIL", f"Second sync generated {sync_result2.get('generated')} bills (should be 0)")
-        
-    return True
-
-def test_vendors_crud():
-    """Test Vendors CRUD with subCategory support"""
-    print("\n🎯 TESTING VENDORS CRUD WITH SUBCATEGORY")
-    
-    # 1. GET /api/vendors — list vendors
-    vendors_data = make_request("GET", "/vendors")
-    if vendors_data is None:
-        return False
-        
-    log_test("Vendors GET", "PASS", f"Retrieved {len(vendors_data) if isinstance(vendors_data, list) else 0} vendors")
-    
-    # 2. POST /api/vendors — create with subCategory
-    test_vendor_data = {
-        "name": "Test Vendor Co",
-        "category": "Packaging",
-        "subCategory": "Boxes",
-        "phone": "+91-9999999999",
-        "email": "test@vendor.com",
-        "gstin": "22AAAAA0000A1Z5",
-        "contactPerson": "John Doe",
-        "address": "123 Test Street"
+    # Step 1: Create a test recipe template
+    logger.log("Creating test recipe template...")
+    template_data = {
+        "name": "Test Unlink Template",
+        "ingredients": [
+            {
+                "name": "Test Material",
+                "category": "Raw Materials", 
+                "quantityUsed": 1,
+                "baseCostPerUnit": 10,
+                "unit": "pcs"
+            }
+        ]
     }
     
-    created_vendor = make_request("POST", "/vendors", test_vendor_data, 200)
-    if created_vendor is None:
-        return False
-        
-    vendor_id = created_vendor.get("_id")
-    if not vendor_id:
-        log_test("Vendor Creation", "FAIL", "No _id returned")
-        return False
-        
-    # Verify subCategory field is saved
-    if created_vendor.get("subCategory") == "Boxes":
-        log_test("Vendor Creation with subCategory", "PASS", f"Vendor created with subCategory: {created_vendor.get('subCategory')}")
-    else:
-        log_test("Vendor Creation with subCategory", "FAIL", f"subCategory not saved correctly: {created_vendor.get('subCategory')}")
+    response = make_request("POST", "/recipe-templates", template_data)
+    if "error" in response:
+        logger.log_test_result("Template creation", False, f"Failed to create template: {response['error']}")
         return False
     
-    # 3. PUT /api/vendors/{vendor_id} — update email
-    update_data = {"email": "updated@vendor.com"}
-    updated_vendor = make_request("PUT", f"/vendors/{vendor_id}", update_data)
+    template_id = response["data"]["_id"]
+    logger.log(f"Created template: {template_id}")
     
-    if updated_vendor and updated_vendor.get("email") == "updated@vendor.com":
-        log_test("Vendor Update", "PASS", "Vendor email updated successfully")
-    else:
-        log_test("Vendor Update", "FAIL", "Vendor update failed")
+    # Step 2: Get a SKU recipe to link to
+    logger.log("Finding SKU recipe to link...")
+    response = make_request("GET", "/sku-recipes")
+    if "error" in response or not response["data"]:
+        logger.log_test_result("Recipe template deletion", False, "Failed to get SKU recipes")
         return False
     
-    # 4. DELETE /api/vendors/{vendor_id} — clean up
-    delete_result = make_request("DELETE", f"/vendors/{vendor_id}")
-    if delete_result is not None:
-        log_test("Vendor Deletion", "PASS", "Test vendor deleted successfully")
-    else:
-        log_test("Vendor Deletion", "FAIL", "Failed to delete test vendor")
+    recipe_id = response["data"][0]["_id"]
+    logger.log(f"Using recipe: {recipe_id}")
+    
+    # Step 3: Link template to recipe
+    logger.log("Linking template to recipe...")
+    link_data = {
+        "templateId": template_id,
+        "templateName": "Test Unlink Template"
+    }
+    
+    response = make_request("PUT", f"/sku-recipes/{recipe_id}", link_data)
+    if "error" in response:
+        logger.log_test_result("Template linking", False, f"Failed to link template: {response['error']}")
         return False
     
+    # Step 4: Verify template is linked
+    response = make_request("GET", f"/sku-recipes/{recipe_id}")
+    if "error" in response:
+        logger.log_test_result("Recipe template deletion", False, "Failed to verify template link")
+        return False
+    
+    if response["data"].get("templateId") != template_id:
+        logger.log_test_result("Template linking verification", False, "Template was not properly linked")
+        return False
+    
+    logger.log("✅ Template successfully linked to recipe")
+    
+    # Step 5: Delete the template
+    logger.log("Deleting template...")
+    response = make_request("DELETE", f"/recipe-templates/{template_id}")
+    if "error" in response:
+        logger.log_test_result("Template deletion", False, f"Failed to delete template: {response['error']}")
+        return False
+    
+    # Step 6: Verify recipe is unlinked
+    logger.log("Verifying recipe is unlinked...")
+    response = make_request("GET", f"/sku-recipes/{recipe_id}")
+    if "error" in response:
+        logger.log_test_result("Recipe template deletion", False, "Failed to verify recipe after template deletion")
+        return False
+    
+    recipe_data = response["data"]
+    
+    if recipe_data.get("templateId") is not None:
+        logger.log_test_result("Template unlinking verification", False, f"templateId should be null but is: {recipe_data.get('templateId')}")
+        return False
+    
+    if recipe_data.get("templateName") is not None:
+        logger.log_test_result("Template unlinking verification", False, f"templateName should be null but is: {recipe_data.get('templateName')}")
+        return False
+    
+    logger.log_test_result("Recipe template deletion", True, "✅ Template deleted and recipe properly unlinked (templateId and templateName set to null)")
+    logger.log("🎯 RECIPE TEMPLATE DELETION UNLINKS: TEST PASSED")
     return True
 
-def test_finance_analytics():
-    """Test Finance Analytics (NO PO fields)"""
-    print("\n🎯 TESTING FINANCE ANALYTICS (NO PO FIELDS)")
+def test_finance_regression_check(logger: TestLogger):
+    """Test 4: Finance Regression Check"""
+    logger.log_test_start("FINANCE REGRESSION CHECK")
     
-    # GET /api/finance/cash-flow
-    cash_flow_data = make_request("GET", "/finance/cash-flow")
-    if cash_flow_data is None:
+    # Test 4a: GET /api/bills — should work
+    logger.log("Testing /api/bills endpoint...")
+    response = make_request("GET", "/bills")
+    
+    if "error" in response:
+        logger.log_test_result("Bills API", False, f"Bills endpoint failed: {response['error']}")
         return False
     
-    # Verify response has required fields (NO PO fields)
-    required_fields = ["totalBilled", "totalPaid", "totalOutstanding", "overdueAmount", 
-                      "overdueCount", "dueThisMonthAmount", "dueThisMonthCount", "totalBills", "monthlyData"]
-    
-    missing_fields = [field for field in required_fields if field not in cash_flow_data]
-    if missing_fields:
-        log_test("Cash Flow Structure", "FAIL", f"Missing required fields: {missing_fields}")
+    bills = response["data"]
+    if not isinstance(bills, list):
+        logger.log_test_result("Bills API", False, f"Bills endpoint should return array, got: {type(bills)}")
         return False
     
-    # Verify NO PO fields are present
-    po_fields = ["pendingPOAmount", "pendingPOCount", "totalPOs"]
-    found_po_fields = [field for field in po_fields if field in cash_flow_data]
+    logger.log_test_result("Bills API", True, f"✅ Bills endpoint returned {len(bills)} bills")
+    
+    # Test 4b: GET /api/vendors — should work  
+    logger.log("Testing /api/vendors endpoint...")
+    response = make_request("GET", "/vendors")
+    
+    if "error" in response:
+        logger.log_test_result("Vendors API", False, f"Vendors endpoint failed: {response['error']}")
+        return False
+    
+    vendors = response["data"]
+    if not isinstance(vendors, list):
+        logger.log_test_result("Vendors API", False, f"Vendors endpoint should return array, got: {type(vendors)}")
+        return False
+    
+    logger.log_test_result("Vendors API", True, f"✅ Vendors endpoint returned {len(vendors)} vendors")
+    
+    # Test 4c: GET /api/purchase-orders — should return 404 (removed)
+    logger.log("Testing /api/purchase-orders endpoint (should be removed)...")
+    response = make_request("GET", "/purchase-orders")
+    
+    if response.get("status") == 404:
+        logger.log_test_result("Purchase Orders removed", True, "✅ Purchase Orders endpoint correctly returns 404")
+    else:
+        logger.log_test_result("Purchase Orders removed", False, f"Purchase Orders should return 404, got status: {response.get('status')}")
+        return False
+    
+    # Test 4d: GET /api/finance/cash-flow — should NOT contain PO fields
+    logger.log("Testing /api/finance/cash-flow endpoint...")
+    response = make_request("GET", "/finance/cash-flow")
+    
+    if "error" in response:
+        logger.log_test_result("Finance cash-flow API", False, f"Cash-flow endpoint failed: {response['error']}")
+        return False
+    
+    cash_flow_data = response["data"]
+    
+    # Check for forbidden PO fields
+    forbidden_fields = ["pendingPOAmount", "pendingPOCount", "totalPOs"]
+    found_po_fields = []
+    
+    for field in forbidden_fields:
+        if field in cash_flow_data:
+            found_po_fields.append(field)
     
     if found_po_fields:
-        log_test("PO Fields Removal", "FAIL", f"Found PO fields that should be removed: {found_po_fields}")
+        logger.log_test_result("Finance cash-flow PO fields", False, f"Found forbidden PO fields: {found_po_fields}")
         return False
     else:
-        log_test("PO Fields Removal", "PASS", "No PO fields found in cash flow (correctly removed)")
+        logger.log_test_result("Finance cash-flow PO fields", True, "✅ No forbidden PO fields found in cash-flow response")
     
-    log_test("Cash Flow Analytics", "PASS", "All required fields present, PO fields correctly removed")
-    
-    # GET /api/finance/priority 
-    priority_data = make_request("GET", "/finance/priority")
-    if priority_data is None:
-        return False
-    
-    if isinstance(priority_data, list):
-        log_test("Priority Bills", "PASS", f"Returns array of {len(priority_data)} unpaid bills sorted by priority")
-    else:
-        log_test("Priority Bills", "FAIL", f"Expected array, got: {type(priority_data)}")
-        return False
-    
+    logger.log("🎯 FINANCE REGRESSION CHECK: ALL TESTS PASSED")
     return True
 
-def test_purchase_orders_removed():
-    """Test that Purchase Orders are completely removed"""
-    print("\n🎯 TESTING PURCHASE ORDERS REMOVAL")
+def test_order_quantity_display_data(logger: TestLogger):
+    """Test 5: Order quantity display data check"""
+    logger.log_test_start("ORDER QUANTITY DISPLAY DATA CHECK")
     
-    # GET /api/purchase-orders — should return 404 or error
-    try:
-        response = requests.get(f"{BASE_URL}/purchase-orders", headers=headers)
-        if response.status_code == 404:
-            log_test("PO GET Endpoint", "PASS", "GET /api/purchase-orders returns 404 (correctly removed)")
-        else:
-            log_test("PO GET Endpoint", "FAIL", f"Expected 404, got {response.status_code}")
-            return False
-    except Exception as e:
-        log_test("PO GET Endpoint", "FAIL", f"Exception: {e}")
+    # GET /api/orders?page=1&limit=100 — check all orders have quantity field ≥ 1
+    logger.log("Fetching orders to verify quantity field...")
+    response = make_request("GET", "/orders", params={"page": 1, "limit": 100})
+    
+    if "error" in response:
+        logger.log_test_result("Order quantity check", False, f"Failed to fetch orders: {response['error']}")
         return False
     
-    # PUT /api/purchase-orders/fake-id — should return 404 or error
-    fake_id = str(uuid.uuid4())
-    try:
-        response = requests.put(f"{BASE_URL}/purchase-orders/{fake_id}", 
-                              headers=headers, json={"test": "data"})
-        if response.status_code == 404:
-            log_test("PO PUT Endpoint", "PASS", "PUT /api/purchase-orders/{id} returns 404 (correctly removed)")
-        else:
-            log_test("PO PUT Endpoint", "FAIL", f"Expected 404, got {response.status_code}")
-            return False
-    except Exception as e:
-        log_test("PO PUT Endpoint", "FAIL", f"Exception: {e}")
-        return False
+    orders = response["data"].get("orders", [])
+    logger.log(f"Checking {len(orders)} orders for quantity field...")
     
-    # DELETE /api/purchase-orders/fake-id — should return 404 or error
-    try:
-        response = requests.delete(f"{BASE_URL}/purchase-orders/{fake_id}", headers=headers)
-        if response.status_code == 404:
-            log_test("PO DELETE Endpoint", "PASS", "DELETE /api/purchase-orders/{id} returns 404 (correctly removed)")
-        else:
-            log_test("PO DELETE Endpoint", "FAIL", f"Expected 404, got {response.status_code}")
-            return False
-    except Exception as e:
-        log_test("PO DELETE Endpoint", "FAIL", f"Exception: {e}")
-        return False
+    # Check quantity field
+    invalid_quantity_orders = []
     
+    for order in orders:
+        quantity = order.get("quantity")
+        if not isinstance(quantity, int) or quantity < 1:
+            invalid_quantity_orders.append({
+                "orderId": order.get("orderId", order.get("_id", "unknown")),
+                "quantity": quantity
+            })
+    
+    if invalid_quantity_orders:
+        logger.log_test_result("Order quantity check", False, f"{len(invalid_quantity_orders)} orders have invalid quantity field (should be integer ≥ 1)")
+        for order in invalid_quantity_orders[:5]:  # Show first 5 examples
+            logger.log(f"   - Order {order['orderId']}: quantity = {order['quantity']}")
+        return False
+    else:
+        logger.log_test_result("Order quantity check", True, f"✅ All {len(orders)} orders have valid quantity field (integer ≥ 1)")
+    
+    logger.log("🎯 ORDER QUANTITY DISPLAY DATA: CHECK PASSED")
     return True
+
+def cleanup_test_data(logger: TestLogger):
+    """Clean up any test data created during testing"""
+    logger.log_test_start("CLEANUP TEST DATA")
+    
+    # Note: Most tests are read-only, but recipe template test creates data
+    # The template deletion is part of the test itself, so minimal cleanup needed
+    
+    logger.log("✅ Test data cleanup completed (most tests were read-only)")
 
 def main():
-    """Run all tests"""
-    print("🚀 STARTING PHASE 5 FINANCE MODULE REFACTOR TESTING")
+    """Main test execution function"""
+    logger = TestLogger()
+    
+    print("🚀 BACKEND BUG FIXES BATCH TESTING")
     print("=" * 60)
-    print("Testing 'Smart Approach' refactor - Purchase Orders completely removed")
     print(f"Base URL: {BASE_URL}")
+    print("Testing 5 bug fix scenarios:")
+    print("1. Tip cleanup verification")
+    print("2. Material Summary Fix (CRITICAL)")
+    print("3. Recipe Template Deletion Unlinks Products") 
+    print("4. Finance Regression Check")
+    print("5. Order quantity display data check")
     print("=" * 60)
     
-    # Track test results
-    test_results = []
+    # Track results
+    test_results = {}
     
-    # Run all tests
-    test_functions = [
-        ("Bills CRUD", test_bills_crud),
-        ("Bill Payment Recording", test_bill_payment_recording), 
-        ("Sync from Expenses", test_sync_from_expenses),
-        ("Vendors CRUD with subCategory", test_vendors_crud),
-        ("Finance Analytics (NO PO fields)", test_finance_analytics),
-        ("Purchase Orders Removal", test_purchase_orders_removed)
-    ]
-    
-    for test_name, test_func in test_functions:
-        try:
-            result = test_func()
-            test_results.append((test_name, result))
-        except Exception as e:
-            log_test(test_name, "FAIL", f"Exception: {e}")
-            test_results.append((test_name, False))
-    
-    # Clean up test data
-    cleanup_test_data()
-    
-    # Print summary
-    print("\n" + "=" * 60)
-    print("🎯 TEST SUMMARY")
-    print("=" * 60)
-    
-    passed_count = 0
-    failed_count = 0
-    
-    for test_name, result in test_results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} {test_name}")
-        if result:
-            passed_count += 1
+    try:
+        # Execute all tests
+        test_results["tip_cleanup"] = test_tip_cleanup_verification(logger)
+        test_results["material_summary"] = test_material_summary_fix(logger)
+        test_results["template_deletion"] = test_recipe_template_deletion_unlinks(logger)
+        test_results["finance_regression"] = test_finance_regression_check(logger)
+        test_results["order_quantity"] = test_order_quantity_display_data(logger)
+        
+        # Cleanup
+        cleanup_test_data(logger)
+        
+        # Final summary
+        print("\n" + "="*60)
+        print("📊 FINAL TEST RESULTS")
+        print("="*60)
+        
+        passed_tests = []
+        failed_tests = []
+        
+        for test_name, result in test_results.items():
+            status = "✅ PASS" if result else "❌ FAIL"
+            print(f"{status} {test_name.replace('_', ' ').title()}")
+            
+            if result:
+                passed_tests.append(test_name)
+            else:
+                failed_tests.append(test_name)
+        
+        print(f"\nSUMMARY: {len(passed_tests)}/{len(test_results)} tests passed")
+        
+        if failed_tests:
+            print(f"\n❌ FAILED TESTS:")
+            for test in failed_tests:
+                print(f"   - {test.replace('_', ' ').title()}")
+            return 1
         else:
-            failed_count += 1
-    
-    print("=" * 60)
-    print(f"TOTAL: {passed_count} PASSED, {failed_count} FAILED")
-    
-    if failed_count == 0:
-        print("🎉 ALL TESTS PASSED! Finance module refactor working correctly.")
-        return 0
-    else:
-        print("❌ SOME TESTS FAILED. Please check the issues above.")
+            print("\n🎉 ALL BUG FIX TESTS PASSED!")
+            return 0
+            
+    except Exception as e:
+        logger.log(f"Test execution failed: {str(e)}", "ERROR")
+        print(f"\n💥 TESTING FAILED: {e}")
         return 1
 
 if __name__ == "__main__":

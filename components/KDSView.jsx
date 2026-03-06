@@ -340,15 +340,22 @@ export default function KDSView() {
 
                   {/* Product Info */}
                   <div>
-                    <p className="text-sm font-medium">{order.productName || order.sku}</p>
+                    <p className="text-sm font-medium">
+                      {order.quantity > 1 && (
+                        <Badge className="bg-primary text-primary-foreground text-xs mr-1.5 px-1.5">{order.quantity}x</Badge>
+                      )}
+                      {order.productName || order.sku}
+                    </p>
                     {order.variantName && (
                       <p className="text-xs text-primary/80 font-medium mt-0.5">
                         Variant: {order.variantName}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground font-mono">SKU: {order.sku}</p>
-                    {order.quantity && order.quantity > 1 && (
-                      <p className="text-xs text-primary font-medium mt-0.5">Qty: {order.quantity}</p>
+                    {order.quantity > 1 && (
+                      <p className="text-xs text-amber-600 font-semibold mt-1 bg-amber-50 dark:bg-amber-950/30 rounded px-2 py-0.5 inline-block">
+                        ⚠️ Make {order.quantity} units — ship in 1 parcel
+                      </p>
                     )}
                   </div>
 

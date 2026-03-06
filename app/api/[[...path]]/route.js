@@ -1214,11 +1214,18 @@ async function shopifySyncOrders() {
       const totalTax = parseFloat(shopifyOrder.total_tax || 0);
 
       // Proportional Revenue Allocation — computed for EVERY order (new and existing)
-      const totalLineItems = (shopifyOrder.line_items || []).length || 1;
+      const allLineItems = shopifyOrder.line_items || [];
+      
+      // Separate real product items from tip items
+      const productItems = allLineItems.filter(i => (i.title || '').toLowerCase() !== 'tip');
+      const tipItems = allLineItems.filter(i => (i.title || '').toLowerCase() === 'tip');
+      const tipAmount = tipItems.reduce((sum, t) => sum + (parseFloat(t.price) * (t.quantity || 1)), 0);
+
+      const totalLineItems = productItems.length || 1;
       const totalShipping = parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0);
       const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
       const finalOrderPrice = parseFloat(shopifyOrder.total_price || 0);
-      const rawSubtotal = (shopifyOrder.line_items || []).reduce((sum, i) => sum + (parseFloat(i.price) * (i.quantity || 1)), 0);
+      const rawSubtotal = productItems.reduce((sum, i) => sum + (parseFloat(i.price) * (i.quantity || 1)), 0);
 
       // Shopify Revenue Parity: extract refund amounts
       const totalRefunds = (shopifyOrder.refunds || []).reduce((sum, refund) => {
@@ -1230,12 +1237,17 @@ async function shopifySyncOrders() {
       // Map Shopify financial_status for strict filtering
       const financialStatus = shopifyOrder.financial_status || 'unknown';
 
-      for (const item of (shopifyOrder.line_items || [])) {
+      // Only process real product items (skip tips)
+      for (const item of productItems) {
         const sku = item.sku || `SHOP-${item.variant_id || item.product_id}`;
+        const itemQty = item.quantity || 1;
 
         // Each line item gets its proportional share of the final checkout price
-        const lineItemRaw = parseFloat(item.price) * (item.quantity || 1);
+        const lineItemRaw = parseFloat(item.price) * itemQty;
         const priceRatio = rawSubtotal > 0 ? lineItemRaw / rawSubtotal : (1 / totalLineItems);
+
+        // Distribute tip proportionally across real line items
+        const itemTipShare = tipAmount > 0 ? Math.round(tipAmount * priceRatio * 100) / 100 : 0;
 
         const result = await db.collection('orders').updateOne(
           // QUERY: match on Shopify order ID + SKU (unique per line item)
@@ -1258,6 +1270,8 @@ async function shopifySyncOrders() {
               orderDate: shopifyDate,
               productName: item.title || item.name,
               variantName: item.variant_title || '',
+              quantity: itemQty,
+              tipAmount: itemTipShare,
               destinationPincode: shippingAddress.zip,
               destinationCity: shippingAddress.city,
               paymentMethod: 'prepaid',
@@ -2552,22 +2566,34 @@ export async function GET(request) {
             const recipeMap = {};
             allRecipes.forEach(r => { recipeMap[r.sku] = r; });
 
-            // Aggregate materials
+            // Aggregate materials from recipe ingredients
             const materialTotals = {};
             batchOrders.forEach(order => {
               const recipe = recipeMap[order.sku];
               if (!recipe) return;
               const qty = order.quantity || 1;
-              (recipe.rawMaterials || []).forEach(m => {
-                const key = m.name || m.materialName;
-                if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'raw', quantity: 0, unit: m.unit || 'pcs' };
-                materialTotals[key].quantity += (m.quantity || 1) * qty;
+              // Use ingredients array (the actual data structure) with category-based grouping
+              (recipe.ingredients || []).forEach(ing => {
+                const key = ing.name || ing.inventoryItemName || ing.materialName;
+                if (!key) return;
+                if (!materialTotals[key]) materialTotals[key] = { name: key, type: ing.category === 'Packaging' ? 'packaging' : 'raw', quantity: 0, unit: ing.unit || 'pcs' };
+                materialTotals[key].quantity += (ing.quantityUsed || ing.quantity || 1) * qty;
               });
-              (recipe.packagingMaterials || []).forEach(m => {
-                const key = m.name || m.materialName;
-                if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'packaging', quantity: 0, unit: m.unit || 'pcs' };
-                materialTotals[key].quantity += (m.quantity || 1) * qty;
-              });
+              // Also check legacy rawMaterials/packagingMaterials arrays as fallback
+              if ((!recipe.ingredients || recipe.ingredients.length === 0)) {
+                (recipe.rawMaterials || []).forEach(m => {
+                  const key = m.name || m.materialName;
+                  if (!key) return;
+                  if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'raw', quantity: 0, unit: m.unit || 'pcs' };
+                  materialTotals[key].quantity += (m.quantity || 1) * qty;
+                });
+                (recipe.packagingMaterials || []).forEach(m => {
+                  const key = m.name || m.materialName;
+                  if (!key) return;
+                  if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'packaging', quantity: 0, unit: m.unit || 'pcs' };
+                  materialTotals[key].quantity += (m.quantity || 1) * qty;
+                });
+              }
             });
 
             return json({
@@ -4667,6 +4693,17 @@ export async function DELETE(request) {
 
     const collection = collectionMap[resource];
     if (!collection) return json({ error: 'Not found' }, 404);
+
+    // Special handling: when deleting a recipe template, unlink all associated SKU recipes
+    if (resource === 'recipe-templates') {
+      const db = await getDb();
+      const unlinkResult = await db.collection('skuRecipes').updateMany(
+        { templateId: id },
+        { $set: { templateId: null, templateName: null, updatedAt: new Date().toISOString() } }
+      );
+      console.log(`Unlinked ${unlinkResult.modifiedCount} SKU recipes from template ${id}`);
+    }
+
     const deleted = await deleteDoc(collection, id);
     if (!deleted) return json({ error: 'Not found' }, 404);
     return json({ message: 'Deleted successfully' });
