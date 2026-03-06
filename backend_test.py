@@ -1,573 +1,286 @@
 #!/usr/bin/env python3
 """
-Phase 6.4 - Public API with Swagger Documentation Testing
-Base URL: http://localhost:3000/api
-
-Test Areas:
-1. API Key Management (CRUD)
-2. Public API v1 Authentication  
-3. Public API v1 Endpoints (10 endpoints)
-4. OpenAPI Spec Validation
-5. Response Format Consistency
+Phase 6.5 - Gamification & Module Toggle System Backend Testing
+Base URL: http://localhost:3000
 """
 
 import requests
 import json
 import sys
-import os
-from datetime import datetime
 
-BASE_URL = "http://localhost:3000/api"
-TEST_API_KEY = "pos_test_api_key_for_testing_12345"
+BASE_URL = "http://localhost:3000"
+API_KEY = "pos_test_api_key_for_testing_12345"
 
-def test_api(method, endpoint, data=None, headers=None):
-    """Helper function to make API requests with error handling"""
-    url = f"{BASE_URL}{endpoint}"
+def test_gamification_progress():
+    """Test GET /api/gamification/progress - Should return XP, level, achievements, etc."""
+    print("\n🎯 TESTING GAMIFICATION PROGRESS API")
     try:
-        if method.upper() == "GET":
-            response = requests.get(url, params=data, headers=headers)
-        elif method.upper() == "POST":
-            response = requests.post(url, json=data, headers=headers)
-        elif method.upper() == "PUT":
-            response = requests.put(url, json=data, headers=headers)
-        elif method.upper() == "DELETE":
-            response = requests.delete(url, headers=headers)
+        response = requests.get(f"{BASE_URL}/api/gamification/progress")
+        print(f"Status: {response.status_code}")
         
-        print(f"{method} {endpoint} -> Status: {response.status_code}")
-        
-        try:
-            result = response.json()
-        except:
-            result = response.text
+        if response.status_code != 200:
+            print(f"❌ FAILED - Expected 200, got {response.status_code}")
+            print(f"Response: {response.text}")
+            return False
             
-        return result, response.status_code
-            
-    except requests.exceptions.RequestException as e:
-        print(f"Request failed: {e}")
-        return None, None
-
-def test_1_api_key_management_crud():
-    """Test 1: API Key Management CRUD Operations"""
-    print("\n🎯 TEST 1: API KEY MANAGEMENT CRUD")
-    print("=" * 50)
-    
-    # GET /api/api-keys — Should return array of API keys with masked keys
-    result, status = test_api("GET", "/api-keys")
-    if status != 200:
-        print("❌ GET /api/api-keys failed")
-        return False
+        data = response.json()
+        print(f"Response keys: {list(data.keys())}")
         
-    if not isinstance(result, list):
-        print("❌ Expected array response for GET /api/api-keys")
-        return False
+        # Check required fields
+        required_fields = ['xp', 'level', 'nextLevel', 'progressToNext', 'unlocked', 'locked', 'unlockedCount', 'totalAchievements', 'setupChecklist']
+        missing_fields = []
         
-    print(f"✅ GET /api/api-keys returned {len(result)} keys")
-    
-    # Verify structure of existing keys
-    if len(result) > 0:
-        key = result[0]
-        required_fields = ['_id', 'name', 'scope', 'maskedKey', 'rateLimit', 'revoked']
         for field in required_fields:
-            if field not in key:
-                print(f"❌ Missing field in API key: {field}")
-                return False
-        print(f"✅ API key structure valid - masked key: {key['maskedKey']}")
-    
-    # POST /api/api-keys — Create new API key
-    new_key_data = {
-        "name": "Agent Test Key",
-        "scope": "readwrite", 
-        "rateLimit": 200
-    }
-    
-    result, status = test_api("POST", "/api-keys", new_key_data)
-    if status != 201:
-        print(f"❌ POST /api/api-keys failed with status {status}")
-        return False
+            if field not in data:
+                missing_fields.append(field)
         
-    if 'key' not in result or 'name' not in result:
-        print("❌ POST /api/api-keys missing key or name in response")
-        return False
-        
-    created_key_id = result['_id']
-    full_key = result['key']
-    print(f"✅ Created API key: {result['name']} (scope: {result['scope']}, rateLimit: {result['rateLimit']})")
-    print(f"✅ Full key returned: {full_key}")
-    
-    # GET /api/api-keys again — Should show new key (masked)
-    result, status = test_api("GET", "/api-keys")
-    if status != 200:
-        print("❌ Second GET /api/api-keys failed")
-        return False
-        
-    # Find our created key
-    found_key = None
-    for key in result:
-        if key['_id'] == created_key_id:
-            found_key = key
-            break
-            
-    if not found_key:
-        print(f"❌ Created key {created_key_id} not found in list")
-        return False
-        
-    print(f"✅ Created key found in list - masked: {found_key['maskedKey']}")
-    
-    # DELETE /api/api-keys/{id} — Should revoke the key
-    result, status = test_api("DELETE", f"/api-keys/{created_key_id}")
-    if status != 200:
-        print(f"❌ DELETE /api/api-keys/{created_key_id} failed")
-        return False
-        
-    print(f"✅ Key revoked: {result.get('message', 'Key revoked')}")
-    
-    # GET /api/api-keys again — Should show key as revoked  
-    result, status = test_api("GET", "/api-keys")
-    if status != 200:
-        print("❌ Final GET /api/api-keys failed")
-        return False
-        
-    # Find our revoked key
-    found_key = None
-    for key in result:
-        if key['_id'] == created_key_id:
-            found_key = key
-            break
-            
-    if not found_key:
-        print(f"❌ Revoked key {created_key_id} not found in list")
-        return False
-        
-    if not found_key.get('revoked', False):
-        print("❌ Key not marked as revoked")
-        return False
-        
-    print(f"✅ Key correctly marked as revoked")
-    
-    print("✅ API Key Management CRUD test passed")
-    return True
-
-def test_2_public_api_authentication():
-    """Test 2: Public API v1 Authentication"""
-    print("\n🎯 TEST 2: PUBLIC API V1 AUTHENTICATION")
-    print("=" * 50)
-    
-    # GET /api/v1/orders WITHOUT X-API-Key header — Should return 401
-    result, status = test_api("GET", "/v1/orders")
-    if status != 401:
-        print(f"❌ Expected 401 for missing API key, got {status}")
-        return False
-        
-    if not isinstance(result, dict) or result.get('success') != False:
-        print("❌ Expected error response format for missing API key")
-        return False
-        
-    expected_error = "Missing X-API-Key header"
-    if expected_error not in result.get('error', ''):
-        print(f"❌ Expected error '{expected_error}', got: {result.get('error')}")
-        return False
-        
-    print(f"✅ Missing API key correctly returns 401: {result['error']}")
-    
-    # GET /api/v1/orders with invalid key — Should return 401
-    invalid_headers = {"X-API-Key": "invalid_key"}
-    result, status = test_api("GET", "/v1/orders", headers=invalid_headers)
-    if status != 401:
-        print(f"❌ Expected 401 for invalid API key, got {status}")
-        return False
-        
-    expected_error = "Invalid or revoked API key"
-    if expected_error not in result.get('error', ''):
-        print(f"❌ Expected error '{expected_error}', got: {result.get('error')}")
-        return False
-        
-    print(f"✅ Invalid API key correctly returns 401: {result['error']}")
-    
-    # GET /api/v1/openapi.json WITHOUT auth — Should return 200 (public)
-    result, status = test_api("GET", "/v1/openapi.json")
-    if status != 200:
-        print(f"❌ Expected 200 for public OpenAPI spec, got {status}")
-        return False
-        
-    if not isinstance(result, dict) or 'openapi' not in result:
-        print("❌ OpenAPI spec should be accessible without auth")
-        return False
-        
-    print(f"✅ OpenAPI spec accessible without auth: {result.get('info', {}).get('title', 'Unknown')}")
-    
-    print("✅ Public API Authentication test passed")
-    return True
-
-def test_3_public_api_endpoints():
-    """Test 3: Public API v1 Endpoints (with valid API key)"""
-    print("\n🎯 TEST 3: PUBLIC API V1 ENDPOINTS")
-    print("=" * 50)
-    
-    headers = {"X-API-Key": TEST_API_KEY}
-    
-    # GET /api/v1/orders?page=1&limit=3 — Should return paginated orders
-    params = {"page": 1, "limit": 3}
-    result, status = test_api("GET", "/v1/orders", params, headers)
-    if status != 200:
-        print(f"❌ GET /v1/orders failed with status {status}")
-        return False
-        
-    if not isinstance(result, dict) or result.get('success') != True:
-        print("❌ Expected success response format")
-        return False
-        
-    if 'data' not in result or 'meta' not in result:
-        print("❌ Missing data or meta in orders response")
-        return False
-        
-    meta = result['meta']
-    required_meta_fields = ['page', 'limit', 'total', 'totalPages']
-    for field in required_meta_fields:
-        if field not in meta:
-            print(f"❌ Missing meta field: {field}")
+        if missing_fields:
+            print(f"❌ FAILED - Missing required fields: {missing_fields}")
             return False
             
-    print(f"✅ GET /v1/orders: {len(result['data'])} orders, page {meta['page']}/{meta['totalPages']}, total: {meta['total']}")
-    
-    # Store order ID for single order test
-    order_id = None
-    if len(result['data']) > 0:
-        order_id = result['data'][0].get('orderId') or result['data'][0].get('_id')
-    
-    # GET /api/v1/orders/{id} — Should return single order with profit
-    if order_id:
-        result, status = test_api("GET", f"/v1/orders/{order_id}", headers=headers)
-        if status != 200:
-            print(f"❌ GET /v1/orders/{order_id} failed with status {status}")
-            return False
+        # Validate specific requirements
+        checks_passed = 0
+        total_checks = 7
+        
+        # Check XP >= 1000
+        if data.get('xp', 0) >= 1000:
+            print(f"✅ XP check passed: {data['xp']} >= 1000")
+            checks_passed += 1
+        else:
+            print(f"❌ XP check failed: {data['xp']} < 1000")
             
-        if result.get('success') != True or 'data' not in result:
-            print("❌ Single order response invalid")
-            return False
+        # Check level name is "Champion"
+        level_name = data.get('level', {}).get('name')
+        if level_name == "Champion":
+            print(f"✅ Level name check passed: {level_name}")
+            checks_passed += 1
+        else:
+            print(f"❌ Level name check failed: {level_name} != 'Champion'")
             
-        order_data = result['data']
-        if 'profit' not in order_data:
-            print("❌ Order missing profit calculation")
-            return False
+        # Check next level is "Legend"
+        next_level_name = data.get('nextLevel', {}).get('name') if data.get('nextLevel') else None
+        if next_level_name == "Legend":
+            print(f"✅ Next level check passed: {next_level_name}")
+            checks_passed += 1
+        else:
+            print(f"❌ Next level check failed: {next_level_name} != 'Legend'")
             
-        print(f"✅ GET /v1/orders/{order_id}: profit calculation included")
-    else:
-        print("⚠️  No orders available to test single order endpoint")
-    
-    # GET /api/v1/products?limit=2 — Should return SKU recipes
-    params = {"limit": 2}
-    result, status = test_api("GET", "/v1/products", params, headers)
-    if status != 200:
-        print(f"❌ GET /v1/products failed with status {status}")
-        return False
-        
-    if result.get('success') != True:
-        print("❌ Products response invalid")
-        return False
-        
-    print(f"✅ GET /v1/products: {len(result.get('data', []))} products returned")
-    
-    # GET /api/v1/products with ?search=Rose — Should return filtered products
-    params = {"search": "Rose"}
-    result, status = test_api("GET", "/v1/products", params, headers)
-    if status != 200:
-        print(f"❌ GET /v1/products with search failed")
-        return False
-        
-    print(f"✅ GET /v1/products?search=Rose: {len(result.get('data', []))} filtered products")
-    
-    # GET /api/v1/expenses — Should return expenses
-    result, status = test_api("GET", "/v1/expenses", headers=headers)
-    if status != 200:
-        print(f"❌ GET /v1/expenses failed")
-        return False
-        
-    if result.get('success') != True:
-        print("❌ Expenses response invalid")
-        return False
-        
-    print(f"✅ GET /v1/expenses: {result.get('meta', {}).get('total', 0)} expenses")
-    
-    # GET /api/v1/dashboard?range=alltime — Should return metrics
-    params = {"range": "alltime"}
-    result, status = test_api("GET", "/v1/dashboard", params, headers)
-    if status != 200:
-        print(f"❌ GET /v1/dashboard failed")
-        return False
-        
-    if result.get('success') != True:
-        print("❌ Dashboard response invalid")
-        return False
-        
-    data = result['data']
-    required_fields = ['totalOrders', 'revenue', 'netProfit']
-    for field in required_fields:
-        if field not in data:
-            print(f"❌ Missing dashboard field: {field}")
-            return False
+        # Check unlocked >= 18
+        unlocked_count = data.get('unlockedCount', 0)
+        if unlocked_count >= 18:
+            print(f"✅ Unlocked count check passed: {unlocked_count} >= 18")
+            checks_passed += 1
+        else:
+            print(f"❌ Unlocked count check failed: {unlocked_count} < 18")
             
-    if data['totalOrders'] <= 0 or data['revenue'] <= 0:
-        print("❌ Dashboard should have totalOrders > 0 and revenue > 0")
-        return False
-        
-    print(f"✅ GET /v1/dashboard: {data['totalOrders']} orders, ₹{data['revenue']} revenue, ₹{data['netProfit']} profit")
-    
-    # GET /api/v1/finance/bills — Should return bills
-    result, status = test_api("GET", "/v1/finance/bills", headers=headers)
-    if status != 200:
-        print(f"❌ GET /v1/finance/bills failed")
-        return False
-        
-    print(f"✅ GET /v1/finance/bills: {result.get('meta', {}).get('total', 0)} bills")
-    
-    # GET /api/v1/finance/vendors — Should return vendors  
-    result, status = test_api("GET", "/v1/finance/vendors", headers=headers)
-    if status != 200:
-        print(f"❌ GET /v1/finance/vendors failed")
-        return False
-        
-    print(f"✅ GET /v1/finance/vendors: {result.get('meta', {}).get('total', 0)} vendors")
-    
-    # GET /api/v1/inventory — Should return inventory items
-    result, status = test_api("GET", "/v1/inventory", headers=headers)
-    if status != 200:
-        print(f"❌ GET /v1/inventory failed")
-        return False
-        
-    print(f"✅ GET /v1/inventory: {result.get('meta', {}).get('total', 0)} inventory items")
-    
-    # GET /api/v1/employees — Should return employees
-    result, status = test_api("GET", "/v1/employees", headers=headers)
-    if status != 200:
-        print(f"❌ GET /v1/employees failed")
-        return False
-        
-    print(f"✅ GET /v1/employees: {result.get('meta', {}).get('total', 0)} employees")
-    
-    # GET /api/v1/unknown-resource — Should return 404
-    result, status = test_api("GET", "/v1/unknown-resource", headers=headers)
-    if status != 404:
-        print(f"❌ Expected 404 for unknown resource, got {status}")
-        return False
-        
-    if result.get('success') != False or 'error' not in result:
-        print("❌ Expected error response for unknown resource")
-        return False
-        
-    error_msg = result['error']
-    if 'Unknown resource' not in error_msg or 'Available:' not in error_msg:
-        print(f"❌ Error message should list available resources: {error_msg}")
-        return False
-        
-    print(f"✅ GET /v1/unknown-resource returns helpful 404: {error_msg}")
-    
-    print("✅ Public API Endpoints test passed")
-    return True
-
-def test_4_openapi_spec_validation():
-    """Test 4: OpenAPI Spec Validation"""
-    print("\n🎯 TEST 4: OPENAPI SPEC VALIDATION")
-    print("=" * 50)
-    
-    # GET /api/v1/openapi.json — Should return valid OpenAPI 3.0 spec
-    result, status = test_api("GET", "/v1/openapi.json")
-    if status != 200:
-        print(f"❌ GET /v1/openapi.json failed")
-        return False
-        
-    if not isinstance(result, dict):
-        print("❌ OpenAPI spec should be JSON object")
-        return False
-        
-    # Verify OpenAPI 3.0 structure
-    required_top_level = ['openapi', 'info', 'paths', 'components']
-    for field in required_top_level:
-        if field not in result:
-            print(f"❌ Missing OpenAPI field: {field}")
-            return False
+        # Check total achievements = 22
+        total_achievements = data.get('totalAchievements', 0)
+        if total_achievements == 22:
+            print(f"✅ Total achievements check passed: {total_achievements} == 22")
+            checks_passed += 1
+        else:
+            print(f"❌ Total achievements check failed: {total_achievements} != 22")
             
-    # Verify info section
-    info = result['info']
-    if 'title' not in info or 'version' not in info:
-        print("❌ Missing title or version in info")
-        return False
-        
-    print(f"✅ OpenAPI title: {info['title']}")
-    print(f"✅ OpenAPI version: {info['version']}")
-    
-    # Verify paths exist
-    paths = result['paths']
-    expected_paths = [
-        '/api/v1/orders',
-        '/api/v1/orders/{id}',
-        '/api/v1/products', 
-        '/api/v1/dashboard',
-        '/api/v1/expenses',
-        '/api/v1/finance/bills',
-        '/api/v1/inventory',
-        '/api/v1/employees'
-    ]
-    
-    for path in expected_paths:
-        if path not in paths:
-            print(f"❌ Missing path: {path}")
-            return False
+        # Check setup checklist has 6 items
+        checklist = data.get('setupChecklist', [])
+        if len(checklist) == 6:
+            print(f"✅ Setup checklist length check passed: {len(checklist)} == 6")
+            checks_passed += 1
+        else:
+            print(f"❌ Setup checklist length check failed: {len(checklist)} != 6")
             
-    print(f"✅ All expected paths present: {len(paths)} total paths")
-    
-    # Verify components has security schemes
-    components = result['components']
-    if 'securitySchemes' not in components:
-        print("❌ Missing securitySchemes in components")
-        return False
-        
-    security_schemes = components['securitySchemes']
-    if 'ApiKeyAuth' not in security_schemes:
-        print("❌ Missing ApiKeyAuth in securitySchemes")
-        return False
-        
-    api_key_auth = security_schemes['ApiKeyAuth']
-    if api_key_auth.get('type') != 'apiKey' or api_key_auth.get('name') != 'X-API-Key':
-        print(f"❌ Invalid ApiKeyAuth config: {api_key_auth}")
-        return False
-        
-    print(f"✅ ApiKeyAuth correctly configured")
-    
-    # Verify tags exist
-    if 'tags' not in result:
-        print("❌ Missing tags")
-        return False
-        
-    tags = result['tags']
-    expected_tag_names = ['Orders', 'Products', 'Expenses', 'Dashboard', 'Finance', 'Inventory', 'Employees']
-    tag_names = [tag.get('name') for tag in tags]
-    
-    for expected_tag in expected_tag_names:
-        if expected_tag not in tag_names:
-            print(f"❌ Missing tag: {expected_tag}")
-            return False
+        # Check setup checklist structure
+        if checklist and all('id' in item and 'label' in item and 'desc' in item and 'completed' in item for item in checklist):
+            print("✅ Setup checklist structure check passed")
+            checks_passed += 1
+        else:
+            print("❌ Setup checklist structure check failed")
             
-    print(f"✅ All expected tags present: {tag_names}")
-    
-    print("✅ OpenAPI Spec Validation test passed")
-    return True
-
-def test_5_response_format_consistency():
-    """Test 5: Response Format Consistency"""
-    print("\n🎯 TEST 5: RESPONSE FORMAT CONSISTENCY")
-    print("=" * 50)
-    
-    headers = {"X-API-Key": TEST_API_KEY}
-    
-    # Test multiple endpoints for consistent format
-    endpoints = [
-        "/v1/orders?limit=1",
-        "/v1/products?limit=1", 
-        "/v1/expenses",
-        "/v1/dashboard?range=today",
-        "/v1/finance/bills",
-        "/v1/inventory",
-        "/v1/employees"
-    ]
-    
-    for endpoint in endpoints:
-        result, status = test_api("GET", endpoint, headers=headers)
-        if status != 200:
-            print(f"❌ {endpoint} failed with status {status}")
-            return False
-            
-        # Verify response format: {success: true, data: ..., meta: ...}
-        if not isinstance(result, dict):
-            print(f"❌ {endpoint} should return JSON object")
-            return False
-            
-        if result.get('success') != True:
-            print(f"❌ {endpoint} should have success: true")
-            return False
-            
-        if 'data' not in result:
-            print(f"❌ {endpoint} missing data field")
-            return False
-            
-        # Most endpoints should have meta (except some dashboard)
-        if endpoint != "/v1/dashboard?range=today" and 'meta' not in result:
-            print(f"⚠️  {endpoint} missing meta field (may be expected)")
-            
-        print(f"✅ {endpoint} has correct response format")
-    
-    # Test error response format
-    result, status = test_api("GET", "/v1/orders", headers={"X-API-Key": "invalid"})
-    if status != 401:
-        print("❌ Error test failed")
-        return False
-        
-    # Verify error format: {success: false, error: "message"}
-    if result.get('success') != False or 'error' not in result:
-        print(f"❌ Error response format incorrect: {result}")
-        return False
-        
-    print(f"✅ Error responses have correct format: {{'success': False, 'error': '...'}}")
-    
-    print("✅ Response Format Consistency test passed")
-    return True
-
-def main():
-    """Run all Phase 6.4 Public API tests"""
-    print("🚀 PHASE 6.4 - PUBLIC API WITH SWAGGER DOCUMENTATION TESTING")
-    print("=" * 70)
-    print(f"Base URL: {BASE_URL}")
-    print(f"Test API Key: {TEST_API_KEY}")
-    print("=" * 70)
-    
-    test_results = []
-    
-    try:
-        # Test 1: API Key Management CRUD
-        result1 = test_1_api_key_management_crud()
-        test_results.append(("API Key Management CRUD", result1))
-        
-        # Test 2: Public API Authentication  
-        result2 = test_2_public_api_authentication()
-        test_results.append(("Public API Authentication", result2))
-        
-        # Test 3: Public API Endpoints
-        result3 = test_3_public_api_endpoints()
-        test_results.append(("Public API Endpoints", result3))
-        
-        # Test 4: OpenAPI Spec Validation
-        result4 = test_4_openapi_spec_validation()
-        test_results.append(("OpenAPI Spec Validation", result4))
-        
-        # Test 5: Response Format Consistency
-        result5 = test_5_response_format_consistency()
-        test_results.append(("Response Format Consistency", result5))
+        print(f"\nGamification Progress API: {checks_passed}/{total_checks} checks passed")
+        return checks_passed == total_checks
         
     except Exception as e:
-        print(f"❌ Test execution error: {e}")
-    
-    # Print summary
-    print("\n📊 FINAL TEST RESULTS SUMMARY")
-    print("=" * 40)
-    
-    passed = 0
-    total = len(test_results)
-    
-    for test_name, success in test_results:
-        status = "✅ PASSED" if success else "❌ FAILED"
-        print(f"{status}: {test_name}")
-        if success:
-            passed += 1
-    
-    print("=" * 40)
-    print(f"TOTAL: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
-    
-    if passed == total:
-        print("🎉 ALL TESTS PASSED! Public API system is fully functional!")
-        return True
-    else:
-        print("⚠️  Some tests failed. Check the details above.")
+        print(f"❌ FAILED - Exception: {str(e)}")
         return False
 
+def test_module_settings():
+    """Test Module Settings API (GET/POST /api/module-settings)"""
+    print("\n🎯 TESTING MODULE SETTINGS API")
+    try:
+        # Test 1: GET /api/module-settings - should return 7 modules with enabled: true
+        print("\n--- Test 1: GET /api/module-settings ---")
+        response = requests.get(f"{BASE_URL}/api/module-settings")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"❌ GET failed - Expected 200, got {response.status_code}")
+            return False
+            
+        data = response.json()
+        expected_modules = ['kds', 'employees', 'rto', 'inventory', 'finance', 'whatsapp', 'reports']
+        
+        checks_passed = 0
+        total_checks = 13
+        
+        if len(data) == 7:
+            print(f"✅ Module count check passed: {len(data)} == 7")
+            checks_passed += 1
+        else:
+            print(f"❌ Module count check failed: {len(data)} != 7")
+            
+        for module_name in expected_modules:
+            if module_name in data:
+                module_data = data[module_name]
+                if module_data.get('enabled') is True and 'label' in module_data and 'desc' in module_data:
+                    print(f"✅ Module {module_name} structure check passed")
+                    checks_passed += 1
+                else:
+                    print(f"❌ Module {module_name} structure check failed: {module_data}")
+            else:
+                print(f"❌ Module {module_name} missing")
+        
+        # Test 2: POST /api/module-settings to disable KDS
+        print("\n--- Test 2: POST /api/module-settings (disable kds) ---")
+        payload = {"kds": False}
+        response = requests.post(f"{BASE_URL}/api/module-settings", json=payload)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            print("✅ POST disable kds successful")
+            checks_passed += 1
+        else:
+            print(f"❌ POST disable kds failed - Expected 200, got {response.status_code}")
+            
+        # Test 3: GET to verify KDS is disabled
+        print("\n--- Test 3: GET /api/module-settings (verify kds disabled) ---")
+        response = requests.get(f"{BASE_URL}/api/module-settings")
+        data = response.json()
+        
+        if data.get('kds', {}).get('enabled') is False:
+            print("✅ KDS disable verification passed")
+            checks_passed += 1
+        else:
+            print(f"❌ KDS disable verification failed: {data.get('kds', {})}")
+            
+        # Test 4: POST to update multiple modules
+        print("\n--- Test 4: POST /api/module-settings (update multiple) ---")
+        payload = {"kds": True, "whatsapp": False}
+        response = requests.post(f"{BASE_URL}/api/module-settings", json=payload)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            print("✅ POST multiple updates successful")
+            checks_passed += 1
+        else:
+            print(f"❌ POST multiple updates failed - Expected 200, got {response.status_code}")
+            
+        # Test 5: GET to verify multiple updates
+        print("\n--- Test 5: GET /api/module-settings (verify multiple updates) ---")
+        response = requests.get(f"{BASE_URL}/api/module-settings")
+        data = response.json()
+        
+        kds_enabled = data.get('kds', {}).get('enabled')
+        whatsapp_enabled = data.get('whatsapp', {}).get('enabled')
+        
+        if kds_enabled is True and whatsapp_enabled is False:
+            print("✅ Multiple updates verification passed")
+            checks_passed += 1
+        else:
+            print(f"❌ Multiple updates verification failed - kds: {kds_enabled}, whatsapp: {whatsapp_enabled}")
+            
+        # Test 6: Reset whatsapp back to enabled
+        print("\n--- Test 6: POST /api/module-settings (reset whatsapp) ---")
+        payload = {"whatsapp": True}
+        response = requests.post(f"{BASE_URL}/api/module-settings", json=payload)
+        
+        if response.status_code == 200:
+            print("✅ Reset whatsapp successful")
+            checks_passed += 1
+        else:
+            print(f"❌ Reset whatsapp failed - Expected 200, got {response.status_code}")
+            
+        print(f"\nModule Settings API: {checks_passed}/{total_checks} checks passed")
+        return checks_passed == total_checks
+        
+    except Exception as e:
+        print(f"❌ FAILED - Exception: {str(e)}")
+        return False
+
+def test_regression_apis():
+    """Test existing APIs to ensure no regression"""
+    print("\n🎯 TESTING REGRESSION - EXISTING APIs")
+    try:
+        checks_passed = 0
+        total_checks = 2
+        
+        # Test 1: GET /api/api-keys - should return API keys array
+        print("\n--- Test 1: GET /api/api-keys ---")
+        response = requests.get(f"{BASE_URL}/api/api-keys")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, list):
+                print(f"✅ API Keys endpoint working - returned {len(data)} keys")
+                checks_passed += 1
+            else:
+                print(f"❌ API Keys endpoint failed - Expected array, got {type(data)}")
+        else:
+            print(f"❌ API Keys endpoint failed - Expected 200, got {response.status_code}")
+            
+        # Test 2: GET /api/v1/orders with API key - should return orders
+        print("\n--- Test 2: GET /api/v1/orders?page=1&limit=1 (with API key) ---")
+        headers = {"X-API-Key": API_KEY}
+        response = requests.get(f"{BASE_URL}/api/v1/orders?page=1&limit=1", headers=headers)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success') and 'data' in data:
+                print(f"✅ Orders API endpoint working with API key")
+                checks_passed += 1
+            else:
+                print(f"❌ Orders API endpoint failed - Invalid response structure")
+        else:
+            print(f"❌ Orders API endpoint failed - Expected 200, got {response.status_code}")
+            
+        print(f"\nRegression Tests: {checks_passed}/{total_checks} checks passed")
+        return checks_passed == total_checks
+        
+    except Exception as e:
+        print(f"❌ FAILED - Exception: {str(e)}")
+        return False
+
+def main():
+    """Run all tests for Phase 6.5 - Gamification & Module Toggle System"""
+    print("🚀 STARTING PHASE 6.5 TESTING - Gamification & Module Toggle System")
+    print(f"Base URL: {BASE_URL}")
+    
+    results = {
+        "gamification_progress": test_gamification_progress(),
+        "module_settings": test_module_settings(), 
+        "regression_apis": test_regression_apis()
+    }
+    
+    print("\n" + "="*70)
+    print("📊 FINAL TEST RESULTS")
+    print("="*70)
+    
+    total_passed = sum(results.values())
+    total_tests = len(results)
+    
+    for test_name, passed in results.items():
+        status = "✅ PASSED" if passed else "❌ FAILED"
+        print(f"{test_name.replace('_', ' ').title()}: {status}")
+        
+    print(f"\nOverall Result: {total_passed}/{total_tests} test areas passed")
+    
+    if total_passed == total_tests:
+        print("🎉 ALL TESTS PASSED! Phase 6.5 backend is working correctly.")
+        sys.exit(0)
+    else:
+        print("⚠️  Some tests failed. Check the details above.")
+        sys.exit(1)
+
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()

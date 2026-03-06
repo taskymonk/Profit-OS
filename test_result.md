@@ -4645,12 +4645,29 @@ agent_communication:
           comment: "New API page in sidebar with 3 tabs: API Keys (create/revoke/view), Documentation (embedded Swagger UI), Code Examples (cURL, JS, Python, Node.js snippets). Quick stats cards showing active keys, total requests, endpoint count."
 
 test_plan:
-  current_focus: []
+  current_focus: ["Phase 6.5 - Gamification", "Phase 6.5 - Module Toggles"]
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+    - agent: "main"
+      message: "Phase 6.5 Gamification & Module Toggle has been implemented. Please test:
+      
+      **Gamification Progress API:**
+      1. GET /api/gamification/progress - Should return XP >= 1000, level Champion, 18+ unlocked achievements, setupChecklist with 6 items
+      
+      **Module Settings API:**
+      2. GET /api/module-settings - Should return 7 modules all enabled
+      3. POST /api/module-settings with {\"kds\": false} - Should disable KDS
+      4. GET /api/module-settings - Verify kds.enabled=false
+      5. POST /api/module-settings with {\"kds\": true} - Re-enable KDS
+      
+      **Regression Check:**
+      6. GET /api/api-keys - Should still work
+      7. GET /api/v1/orders?page=1&limit=1 with X-API-Key: pos_test_api_key_for_testing_12345 - Should still work
+      
+      Base URL: http://localhost:3000"
     - agent: "main"
       message: "Phase 6.4 Public API has been implemented. Please test the following:
       
@@ -4802,3 +4819,59 @@ agent_communication:
 ✓ Public endpoints (OpenAPI spec) accessible without authentication as designed
 
 **PHASE 6.4 PUBLIC API WITH SWAGGER DOCUMENTATION FULLY FUNCTIONAL AND TESTED!** All 5 critical areas working perfectly. API management, authentication, 10 public endpoints, OpenAPI documentation, and response consistency all verified with comprehensive testing."
+    - agent: "main"
+      message: "PHASE 6.5 - GAMIFICATION & MODULE TOGGLE SYSTEM TESTING NEEDED. Base URL: http://localhost:3000. Test these 3 areas:
+
+1. **GAMIFICATION PROGRESS API** (GET /api/gamification/progress):
+   - Should return JSON object with: xp (number, should be >= 1000), level object with name (should be 'Champion'), icon, color
+   - nextLevel object (should be 'Legend'), progressToNext (percentage number)
+   - unlocked array (should have 18+ items), locked array (remaining achievements)
+   - unlockedCount (should be >= 18), totalAchievements (should be 22)
+   - setupChecklist array with 6 items, each having id, label, desc, completed fields
+
+2. **MODULE SETTINGS API**:
+   - GET /api/module-settings — Should return 7 modules: kds, employees, rto, inventory, finance, whatsapp, reports. Each with enabled: true, label, desc.
+   - POST /api/module-settings with body {'kds': false} — Should return success message
+   - GET /api/module-settings — Verify kds.enabled is now false  
+   - POST /api/module-settings with body {'kds': true, 'whatsapp': false} — Should update both
+   - GET /api/module-settings — Verify kds=true, whatsapp=false
+   - POST /api/module-settings with body {'whatsapp': true} — Reset whatsapp back
+
+3. **REGRESSION: EXISTING APIs**:
+   - GET /api/api-keys — Should still return API keys array
+   - GET /api/v1/orders?page=1&limit=1 with header X-API-Key: pos_test_api_key_for_testing_12345 — Should still return orders
+
+**DO NOT modify** any code. Just test and report results."
+    - agent: "testing"
+      message: "🎉 PHASE 6.5 - GAMIFICATION & MODULE TOGGLE SYSTEM TESTING COMPLETE - ALL 3 CRITICAL AREAS PASSED!
+
+🎯 **GAMIFICATION PROGRESS API**: ✅ PASSED (7/7 tests)
+- ✅ XP check passed: 1575 >= 1000 
+- ✅ Level name check passed: 'Champion'
+- ✅ Next level check passed: 'Legend'
+- ✅ Unlocked count check passed: 18 >= 18
+- ✅ Total achievements check passed: 22 == 22 
+- ✅ Setup checklist length check passed: 6 == 6
+- ✅ Setup checklist structure check passed: All items have id, label, desc, completed fields
+
+🎯 **MODULE SETTINGS API**: ✅ PASSED (13/13 tests)
+- ✅ Module count check passed: 7 == 7 (kds, employees, rto, inventory, finance, whatsapp, reports)
+- ✅ All 7 modules have proper structure (enabled: true, label, desc fields)
+- ✅ POST disable kds successful (200 status)
+- ✅ KDS disable verification passed (enabled: false)
+- ✅ POST multiple updates successful (kds: true, whatsapp: false)
+- ✅ Multiple updates verification passed (kds=true, whatsapp=false)
+- ✅ Reset whatsapp successful (whatsapp: true)
+
+🎯 **REGRESSION - EXISTING APIs**: ✅ PASSED (2/2 tests)
+- ✅ API Keys endpoint working - returned 3 keys
+- ✅ Orders API endpoint working with API key (pos_test_api_key_for_testing_12345)
+
+**COMPREHENSIVE SYSTEM VERIFICATION:**
+✓ Gamification engine fully operational with XP=1575, Champion level, 18/22 achievements unlocked
+✓ Module toggle system working perfectly - all 7 modules configurable with persistence
+✓ Setup checklist populated with 6 onboarding items with completion tracking
+✓ All existing APIs remain functional (no regression)
+✓ API authentication system intact with proper key validation
+
+**PHASE 6.5 GAMIFICATION & MODULE TOGGLE SYSTEM FULLY FUNCTIONAL AND TESTED!** All 3 critical areas working perfectly. Achievement system calculating progress correctly, module settings with full CRUD operations, and existing API compatibility confirmed. Base URL: http://localhost:3000"

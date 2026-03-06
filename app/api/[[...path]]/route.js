@@ -5,6 +5,7 @@ import { calculateOrderProfit, calculateDashboardMetrics, calculateProratedOverh
 import { getSyncSettings, updateSyncSettings, initScheduler, getSchedulerStatus, acquireSyncLock, releaseSyncLock, isSyncRunning, getSyncLockStatus } from '@/lib/syncScheduler';
 import { shopifySyncOrdersIncremental, razorpaySyncPaymentsIncremental, logSyncEventLib } from '@/lib/syncFunctions';
 import crypto from 'crypto';
+import { calculateProgress, SETUP_CHECKLIST, DEFAULT_MODULE_SETTINGS } from '@/lib/achievements';
 
 function corsHeaders() {
   return {
@@ -2291,6 +2292,72 @@ export async function GET(request) {
         return json(masked);
       }
 
+      case 'gamification': {
+        // GET /api/gamification/progress — Calculate and return gamification data
+        const db = await getDb();
+        const [tenantConfig, integrations, orderCount, skuCount, expCount, billCount, vendorCount, invCount, empCount, apiKeyCount] = await Promise.all([
+          db.collection('tenantConfig').findOne({}),
+          db.collection('integrations').findOne({ _id: 'integrations-config' }),
+          db.collection('orders').countDocuments({}),
+          db.collection('skuRecipes').countDocuments({}),
+          db.collection('overheadExpenses').countDocuments({}),
+          db.collection('bills').countDocuments({}),
+          db.collection('vendors').countDocuments({}),
+          db.collection('inventoryItems').countDocuments({}),
+          db.collection('employees').countDocuments({}),
+          db.collection('apiKeys').countDocuments({ revoked: { $ne: true } }),
+        ]);
+
+        // Check if any backups exist
+        const fs = (await import('fs')).default;
+        const path = (await import('path')).default;
+        const backupDir = path.join(process.cwd(), 'backups');
+        let backupCount = 0;
+        try { backupCount = fs.readdirSync(backupDir).filter(f => f.endsWith('.zip')).length; } catch {}
+
+        const ctx = {
+          tenantConfig: tenantConfig || {},
+          integrations: integrations || {},
+          counts: {
+            orders: orderCount,
+            skuRecipes: skuCount,
+            expenses: expCount,
+            bills: billCount,
+            vendors: vendorCount,
+            inventoryItems: invCount,
+            employees: empCount,
+            apiKeys: apiKeyCount,
+            backups: backupCount,
+          },
+        };
+
+        const progress = calculateProgress(ctx);
+
+        // Build setup checklist
+        const setupChecklist = SETUP_CHECKLIST.map(item => {
+          const ach = progress.unlocked.find(a => a.id === item.achievementId);
+          return { ...item, completed: !!ach };
+        });
+
+        return json({ ...progress, setupChecklist });
+      }
+
+      case 'module-settings': {
+        // GET /api/module-settings — Get module toggle settings
+        const db = await getDb();
+        const config = await db.collection('tenantConfig').findOne({});
+        const moduleSettings = config?.moduleSettings || {};
+        // Merge with defaults
+        const merged = {};
+        for (const [key, def] of Object.entries(DEFAULT_MODULE_SETTINGS)) {
+          merged[key] = {
+            ...def,
+            enabled: moduleSettings[key]?.enabled !== undefined ? moduleSettings[key].enabled : def.enabled,
+          };
+        }
+        return json(merged);
+      }
+
       case 'users': {
         const db = await getDb();
         if (subResource && subResource !== 'me') {
@@ -3560,6 +3627,21 @@ export async function POST(request) {
         const db = await getDb();
         await db.collection('apiKeys').insertOne(keyDoc);
         return json({ _id: keyDoc._id, key: rawKey, name: keyDoc.name, scope: keyDoc.scope, rateLimit: keyDoc.rateLimit, createdAt: keyDoc.createdAt }, 201);
+      }
+
+      case 'module-settings': {
+        // POST /api/module-settings — Update module toggle settings
+        const db = await getDb();
+        const updates = {};
+        for (const [key, val] of Object.entries(body)) {
+          if (DEFAULT_MODULE_SETTINGS[key] !== undefined) {
+            updates[`moduleSettings.${key}.enabled`] = !!val;
+          }
+        }
+        if (Object.keys(updates).length > 0) {
+          await db.collection('tenantConfig').updateOne({}, { $set: updates });
+        }
+        return json({ message: 'Module settings updated' });
       }
 
       case 'seed':

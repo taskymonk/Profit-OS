@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle, Globe, DollarSign, Settings2, ToggleLeft, Upload, Image, Check, Sun, Moon, Monitor, Users } from 'lucide-react';
+import { Save, Building2, Palette, Trash2, AlertTriangle, Loader2, CheckCircle2, AlertCircle, Globe, DollarSign, Settings2, ToggleLeft, Upload, Image, Check, Sun, Moon, Monitor, Users, Blocks } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
@@ -88,7 +88,7 @@ function extractColorsFromImage(imgSrc) {
   });
 }
 
-export default function SettingsView() {
+export default function SettingsView({ moduleSettings = {}, onModuleSettingsChange }) {
   const [config, setConfig] = useState({
     tenantName: '', logo: '', icon: '', primaryColor: '#059669', themePreference: 'system',
     baseCurrency: 'INR', supportedCurrencies: ['INR', 'USD'], timezone: 'Asia/Kolkata',
@@ -771,6 +771,42 @@ export default function SettingsView() {
           </Button>
         </DialogContent>
       </Dialog>
+
+      {/* ========== MODULE TOGGLES ========== */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30"><Blocks className="w-5 h-5 text-indigo-600" /></div>
+            <div>
+              <CardTitle className="text-base">Module Management</CardTitle>
+              <CardDescription>Enable or disable sidebar modules to simplify your workspace</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {Object.entries(moduleSettings).map(([key, mod]) => (
+              <div key={key} className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/30 transition-colors">
+                <div>
+                  <p className="text-sm font-medium">{mod.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{mod.desc}</p>
+                </div>
+                <Switch
+                  checked={mod.enabled !== false}
+                  onCheckedChange={(checked) => {
+                    if (onModuleSettingsChange) {
+                      onModuleSettingsChange({ [key]: checked });
+                    }
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+          {Object.keys(moduleSettings).length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">No toggleable modules available.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

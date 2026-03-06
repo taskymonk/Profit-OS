@@ -9,10 +9,12 @@ import {
   Settings, Plug, ChevronLeft, ChevronRight, Menu, X,
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
   Boxes, Moon, Sun, BarChart3, LogOut, UserCircle, Shield,
-  ChevronDown, ClipboardList, MessageSquare, Banknote, PackageX, HardDrive, Code2
+  ChevronDown, ClipboardList, MessageSquare, Banknote, PackageX, HardDrive, Code2,
+  Trophy, Sparkles
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuLabel
@@ -33,24 +35,65 @@ import FinanceView from '@/components/FinanceView';
 import RTOView from '@/components/RTOView';
 import DataManagementView from '@/components/DataManagementView';
 import ApiSettingsView from '@/components/ApiSettingsView';
+import GamificationView from '@/components/GamificationView';
 
-const ALL_NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'admin' },
-  { id: 'kds', label: 'Kitchen Display', icon: Boxes, minRole: 'employee' },
-  { id: 'orders', label: 'Orders', icon: ShoppingCart, minRole: 'admin' },
-  { id: 'rto', label: 'Returns & RTO', icon: PackageX, minRole: 'admin' },
-  { id: 'products', label: 'SKU Recipes', icon: Package, minRole: 'admin' },
-  { id: 'inventory', label: 'Inventory', icon: Boxes, minRole: 'admin' },
-  { id: 'employees', label: 'KDS Overview', icon: ClipboardList, minRole: 'admin' },
-  { id: 'expenses', label: 'Expenses', icon: Receipt, minRole: 'admin' },
-  { id: 'finance', label: 'Finance', icon: Banknote, minRole: 'admin' },
-  { id: 'reports', label: 'Reports', icon: BarChart3, minRole: 'admin' },
-  { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, minRole: 'admin' },
-  { id: 'integrations', label: 'Integrations', icon: Plug, minRole: 'master_admin' },
-  { id: 'data-management', label: 'Data Management', icon: HardDrive, minRole: 'master_admin' },
-  { id: 'api-settings', label: 'API', icon: Code2, minRole: 'master_admin' },
-  { id: 'settings', label: 'Settings', icon: Settings, minRole: 'master_admin' },
+// Organized nav with section groups
+const NAV_SECTIONS = [
+  {
+    label: null, // No header for main section
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'admin', alwaysShow: true },
+    ],
+  },
+  {
+    label: 'Operations',
+    items: [
+      { id: 'orders', label: 'Orders', icon: ShoppingCart, minRole: 'admin', alwaysShow: true },
+      { id: 'rto', label: 'Returns & RTO', icon: PackageX, minRole: 'admin', toggleKey: 'rto' },
+    ],
+  },
+  {
+    label: 'Production',
+    items: [
+      { id: 'kds', label: 'Kitchen Display', icon: Boxes, minRole: 'employee', toggleKey: 'kds' },
+      { id: 'employees', label: 'KDS Overview', icon: ClipboardList, minRole: 'admin', toggleKey: 'employees' },
+    ],
+  },
+  {
+    label: 'Products & Stock',
+    items: [
+      { id: 'products', label: 'SKU Recipes', icon: Package, minRole: 'admin', alwaysShow: true },
+      { id: 'inventory', label: 'Inventory', icon: Boxes, minRole: 'admin', toggleKey: 'inventory' },
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      { id: 'expenses', label: 'Expenses', icon: Receipt, minRole: 'admin', alwaysShow: true },
+      { id: 'finance', label: 'Finance', icon: Banknote, minRole: 'admin', toggleKey: 'finance' },
+      { id: 'reports', label: 'Reports', icon: BarChart3, minRole: 'admin', toggleKey: 'reports' },
+    ],
+  },
+  {
+    label: 'Communication',
+    items: [
+      { id: 'whatsapp', label: 'WhatsApp', icon: MessageSquare, minRole: 'admin', toggleKey: 'whatsapp' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { id: 'gamification', label: 'Achievements', icon: Trophy, minRole: 'admin', alwaysShow: true },
+      { id: 'integrations', label: 'Integrations', icon: Plug, minRole: 'master_admin', alwaysShow: true },
+      { id: 'data-management', label: 'Data Management', icon: HardDrive, minRole: 'master_admin', alwaysShow: true },
+      { id: 'api-settings', label: 'API', icon: Code2, minRole: 'master_admin', alwaysShow: true },
+      { id: 'settings', label: 'Settings', icon: Settings, minRole: 'master_admin', alwaysShow: true },
+    ],
+  },
 ];
+
+// Flatten for backwards compatibility
+const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items);
 
 const ROLE_LEVEL = { master_admin: 3, admin: 2, employee: 1 };
 
@@ -80,12 +123,29 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [tenantConfig, setTenantConfig] = useState(null);
   const [dataReady, setDataReady] = useState(false);
+  const [moduleSettings, setModuleSettings] = useState({});
+  const [gamificationData, setGamificationData] = useState(null);
 
   const userRole = session?.user?.role || 'employee';
   const userLevel = ROLE_LEVEL[userRole] || 1;
 
-  // Filter nav items based on user role
-  const navItems = ALL_NAV_ITEMS.filter(item => userLevel >= (ROLE_LEVEL[item.minRole] || 1));
+  // Filter nav sections based on role and module toggles
+  const filteredSections = NAV_SECTIONS.map(section => ({
+    ...section,
+    items: section.items.filter(item => {
+      // Role check
+      if (userLevel < (ROLE_LEVEL[item.minRole] || 1)) return false;
+      // Module toggle check (only if toggleKey is defined and not alwaysShow)
+      if (item.toggleKey && !item.alwaysShow) {
+        const mod = moduleSettings[item.toggleKey];
+        if (mod && mod.enabled === false) return false;
+      }
+      return true;
+    }),
+  })).filter(section => section.items.length > 0);
+
+  // Flat list for compatibility
+  const navItems = filteredSections.flatMap(s => s.items);
 
   // Hex to HSL converter for CSS variables
   const hexToHSL = useCallback((hex) => {
@@ -161,7 +221,11 @@ export default function App() {
 
     async function init() {
       try {
-        const configRes = await fetch('/api/tenant-config');
+        const [configRes, moduleRes, gamRes] = await Promise.all([
+          fetch('/api/tenant-config'),
+          fetch('/api/module-settings'),
+          fetch('/api/gamification/progress'),
+        ]);
         const config = await configRes.json();
         if (config && config.tenantName) {
           setTenantConfig(config);
@@ -170,6 +234,8 @@ export default function App() {
           if (config.icon) setFavicon(config.icon);
           else if (config.logo) setFavicon(config.logo);
         }
+        try { const modData = await moduleRes.json(); setModuleSettings(modData || {}); } catch {}
+        try { const gamData = await gamRes.json(); setGamificationData(gamData); } catch {}
         setDataReady(true);
       } catch (err) {
         console.error('Init error:', err);
@@ -245,7 +311,16 @@ export default function App() {
       case 'integrations': return <IntegrationsView />;
       case 'data-management': return <DataManagementView />;
       case 'api-settings': return <ApiSettingsView />;
-      case 'settings': return <SettingsView />;
+      case 'gamification': return <GamificationView onNavigate={(view) => setActiveView(view)} />;
+      case 'settings': return <SettingsView moduleSettings={moduleSettings} onModuleSettingsChange={async (updates) => {
+        try {
+          await fetch('/api/module-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
+          const res = await fetch('/api/module-settings');
+          const data = await res.json();
+          setModuleSettings(data || {});
+          toast.success('Module settings updated');
+        } catch { toast.error('Failed to update'); }
+      }} />;
       default: return <DashboardView />;
     }
   };
@@ -309,32 +384,60 @@ export default function App() {
           )}
         </div>
 
-        {/* Nav Items */}
-        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
-          {navItems.map(item => {
-            const Icon = item.icon;
-            const isActive = activeView === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                  transition-all duration-200 min-h-[44px]
-                  ${isActive
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                  }
-                  ${!sidebarOpen && 'justify-center px-2'}
-                `}
-                title={!sidebarOpen ? item.label : undefined}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && <span className="truncate">{item.label}</span>}
-              </button>
-            );
-          })}
+        {/* Nav Items - Sectioned */}
+        <nav className="flex-1 py-3 px-3 space-y-0.5 overflow-y-auto">
+          {filteredSections.map((section, sIdx) => (
+            <div key={sIdx}>
+              {section.label && sidebarOpen && (
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold px-3 pt-3 pb-1">{section.label}</p>
+              )}
+              {section.label && !sidebarOpen && sIdx > 0 && (
+                <div className="mx-2 my-2 border-t border-sidebar-border" />
+              )}
+              {section.items.map(item => {
+                const Icon = item.icon;
+                const isActive = activeView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
+                    className={`
+                      w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+                      transition-all duration-200 min-h-[38px]
+                      ${isActive
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                      }
+                      ${!sidebarOpen && 'justify-center px-2'}
+                    `}
+                    title={!sidebarOpen ? item.label : undefined}
+                  >
+                    <Icon className="w-[18px] h-[18px] flex-shrink-0" />
+                    {sidebarOpen && <span className="truncate text-[13px]">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
+
+        {/* Gamification Progress Widget */}
+        {sidebarOpen && gamificationData && (
+          <div className="px-3 pb-2">
+            <button
+              onClick={() => { setActiveView('gamification'); setMobileMenuOpen(false); }}
+              className="w-full p-2.5 rounded-lg border bg-gradient-to-r from-violet-50/50 to-amber-50/50 dark:from-violet-900/10 dark:to-amber-900/10 hover:shadow-sm transition-all text-left"
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-base">{gamificationData.level?.icon}</span>
+                <span className="text-xs font-semibold">{gamificationData.level?.name}</span>
+                <Badge variant="outline" className="text-[8px] h-3.5 ml-auto">{gamificationData.xp} XP</Badge>
+              </div>
+              <Progress value={gamificationData.progressToNext || 100} className="h-1.5" />
+              <p className="text-[9px] text-muted-foreground mt-1">{gamificationData.unlockedCount}/{gamificationData.totalAchievements} achievements</p>
+            </button>
+          </div>
+        )}
 
         {/* Sidebar Footer */}
         <div className="p-3 border-t border-sidebar-border space-y-1">
