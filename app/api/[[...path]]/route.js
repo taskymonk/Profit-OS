@@ -2375,7 +2375,7 @@ export async function GET(request) {
 
       case 'users': {
         const db = await getDb();
-        if (subResource && action === 'activity') {
+        if (subResource && thirdSegment === 'activity') {
           // GET /api/users/{id}/activity — User activity log
           const activities = await db.collection('userActivity').find({ userId: subResource }).sort({ timestamp: -1 }).limit(100).toArray();
           // Also add auto-generated activity from KDS assignments
@@ -6001,6 +6001,7 @@ export async function PUT(request) {
         const kdsSubResource = kdsSegs[1];
         const kdsId = kdsSegs[2];
         const kdsAction = kdsSegs[3];
+        const db = await getDb();
 
         if (kdsSubResource === 'override' && kdsId) {
           // PUT /api/kds/override/{assignmentId} — Master admin override
