@@ -190,13 +190,28 @@ export default function App() {
     });
   }, []);
 
+  // Set default view based on role when session loads
+  const [initialViewSet, setInitialViewSet] = useState(false);
+  useEffect(() => {
+    if (status === 'authenticated' && !initialViewSet) {
+      const role = session?.user?.role || 'employee';
+      if (role === 'employee') {
+        setActiveView('kds');
+      } else {
+        setActiveView('dashboard');
+      }
+      setInitialViewSet(true);
+    }
+  }, [status, session, initialViewSet]);
+
   // Ensure active view is accessible by current role
   useEffect(() => {
+    if (!initialViewSet) return;
     const isAccessible = navItems.some(item => item.id === activeView);
     if (!isAccessible && navItems.length > 0) {
       setActiveView(navItems[0].id);
     }
-  }, [userRole, activeView, navItems]);
+  }, [userRole, activeView, navItems, initialViewSet]);
 
   const renderView = () => {
     switch (activeView) {
