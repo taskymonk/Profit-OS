@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import GuideCard from '@/components/GuideCard';
+import PageSkeleton from '@/components/PageSkeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -262,7 +263,7 @@ export default function InventoryView() {
 
       {/* Inventory Items */}
       {loading ? (
-        <div className="text-center py-12 text-muted-foreground">Loading inventory...</div>
+        <PageSkeleton variant="list" />
       ) : Object.keys(grouped).length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">

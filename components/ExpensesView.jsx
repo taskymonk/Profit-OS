@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import GuideCard from '@/components/GuideCard';
+import PageSkeleton from '@/components/PageSkeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -193,7 +194,7 @@ export default function ExpensesView() {
   const totalMonthly = expenses.filter(e => e.category !== 'MetaAds' && (e.frequency === 'monthly' || e.frequency === 'recurring')).reduce((s, e) => s + (e.amount || 0), 0);
   const totalYearly = expenses.filter(e => e.category !== 'MetaAds' && e.frequency === 'yearly').reduce((s, e) => s + (e.amount || 0), 0);
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-6 h-6 animate-spin" /></div>;
+  if (loading) return <PageSkeleton variant="list" />;
 
   return (
     <div className="space-y-6">

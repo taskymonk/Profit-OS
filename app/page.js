@@ -39,6 +39,8 @@ import GamificationView from '@/components/GamificationView';
 import UserManagementView from '@/components/UserManagementView';
 import ShippingCarriersView from '@/components/ShippingCarriersView';
 import ProfileView from '@/components/ProfileView';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import OfflineBanner from '@/components/OfflineBanner';
 
 // Organized nav with section groups
 const NAV_SECTIONS = [
@@ -534,9 +536,12 @@ export default function App() {
 
         {/* Page Content */}
         <div className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {renderView()}
+          <ErrorBoundary key={activeView}>
+            {renderView()}
+          </ErrorBoundary>
         </div>
       </main>
+      <OfflineBanner />
     </div>
   );
 }

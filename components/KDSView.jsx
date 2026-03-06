@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import GuideCard from '@/components/GuideCard';
+import PageSkeleton from '@/components/PageSkeleton';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -300,9 +301,7 @@ export default function KDSView() {
 
       {/* Orders Grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-        </div>
+        <PageSkeleton variant="cards" />
       ) : filteredAssignments.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <Package className="w-12 h-12 mx-auto mb-4 opacity-30" />
