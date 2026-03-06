@@ -548,7 +548,12 @@ async function getDashboardData(params = {}) {
   }
 
   // STEP 2: Query only orders within date range (uses orderDate index)
-  const orderQuery = { orderDate: { $gte: startDate, $lte: endDate } };
+  // orderDate is stored as ISO string (e.g., '2026-03-06T16:37:25.000Z')
+  // startDate/endDate are IST date strings (e.g., '2026-02-28', '2026-03-06')
+  // Fix: Convert IST date bounds to UTC ISO range for correct string comparison
+  const queryStartUTC = new Date(startDate + 'T00:00:00+05:30').toISOString();
+  const queryEndUTC = new Date(endDate + 'T23:59:59.999+05:30').toISOString();
+  const orderQuery = { orderDate: { $gte: queryStartUTC, $lte: queryEndUTC } };
   const [orders, skuRecipes, expenses, tenantConfig, integrations] = await Promise.all([
     db.collection('orders').find(orderQuery).sort({ orderDate: -1 }).toArray(),
     db.collection('skuRecipes').find({}).toArray(),
@@ -756,10 +761,8 @@ async function getReportProfitableSkus(params) {
   const taxRate = tenantConfig?.adSpendTaxRate ?? 18;
   const taxMul = 1 + (taxRate / 100);
 
-  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
-  const endDate = params.endDate ? new Date(params.endDate) : new Date();
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
+  const startDate = params.startDate ? new Date(params.startDate + 'T00:00:00+05:30') : new Date(new Date().setDate(new Date().getDate() - 30));
+  const endDate = params.endDate ? new Date(params.endDate + 'T23:59:59.999+05:30') : new Date();
 
   const filteredOrders = orders.filter(o => {
     const d = new Date(o.orderDate);
@@ -819,10 +822,8 @@ async function getReportRtoLocations(params) {
   const db = await getDb();
   const orders = await db.collection('orders').find({}).toArray();
 
-  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
-  const endDate = params.endDate ? new Date(params.endDate) : new Date();
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
+  const startDate = params.startDate ? new Date(params.startDate + 'T00:00:00+05:30') : new Date(new Date().setDate(new Date().getDate() - 30));
+  const endDate = params.endDate ? new Date(params.endDate + 'T23:59:59.999+05:30') : new Date();
 
   const filteredOrders = orders.filter(o => {
     const d = new Date(o.orderDate);
@@ -852,10 +853,8 @@ async function getReportEmployeeOutput(params) {
   const employees = await db.collection('employees').find({}).toArray();
   const orders = await db.collection('orders').find({}).toArray();
 
-  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
-  const endDate = params.endDate ? new Date(params.endDate) : new Date();
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
+  const startDate = params.startDate ? new Date(params.startDate + 'T00:00:00+05:30') : new Date(new Date().setDate(new Date().getDate() - 30));
+  const endDate = params.endDate ? new Date(params.endDate + 'T23:59:59.999+05:30') : new Date();
 
   return employees.map(emp => {
     const empOrders = orders.filter(o => o.preparedBy === emp._id && new Date(o.orderDate) >= startDate && new Date(o.orderDate) <= endDate);
@@ -895,11 +894,9 @@ async function getReportMonthlyPL(params) {
   const adSpendMap = {};
   if (isMetaActive) dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
 
-  // Date range filter
-  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 180));
-  const endDate = params.endDate ? new Date(params.endDate) : new Date();
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
+  // Date range filter (IST-aware: '2026-02-28' → Feb 28 00:00 IST = Feb 27 18:30 UTC)
+  const startDate = params.startDate ? new Date(params.startDate + 'T00:00:00+05:30') : new Date(new Date().setDate(new Date().getDate() - 180));
+  const endDate = params.endDate ? new Date(params.endDate + 'T23:59:59.999+05:30') : new Date();
 
   const filteredOrders = orders.filter(o => {
     const d = new Date(o.orderDate);
@@ -1003,10 +1000,8 @@ async function getReportMonthlyPL(params) {
 async function getReportCustomerRepeat(params) {
   const db = await getDb();
   const orders = await db.collection('orders').find({}).toArray();
-  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 90));
-  const endDate = params.endDate ? new Date(params.endDate) : new Date();
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
+  const startDate = params.startDate ? new Date(params.startDate + 'T00:00:00+05:30') : new Date(new Date().setDate(new Date().getDate() - 90));
+  const endDate = params.endDate ? new Date(params.endDate + 'T23:59:59.999+05:30') : new Date();
 
   const filteredOrders = orders.filter(o => {
     const d = new Date(o.orderDate);
@@ -1045,10 +1040,8 @@ async function getReportProductCOGS(params) {
   const db = await getDb();
   const recipes = await db.collection('skuRecipes').find({}).toArray();
   const orders = await db.collection('orders').find({}).toArray();
-  const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 30));
-  const endDate = params.endDate ? new Date(params.endDate) : new Date();
-  startDate.setHours(0, 0, 0, 0);
-  endDate.setHours(23, 59, 59, 999);
+  const startDate = params.startDate ? new Date(params.startDate + 'T00:00:00+05:30') : new Date(new Date().setDate(new Date().getDate() - 30));
+  const endDate = params.endDate ? new Date(params.endDate + 'T23:59:59.999+05:30') : new Date();
 
   const filteredOrders = orders.filter(o => new Date(o.orderDate) >= startDate && new Date(o.orderDate) <= endDate);
 
