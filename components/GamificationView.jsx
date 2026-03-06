@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import GuideCard from '@/components/GuideCard';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
@@ -52,6 +53,13 @@ export default function GamificationView({ onNavigate }) {
 
   return (
     <div className="space-y-6 max-w-[960px] mx-auto">
+      <GuideCard storageKey="guide_achievements" icon={Trophy} title="🏆 Achievements & Gamification">
+        <p>• ⭐ <strong>Earn XP</strong> by completing actions — sync orders, create recipes, send WhatsApp messages, and more</p>
+        <p>• 🎖️ <strong>Unlock badges</strong> as you hit milestones: "First Order Synced!", "100 Orders", "Recipe Master", etc.</p>
+        <p>• 📈 <strong>Level up</strong> from Beginner → Intermediate → Pro → Champion as your XP grows</p>
+        <p>• 🎯 Your <strong>progress checklist</strong> shows what's been set up and what's still pending</p>
+        <p>• 🎉 Keep going — each badge brings you closer to <strong>Profit OS Champion</strong> status!</p>
+      </GuideCard>
       {/* Hero Level Card */}
       <Card className="overflow-hidden">
         <div className="relative">

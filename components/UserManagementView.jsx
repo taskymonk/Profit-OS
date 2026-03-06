@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import GuideCard from '@/components/GuideCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -157,6 +158,14 @@ export default function UserManagementView({ moduleSettings = {} }) {
 
   return (
     <div className="space-y-6 max-w-[960px] mx-auto">
+      <GuideCard storageKey="guide_users" icon={Info} title="👤 User Management Guide">
+        <p>• ➕ <strong>Invite team members</strong> — users appear here after they sign in with Google or Email</p>
+        <p>• 🔐 <strong>Assign roles</strong> to control access:</p>
+        <p>&nbsp;&nbsp;&nbsp;◦ <strong>Master Admin</strong> — Full access including Settings & Integrations</p>
+        <p>&nbsp;&nbsp;&nbsp;◦ <strong>Admin</strong> — Everything except Settings & Integrations</p>
+        <p>&nbsp;&nbsp;&nbsp;◦ <strong>Employee</strong> — Dashboard + KDS only (no financial data)</p>
+        <p>• 🗑️ Remove users who no longer need access — this cannot be undone</p>
+      </GuideCard>
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
         <div className="text-center p-3 rounded-lg bg-muted/50 border">

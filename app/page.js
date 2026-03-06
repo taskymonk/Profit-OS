@@ -38,6 +38,7 @@ import ApiSettingsView from '@/components/ApiSettingsView';
 import GamificationView from '@/components/GamificationView';
 import UserManagementView from '@/components/UserManagementView';
 import ShippingCarriersView from '@/components/ShippingCarriersView';
+import ProfileView from '@/components/ProfileView';
 
 // Organized nav with section groups
 const NAV_SECTIONS = [
@@ -293,6 +294,9 @@ export default function App() {
   // Ensure active view is accessible by current role
   useEffect(() => {
     if (!initialViewSet) return;
+    // 'profile' is accessible via dropdown, not sidebar nav
+    const nonNavViews = ['profile'];
+    if (nonNavViews.includes(activeView)) return;
     const isAccessible = navItems.some(item => item.id === activeView);
     if (!isAccessible && navItems.length > 0) {
       setActiveView(navItems[0].id);
@@ -318,6 +322,7 @@ export default function App() {
       case 'gamification': return <GamificationView onNavigate={(view) => setActiveView(view)} />;
       case 'user-management': return <UserManagementView moduleSettings={moduleSettings} />;
       case 'shipping': return <ShippingCarriersView />;
+      case 'profile': return <ProfileView />;
       case 'settings': return <SettingsView moduleSettings={moduleSettings} onModuleSettingsChange={async (updates) => {
         try {
           await fetch('/api/module-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
@@ -468,7 +473,7 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </Button>
             <h2 className="text-lg font-semibold">
-              {navItems.find(i => i.id === activeView)?.label || 'Dashboard'}
+              {activeView === 'profile' ? 'My Profile' : (navItems.find(i => i.id === activeView)?.label || 'Dashboard')}
             </h2>
             <Badge variant="outline" className="hidden sm:inline-flex text-xs">
               {tenantConfig?.baseCurrency || 'INR'}
@@ -506,6 +511,14 @@ export default function App() {
                     </Badge>
                   </div>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => { setActiveView('profile'); setMobileMenuOpen(false); }}
+                >
+                  <UserCircle className="w-4 h-4 mr-2" />
+                  My Profile
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive cursor-pointer"

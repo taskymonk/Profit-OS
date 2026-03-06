@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import GuideCard from '@/components/GuideCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -222,6 +223,14 @@ export default function ReportsView() {
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
+      <GuideCard storageKey="guide_reports" icon={BarChart3} title="📈 Reports & Analytics Guide">
+        <p>• 📊 <strong>P&L Report</strong> — Full profit & loss breakdown with revenue, COGS, expenses, marketing, and net profit</p>
+        <p>• 💳 <strong>Payments Tab</strong> — Razorpay payment reconciliation, settlement tracking, and unmatched payment alerts</p>
+        <p>• 📢 <strong>Marketing Tab</strong> — ROAS, CPA, and ad spend efficiency across Meta Ads campaigns</p>
+        <p>• 📦 <strong>Product Performance</strong> — Per-SKU revenue, order count, COGS, and profit margin analysis</p>
+        <p>• 👥 <strong>Team Performance</strong> — Employee KDS metrics, efficiency scores, and comparison charts</p>
+        <p>• 📅 All reports respect the <strong>date range filter</strong> — switch between weekly, monthly, or custom periods</p>
+      </GuideCard>
       {/* Date Filter - Dashboard Style with Calendar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">

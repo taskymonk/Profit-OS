@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import GuideCard from '@/components/GuideCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -235,6 +236,14 @@ export default function KDSView() {
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
+      <GuideCard storageKey="guide_kds" icon={Info} title="👨‍🍳 Kitchen Display System (KDS)">
+        <p>• 📋 View your <strong>assigned orders</strong> — each card shows the order, customer, SKU recipe, and ingredients needed</p>
+        <p>• ▶️ Progress orders through stages: <strong>Assigned → In Progress → Completed → Packed</strong></p>
+        <p>• ⚠️ <strong>Report wastage</strong> — damaged materials are auto-deducted from FIFO stock</p>
+        <p>• 📦 <strong>Request materials</strong> if you need more — admin gets notified for approval</p>
+        <p>• 📸 Upload <strong>shipping label photo</strong> when packing — OCR extracts tracking number automatically</p>
+        <p>• 🔄 Board <strong>auto-refreshes</strong> every 30 seconds to keep you up to date</p>
+      </GuideCard>
       {/* Header Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {KDS_STATUSES.map(status => {

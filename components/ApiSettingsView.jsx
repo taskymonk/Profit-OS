@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import GuideCard from '@/components/GuideCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -104,6 +105,14 @@ export default function ApiSettingsView() {
 
   return (
     <div className="space-y-6 max-w-[960px] mx-auto">
+      <GuideCard storageKey="guide_api" icon={Info} title="🔑 API Keys & Developer Access Guide">
+        <p>• 🔐 <strong>Generate API keys</strong> to access your data programmatically from external apps</p>
+        <p>• 📋 <strong>Scope control</strong> — set keys as Read-Only, Read-Write, or Full Access</p>
+        <p>• 🏷️ <strong>Name your keys</strong> for easy identification (e.g., "Zapier Integration", "Custom Dashboard")</p>
+        <p>• ⚡ <strong>Rate limiting</strong> — configurable per key (default: 100 requests/minute)</p>
+        <p>• 🔄 <strong>Revoke or regenerate</strong> keys anytime from this panel</p>
+        <p>• 📖 Access API documentation for endpoint details, code examples, and response formats</p>
+      </GuideCard>
       <p className="text-sm text-muted-foreground">Manage API keys and explore the public REST API documentation.</p>
 
       {/* Quick Stats */}

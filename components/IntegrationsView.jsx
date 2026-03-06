@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import GuideCard from '@/components/GuideCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -340,6 +341,14 @@ export default function IntegrationsView() {
 
   return (
     <div className="space-y-6 max-w-[900px] mx-auto">
+      <GuideCard storageKey="guide_integrations" icon={Zap} title="🔌 Integrations & Sync Guide">
+        <p>• 🛒 <strong>Shopify</strong> — Connect your store to auto-sync orders, products, and fulfillment status</p>
+        <p>• 💳 <strong>Razorpay</strong> — Auto-reconcile payments with orders and track settlement payouts</p>
+        <p>• 📢 <strong>Meta Ads</strong> — Sync daily ad spend for marketing ROI analysis in Reports</p>
+        <p>• 📮 <strong>India Post</strong> — Track shipments via India Post Bulk API with automated status updates</p>
+        <p>• 📸 <strong>AI & OCR</strong> — Configure Tesseract.js (free) or LLM-powered OCR for invoice scanning</p>
+        <p>• 🔄 Use the <strong>Sync Controls Bar</strong> at the top to toggle auto-sync or trigger a manual "Sync All"</p>
+      </GuideCard>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

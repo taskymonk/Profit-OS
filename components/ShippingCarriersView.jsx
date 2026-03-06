@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import GuideCard from '@/components/GuideCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -86,6 +87,13 @@ export default function ShippingCarriersView() {
 
   return (
     <div className="space-y-6 max-w-[960px] mx-auto">
+      <GuideCard storageKey="guide_carriers" icon={Truck} title="🚚 Shipping Carriers Guide">
+        <p>• 📮 <strong>Manage carriers</strong> — India Post, Blue Dart, Delhivery, DTDC, XpressBees, FedEx, and more</p>
+        <p>• 🔗 <strong>Tracking URLs</strong> — Set custom tracking URL patterns for each carrier</p>
+        <p>• 🤖 <strong>Auto-detection</strong> — OCR on shipping labels automatically identifies the carrier from the label text</p>
+        <p>• ➕ <strong>Add custom carriers</strong> — for regional or niche shipping partners</p>
+        <p>• 📦 Carrier data is used across <strong>Orders, KDS, and RTO</strong> for unified tracking</p>
+      </GuideCard>
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="text-center p-3 rounded-lg bg-muted/50 border">

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { v4 as uuidv4 } from 'uuid';
+import { getToken } from 'next-auth/jwt';
 import { calculateOrderProfit, calculateDashboardMetrics, calculateProratedOverhead, getISTDateKey } from '@/lib/profitCalculator';
 import { getSyncSettings, updateSyncSettings, initScheduler, getSchedulerStatus, acquireSyncLock, releaseSyncLock, isSyncRunning, getSyncLockStatus, runSyncAll } from '@/lib/syncScheduler';
 import { shopifySyncOrdersIncremental, razorpaySyncPaymentsIncremental, logSyncEventLib } from '@/lib/syncFunctions';
@@ -2523,6 +2524,21 @@ export async function GET(request) {
         const db = await getDb();
         const carriers = await db.collection('shippingCarriers').find({}).sort({ name: 1 }).toArray();
         return json(carriers);
+      }
+
+      case 'profile': {
+        // GET /api/profile — Get current user's profile
+        const db = await getDb();
+        try {
+          const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+          if (!token?.userId) return json({ error: 'Not authenticated' }, 401);
+          const user = await db.collection('users').findOne({ _id: token.userId });
+          if (!user) return json({ error: 'User not found' }, 404);
+          const { passwordHash, ...safeUser } = user;
+          return json(safeUser);
+        } catch (err) {
+          return json({ error: 'Failed to get profile' }, 500);
+        }
       }
 
       case 'users': {
@@ -5707,6 +5723,26 @@ export async function POST(request) {
         return json({ message: 'Icon uploaded successfully', icon: imageData });
       }
 
+      case 'profile': {
+        // POST /api/profile/avatar — Upload avatar for current user
+        if (subResource === 'avatar') {
+          const db = await getDb();
+          try {
+            const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+            if (!token?.userId) return json({ error: 'Not authenticated' }, 401);
+            const avatarData = body.imageData || '';
+            await db.collection('users').updateOne(
+              { _id: token.userId },
+              { $set: { avatar: avatarData, updatedAt: new Date().toISOString() } }
+            );
+            return json({ message: 'Avatar updated', avatar: avatarData });
+          } catch (err) {
+            return json({ error: 'Failed to update avatar' }, 500);
+          }
+        }
+        return json({ error: 'Invalid profile action' }, 400);
+      }
+
       case 'purge': {
         // Selective purge or full purge
         const db = await getDb();
@@ -6358,6 +6394,50 @@ export async function PUT(request) {
     try { body = await request.json(); } catch (e) {}
 
     switch (resource) {
+      case 'profile': {
+        // PUT /api/profile — Update current user's profile (name, themePreference)
+        // PUT /api/profile/password — Change password
+        // POST /api/profile/avatar handled in POST section
+        const db = await getDb();
+        try {
+          const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+          if (!token?.userId) return json({ error: 'Not authenticated' }, 401);
+
+          if (id === 'password') {
+            // PUT /api/profile/password
+            const bcrypt = require('bcryptjs');
+            const user = await db.collection('users').findOne({ _id: token.userId });
+            if (!user) return json({ error: 'User not found' }, 404);
+            if (user.googleId && !user.passwordHash) {
+              return json({ error: 'Google accounts cannot change password here' }, 400);
+            }
+            if (!body.currentPassword || !body.newPassword) {
+              return json({ error: 'Current and new password required' }, 400);
+            }
+            const isValid = await bcrypt.compare(body.currentPassword, user.passwordHash);
+            if (!isValid) return json({ error: 'Current password is incorrect' }, 400);
+            if (body.newPassword.length < 6) return json({ error: 'New password must be at least 6 characters' }, 400);
+            const newHash = await bcrypt.hash(body.newPassword, 12);
+            await db.collection('users').updateOne(
+              { _id: token.userId },
+              { $set: { passwordHash: newHash, updatedAt: new Date().toISOString() } }
+            );
+            return json({ message: 'Password changed successfully' });
+          }
+
+          // General profile update (name, themePreference)
+          const allowedFields = ['name', 'themePreference'];
+          const updates = { updatedAt: new Date().toISOString() };
+          allowedFields.forEach(f => { if (body[f] !== undefined) updates[f] = body[f]; });
+          await db.collection('users').updateOne({ _id: token.userId }, { $set: updates });
+          const updated = await db.collection('users').findOne({ _id: token.userId });
+          const { passwordHash: _, ...safeUser } = updated;
+          return json(safeUser);
+        } catch (err) {
+          return json({ error: 'Failed to update profile' }, 500);
+        }
+      }
+
       case 'tenant-config': {
         const db = await getDb();
         const existing = await db.collection('tenantConfig').findOne({});

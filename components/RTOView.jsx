@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import GuideCard from '@/components/GuideCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -333,6 +334,14 @@ export default function RTOView() {
 
   return (
     <div className="space-y-6">
+      <GuideCard storageKey="guide_rto" icon={Info} title="📦 RTO / Returns Management">
+        <p>• 📸 <strong>Scan returned parcels</strong> — upload a photo and OCR extracts the AWB number automatically</p>
+        <p>• 🔍 <strong>Auto-match</strong> with India Post tracking to find the original order</p>
+        <p>• ⚡ <strong>3 actions</strong> for each RTO: Reship (with payment link), Refund, or Cancel</p>
+        <p>• 💬 Customers get <strong>WhatsApp updates</strong> on RTO status (if WhatsApp is connected)</p>
+        <p>• 📊 Track <strong>RTO rates</strong> and financial impact in the dashboard above</p>
+        <p>• 🔄 <strong>Reshipped orders</strong> re-enter the KDS workflow as linked orders</p>
+      </GuideCard>
       {/* Header Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="p-3">

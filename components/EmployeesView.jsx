@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import GuideCard from '@/components/GuideCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -150,6 +151,14 @@ export default function EmployeesView() {
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
+      <GuideCard storageKey="guide_employees" icon={Users} title="👥 Employees & Team Guide">
+        <p>• ➕ <strong>Add employees</strong> — they get KDS access to view and process assigned orders</p>
+        <p>• 📋 <strong>Assign orders</strong> from the Orders page → employees see them on their KDS dashboard</p>
+        <p>• 📊 Track <strong>performance stats</strong> — orders completed, avg time, efficiency scores</p>
+        <p>• 📦 View <strong>material requests</strong> — approve or deny requests from employees who need more supplies</p>
+        <p>• ⚠️ Review <strong>wastage reports</strong> submitted by employees during production</p>
+        <p>• 🔐 Employees only see their own assigned work — no access to financial data</p>
+      </GuideCard>
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Card className="p-4">

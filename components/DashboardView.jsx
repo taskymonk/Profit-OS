@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import GuideCard from '@/components/GuideCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -270,6 +271,15 @@ export default function DashboardView() {
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
+      {/* Page Guide */}
+      <GuideCard storageKey="guide_dashboard" icon={CalendarDays} title="📊 Dashboard Overview">
+        <p>• 📅 Use <strong>date range filters</strong> to view metrics for any period — Today, 7 days, 30 days, or custom</p>
+        <p>• 💰 <strong>Revenue & Profit</strong> cards show real-time totals from synced Shopify orders</p>
+        <p>• 📈 The <strong>P&L Waterfall</strong> chart breaks down: Revenue → COGS → Expenses → Marketing → Fees → Net Profit</p>
+        <p>• 🏦 <strong>Settlement Estimates</strong> show expected Razorpay payouts with fee breakdowns</p>
+        <p>• 🔍 Click any metric card for more details — everything updates in real-time with your sync schedule</p>
+      </GuideCard>
+
       {/* Date Range Picker */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
         <div className="flex items-center gap-2 flex-wrap">

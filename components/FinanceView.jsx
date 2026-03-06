@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import GuideCard from '@/components/GuideCard';
 import { toast } from 'sonner';
 import {
   DollarSign, Plus, Edit2, Trash2, Search, RefreshCw, Clock, AlertTriangle,
@@ -209,6 +210,14 @@ export default function FinanceView() {
 
   return (
     <div className="space-y-6">
+      <GuideCard storageKey="guide_finance" icon={Info} title="🏦 Finance & Bills Guide">
+        <p>• 📄 <strong>Create bills</strong> — track vendor invoices, GST payable, subscription costs, and ad spend</p>
+        <p>• 💳 <strong>Record payments</strong> against bills — partial payments supported with remaining balance tracking</p>
+        <p>• 🏪 <strong>Manage vendors</strong> — add vendor details and track spending per vendor</p>
+        <p>• 📊 <strong>Cash flow overview</strong> — see inflows (settlements) vs outflows (payments) at a glance</p>
+        <p>• ⏰ Bills are <strong>sorted by due date</strong> — overdue items highlighted in red for priority</p>
+        <p>• 🔗 Auto-generated bills for Meta Ads and GST based on synced data</p>
+      </GuideCard>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

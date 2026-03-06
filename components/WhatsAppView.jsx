@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
+import GuideCard from '@/components/GuideCard';
 import {
   MessageSquare, Plus, Edit2, Trash2, Send, ToggleLeft, ToggleRight,
   RefreshCw, Eye, Clock, CheckCircle2, AlertTriangle, XCircle,
@@ -94,8 +95,7 @@ export default function WhatsAppView() {
   const [sendForm, setSendForm] = useState({ phone: '', templateId: '', customMessage: '' });
   const [sendLoading, setSendLoading] = useState(false);
 
-  // Info dialog
-  const [showInfoCard, setShowInfoCard] = useState(true);
+  // Info dialog - removed legacy showInfoCard, now using GuideCard component
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -349,31 +349,15 @@ export default function WhatsAppView() {
         </Alert>
       )}
 
-      {/* Info Card */}
-      {showInfoCard && (
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardContent className="pt-4 pb-3">
-            <div className="flex justify-between items-start">
-              <div className="flex gap-3">
-                <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-                <div className="text-sm text-blue-800 space-y-1">
-                  <p className="font-medium">How WhatsApp Automation Works</p>
-                  <ul className="list-disc pl-4 space-y-0.5 text-blue-700">
-                    <li>Templates are sent automatically when order status changes (e.g., Confirmed, Dispatched, Delivered)</li>
-                    <li>Messages use <strong>WhatsApp Cloud API via Meta</strong> — you need a Meta Business Account</li>
-                    <li>For automated outbound messages, templates must be <strong>approved by Meta</strong> first</li>
-                    <li>Customers can reply <strong>STOP</strong> to opt out, or <strong>STATUS</strong> to get order updates</li>
-                    <li>Quiet hours (9 PM - 9 AM IST) — messages are queued and sent at 9 AM</li>
-                  </ul>
-                </div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setShowInfoCard(false)} className="text-blue-600">
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Page Guide */}
+      <GuideCard storageKey="guide_whatsapp" icon={Info} title="💬 WhatsApp Automation Guide">
+        <p>• 🔄 Messages are sent <strong>automatically</strong> when order status changes (Confirmed, Dispatched, Delivered)</p>
+        <p>• 📱 Uses <strong>WhatsApp Cloud API via Meta</strong> — you need a Meta Business Account + Phone Number</p>
+        <p>• ✅ Templates must be <strong>approved by Meta</strong> before they can be sent to customers</p>
+        <p>• 🛑 Customers can reply <strong>STOP</strong> to opt out, or <strong>STATUS</strong> to get order updates</p>
+        <p>• 🕘 <strong>Quiet hours</strong> (9 PM – 9 AM IST) — messages are queued and sent at 9 AM</p>
+        <p>• 📊 Track delivery rates, read rates, and failed messages in the stats above</p>
+      </GuideCard>
 
       {/* Stats Cards */}
       {stats && (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import GuideCard from '@/components/GuideCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -219,6 +220,14 @@ export default function SettingsView({ moduleSettings = {}, onModuleSettingsChan
 
   return (
     <div className="space-y-6 max-w-[800px] mx-auto">
+      <GuideCard storageKey="guide_settings" icon={Settings2} title="⚙️ Settings Guide">
+        <p>• 🏢 <strong>Brand & Identity</strong> — Set your business name, upload logo and icon, pick brand colors</p>
+        <p>• 🎨 <strong>Appearance</strong> — Choose Light/Dark/System theme and accent color for the entire app</p>
+        <p>• 💰 <strong>Tax & Fees</strong> — Configure GST rates, Shopify transaction fees, and ad spend tax</p>
+        <p>• 🌍 <strong>Localization</strong> — Set currency, timezone, and date format preferences</p>
+        <p>• 📦 <strong>Module Management</strong> — Enable/disable sidebar modules to simplify your workspace</p>
+        <p>• ⚠️ <strong>Danger Zone</strong> — Purge operational data (preserves config, users, and integrations)</p>
+      </GuideCard>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Configure your dashboard settings and preferences</p>
         <Button onClick={handleSave} disabled={saving}><Save className="w-4 h-4 mr-2" />{saving ? 'Saving...' : 'Save Settings'}</Button>

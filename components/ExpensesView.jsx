@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import GuideCard from '@/components/GuideCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +44,6 @@ export default function ExpensesView() {
   const [newCatName, setNewCatName] = useState('');
   const [newSubCat, setNewSubCat] = useState({});
   const [inventoryItems, setInventoryItems] = useState([]);
-  const [showGuide, setShowGuide] = useState(true);
   const [vendors, setVendors] = useState([]);
   const [showInvoiceScanner, setShowInvoiceScanner] = useState(false);
 
@@ -216,32 +216,14 @@ export default function ExpensesView() {
         </div>
       </div>
 
-      {/* Getting Started Guide */}
-      {showGuide && (
-        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
-          <button onClick={() => setShowGuide(false)} className="absolute top-2.5 right-2.5 text-blue-400 hover:text-blue-600"><X className="w-4 h-4" /></button>
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-blue-100"><Zap className="w-4 h-4 text-blue-600" /></div>
-            <div className="space-y-1.5">
-              <h3 className="font-semibold text-sm text-blue-900">Expense Tracking Guide</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                <div className="p-2 rounded-lg border border-blue-200 bg-white">
-                  <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 className="w-3.5 h-3.5 text-blue-500" /><span className="font-semibold">Recurring Costs</span></div>
-                  <p className="text-muted-foreground">Add your Shopify subscription, salaries, rent, etc. Set them as Monthly/Yearly with auto-generation.</p>
-                </div>
-                <div className="p-2 rounded-lg border border-blue-200 bg-white">
-                  <div className="flex items-center gap-1.5 mb-0.5"><Package className="w-3.5 h-3.5 text-blue-500" /><span className="font-semibold">Raw Material Purchases</span></div>
-                  <p className="text-muted-foreground">Link purchases to inventory items — stock batches are created automatically for FIFO costing.</p>
-                </div>
-                <div className="p-2 rounded-lg border border-blue-200 bg-white">
-                  <div className="flex items-center gap-1.5 mb-0.5"><ReceiptText className="w-3.5 h-3.5 text-blue-500" /><span className="font-semibold">P&L Impact</span></div>
-                  <p className="text-muted-foreground">All expenses are pro-rated in the Dashboard P&L waterfall. Monthly costs are divided by days in the selected period.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Page Guide */}
+      <GuideCard storageKey="guide_expenses" icon={Zap} title="💰 Expense Tracking Guide">
+        <p>• 🔄 <strong>Recurring costs</strong> — Add Shopify subscription, salaries, rent etc. Set Monthly/Yearly with auto-generation</p>
+        <p>• 📦 <strong>Raw material purchases</strong> — Link to inventory items for automatic FIFO stock batch creation</p>
+        <p>• 📸 <strong>Invoice OCR</strong> — Scan expense invoices to auto-fill amount, vendor, date, and tax</p>
+        <p>• 🏪 <strong>Vendor tracking</strong> — Assign vendors to expenses for better financial visibility</p>
+        <p>• 📊 <strong>P&L impact</strong> — All expenses are pro-rated in the Dashboard P&L waterfall automatically</p>
+      </GuideCard>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">

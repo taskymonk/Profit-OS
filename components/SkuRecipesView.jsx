@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import GuideCard from '@/components/GuideCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +25,6 @@ export default function SkuRecipesView() {
   const [templates, setTemplates] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showGuide, setShowGuide] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all' | 'needs-setup' | 'has-recipe'
   const [sortBy, setSortBy] = useState('orders'); // 'orders' | 'name' | 'revenue'
   const [searchTerm, setSearchTerm] = useState('');
@@ -428,50 +428,14 @@ export default function SkuRecipesView() {
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto">
-      {/* Getting Started Guide */}
-      {showGuide && (
-        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5">
-          <button onClick={() => setShowGuide(false)} className="absolute top-3 right-3 text-blue-400 hover:text-blue-600">
-            <X className="w-4 h-4" />
-          </button>
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-blue-100"><Zap className="w-5 h-5 text-blue-600" /></div>
-            <div className="space-y-2">
-              <h3 className="font-semibold text-sm text-blue-900">Quick Setup Guide</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-                <div className={`p-2.5 rounded-lg border ${inventoryItems.length > 0 ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {inventoryItems.length > 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">1</span>}
-                    <span className="font-semibold">Add Inventory Items</span>
-                  </div>
-                  <p className="text-muted-foreground">Raw materials & packaging in the Inventory page</p>
-                </div>
-                <div className={`p-2.5 rounded-lg border ${templates.length > 0 ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {templates.length > 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">2</span>}
-                    <span className="font-semibold">Create Templates</span>
-                  </div>
-                  <p className="text-muted-foreground">Define ingredient recipes once, reuse across products</p>
-                </div>
-                <div className={`p-2.5 rounded-lg border ${hasRecipe > 0 ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {hasRecipe > 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">3</span>}
-                    <span className="font-semibold">Apply to Products</span>
-                  </div>
-                  <p className="text-muted-foreground">Assign templates to multiple products at once</p>
-                </div>
-                <div className="p-2.5 rounded-lg border border-blue-200 bg-white">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">4</span>
-                    <span className="font-semibold">Accurate COGS</span>
-                  </div>
-                  <p className="text-muted-foreground">Orders auto-calculate cost using FIFO batch prices</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Page Guide */}
+      <GuideCard storageKey="guide_recipes" icon={Zap} title="🧾 SKU Recipes Guide">
+        <p>• 📦 <strong>Step 1:</strong> Add raw materials & packaging in the <strong>Inventory</strong> page first</p>
+        <p>• 🧩 <strong>Step 2:</strong> Create <strong>Recipe Templates</strong> — define ingredient combos you reuse (e.g., "Standard Gift Box")</p>
+        <p>• 🔗 <strong>Step 3:</strong> Assign templates to Shopify products — auto-calculates COGS per order</p>
+        <p>• 💰 <strong>Auto COGS:</strong> Each order uses FIFO batch prices from Inventory for accurate cost tracking</p>
+        <p>• 📊 Use the <strong>progress bar</strong> above to track how many products have recipes set up</p>
+      </GuideCard>
 
       {/* Progress Bar */}
       <Card>

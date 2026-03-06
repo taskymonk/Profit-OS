@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import GuideCard from '@/components/GuideCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +46,6 @@ export default function OrdersView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [showGuide, setShowGuide] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
@@ -367,23 +367,15 @@ export default function OrdersView() {
 
   return (
     <div className="space-y-4 max-w-[1400px] mx-auto">
-      {/* UX Guide Banner */}
-      {showGuide && (
-        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-4">
-          <button onClick={() => setShowGuide(false)} className="absolute top-2.5 right-2.5 text-blue-400 hover:text-blue-600">
-            <X className="w-4 h-4" />
-          </button>
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 shrink-0"><ShoppingBag className="w-4 h-4 text-blue-600" /></div>
-            <div>
-              <h3 className="font-semibold text-sm text-blue-900">How Orders Work</h3>
-              <p className="text-xs text-blue-700 mt-1">
-                Orders sync from Shopify automatically. Click any order row to see its <strong>full profit breakdown</strong> — including COGS (from SKU Recipes), Shopify fees, Razorpay fees, and marketing allocation. Each order's true profit is calculated in real-time.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Page Guide */}
+      <GuideCard storageKey="guide_orders" icon={ShoppingBag} title="🛒 How Orders Work">
+        <p>• Orders <strong>sync from Shopify</strong> automatically — or add manually</p>
+        <p>• 📊 Click any order row to see its <strong>full profit breakdown</strong> — COGS, Shopify fees, Razorpay fees, and marketing allocation</p>
+        <p>• 🔍 Use <strong>status filters</strong> and search to find orders by ID, customer, or SKU</p>
+        <p>• 👨‍🍳 Assign orders to employees via <strong>KDS</strong> for production tracking</p>
+        <p>• 📦 Track <strong>shipping status</strong> and auto-reconcile with Razorpay payments</p>
+        <p>• 🏷️ Mark orders as <strong>Urgent</strong> or update fulfillment status directly</p>
+      </GuideCard>
 
       {/* Toolbar */}
       <div className="flex flex-col gap-3">

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import GuideCard from '@/components/GuideCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +30,6 @@ export default function InventoryView() {
   const [movementsLoading, setMovementsLoading] = useState(false);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [batchItemId, setBatchItemId] = useState(null);
-  const [showGuide, setShowGuide] = useState(true);
   const [catDialogOpen, setCatDialogOpen] = useState(false);
   const [invCategories, setInvCategories] = useState([]);
   const [catEditing, setCatEditing] = useState([]);
@@ -176,48 +176,15 @@ export default function InventoryView() {
 
   return (
     <div className="space-y-6">
-      {/* Getting Started Guide */}
-      {showGuide && (
-        <div className="relative rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5">
-          <button onClick={() => setShowGuide(false)} className="absolute top-3 right-3 text-blue-400 hover:text-blue-600"><X className="w-4 h-4" /></button>
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-blue-100"><Zap className="w-5 h-5 text-blue-600" /></div>
-            <div className="space-y-2 flex-1">
-              <h3 className="font-semibold text-sm text-blue-900">Inventory Setup Guide</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
-                <div className={`p-2.5 rounded-lg border ${items.length > 0 ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {items.length > 0 ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">1</span>}
-                    <span className="font-semibold">Add Raw Materials</span>
-                  </div>
-                  <p className="text-muted-foreground">List all materials & packaging you use to make products</p>
-                </div>
-                <div className={`p-2.5 rounded-lg border ${hasExpenses ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {hasExpenses ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">2</span>}
-                    <span className="font-semibold">Enter Current Stock</span>
-                  </div>
-                  <p className="text-muted-foreground">Add stock batches with purchase price — or log purchases as Expenses</p>
-                </div>
-                <div className={`p-2.5 rounded-lg border ${hasRecipes ? 'border-green-300 bg-green-50' : 'border-blue-200 bg-white'}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    {hasRecipes ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" /> : <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">3</span>}
-                    <span className="font-semibold">Link to SKU Recipes</span>
-                  </div>
-                  <p className="text-muted-foreground">Go to SKU Recipes → create templates with these items as ingredients</p>
-                </div>
-                <div className="p-2.5 rounded-lg border border-blue-200 bg-white">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="w-4 h-4 rounded-full border-2 border-blue-300 flex items-center justify-center text-[9px] font-bold text-blue-500">4</span>
-                    <span className="font-semibold">FIFO Costing</span>
-                  </div>
-                  <p className="text-muted-foreground">Orders consume stock from oldest batch first — accurate COGS automatically</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Page Guide */}
+      <GuideCard storageKey="guide_inventory" icon={Zap} title="📦 Inventory & Stock Guide">
+        <p>• 🏷️ <strong>Add raw materials & packaging</strong> — List everything you use to make products</p>
+        <p>• 📥 <strong>Enter stock batches</strong> — Add batches with purchase prices, or log purchases as Expenses for auto-creation</p>
+        <p>• 🔗 <strong>Link to SKU Recipes</strong> — Go to SKU Recipes and add these as ingredients to enable auto COGS</p>
+        <p>• 📊 <strong>FIFO costing</strong> — Orders consume stock from the oldest batch first, giving you accurate cost of goods sold</p>
+        <p>• ⚠️ <strong>Low stock alerts</strong> — Set minimum thresholds to get notified when stock runs low</p>
+        <p>• 📂 <strong>Categories</strong> — Organize items by type for easier management</p>
+      </GuideCard>
 
       {/* Header */}
       <div className="flex items-center justify-between">

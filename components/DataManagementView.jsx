@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import GuideCard from '@/components/GuideCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -281,6 +282,14 @@ export default function DataManagementView() {
 
   return (
     <div className="space-y-6 max-w-[960px] mx-auto">
+      <GuideCard storageKey="guide_data" icon={Database} title="💾 Data Management Guide">
+        <p>• 📤 <strong>Export data</strong> — Download orders, recipes, inventory, expenses, etc. as JSON or CSV</p>
+        <p>• 📥 <strong>Import data</strong> — Upload JSON files to restore or migrate data with conflict resolution</p>
+        <p>• 💾 <strong>Backups</strong> — Create manual snapshots or set up auto-backup schedules (Daily/Weekly/Monthly)</p>
+        <p>• ☁️ <strong>Google Drive</strong> — Connect your Drive to auto-upload backups to the cloud</p>
+        <p>• 🔄 <strong>Selective restore</strong> — Choose specific modules to restore without overwriting everything</p>
+        <p>• ⚠️ Always create a backup <strong>before importing</strong> to avoid data loss</p>
+      </GuideCard>
       <p className="text-sm text-muted-foreground">Export, import, backup, and restore your business data.</p>
 
       {/* Data Overview */}
