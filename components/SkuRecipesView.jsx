@@ -252,7 +252,7 @@ export default function SkuRecipesView() {
       toast.success(data.message || `Applied to ${data.applied} products`);
       setApplyDialogOpen(false);
       setSelectedRecipeIds([]);
-      fetchData();
+      await fetchData(); // Await to ensure coverage bar updates immediately
     } catch (err) { toast.error('Failed to apply'); }
   };
 
@@ -264,7 +264,7 @@ export default function SkuRecipesView() {
       });
       const data = await res.json();
       toast.success(data.message);
-      fetchData();
+      await fetchData();
     } catch (err) { toast.error('Failed'); }
   };
 

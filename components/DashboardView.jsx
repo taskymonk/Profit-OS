@@ -146,6 +146,7 @@ function OrderRow({ order, expanded, onToggle }) {
                 <p className="text-muted-foreground">Discount: {fmt(profit.discount)}</p>
                 <p className="text-muted-foreground">GST: {fmt(profit.gstOnRevenue)}</p>
                 <p className="font-medium text-foreground">Net: {fmt(profit.netRevenue)}</p>
+                {profit.tipAmount > 0 && <p className="text-emerald-600 font-medium">Tip: +{fmt(profit.tipAmount)}</p>}
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-muted-foreground"><Package className="w-3 h-3" /> COGS</div>
@@ -676,6 +677,16 @@ export default function DashboardView() {
                 </div>
                 <span className="text-sm font-bold">{fmt(plBreakdown.netRevenue)}</span>
               </div>
+              {/* Tips */}
+              {(plBreakdown.totalTips || 0) > 0 && (
+                <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-sm text-muted-foreground">Tips Received</span>
+                  </div>
+                  <span className="text-sm font-medium text-emerald-600">+{fmt(plBreakdown.totalTips)}</span>
+                </div>
+              )}
               {/* Operating Costs */}
               {[
                 { label: 'Cost of Goods Sold (COGS)', value: plBreakdown.totalCOGS, color: 'text-amber-600', icon: Package },

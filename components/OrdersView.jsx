@@ -550,9 +550,23 @@ export default function OrdersView() {
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                 {materialSummary.materials.map((m, i) => (
-                  <div key={i} className="p-2 rounded-lg bg-white dark:bg-background border text-sm">
-                    <span className="font-medium">{m.name}</span>
-                    <span className="text-muted-foreground ml-1">×{m.quantity} {m.unit}</span>
+                  <div key={i} className="p-2.5 rounded-lg bg-white dark:bg-background border text-sm">
+                    <div className="font-medium">{m.name}</div>
+                    {m.yieldPerUnit && m.portions > 0 ? (
+                      <div className="mt-0.5">
+                        <span className="text-primary font-semibold">{m.portions} strips</span>
+                        <span className="text-muted-foreground text-xs ml-1">
+                          ({m.quantity < 1 ? `${Math.round(m.quantity * 100) / 100}` : Math.ceil(m.quantity)} {m.unit})
+                        </span>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          1 {m.unit} → {m.yieldPerUnit} strips
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        ×{Number.isInteger(m.quantity) ? m.quantity : Math.round(m.quantity * 100) / 100} {m.unit}
+                      </span>
+                    )}
                     <Badge variant="outline" className="ml-1 text-[9px] px-1">{m.type}</Badge>
                   </div>
                 ))}

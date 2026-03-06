@@ -2568,29 +2568,41 @@ export async function GET(request) {
 
             // Aggregate materials from recipe ingredients
             const materialTotals = {};
+            let totalUnits = 0; // Total product units across all orders
             batchOrders.forEach(order => {
               const recipe = recipeMap[order.sku];
               if (!recipe) return;
               const qty = order.quantity || 1;
+              totalUnits += qty;
               // Use ingredients array (the actual data structure) with category-based grouping
               (recipe.ingredients || []).forEach(ing => {
                 const key = ing.name || ing.inventoryItemName || ing.materialName;
                 if (!key) return;
-                if (!materialTotals[key]) materialTotals[key] = { name: key, type: ing.category === 'Packaging' ? 'packaging' : 'raw', quantity: 0, unit: ing.unit || 'pcs' };
-                materialTotals[key].quantity += (ing.quantityUsed || ing.quantity || 1) * qty;
+                if (!materialTotals[key]) materialTotals[key] = { 
+                  name: key, type: ing.category === 'Packaging' ? 'packaging' : 'raw', 
+                  quantity: 0, unit: ing.unit || 'pcs',
+                  yieldPerUnit: ing.yieldPerUnit || null,
+                  portions: 0, // How many portions/strips needed
+                };
+                const qtyUsed = (ing.quantityUsed || ing.quantity || 1) * qty;
+                materialTotals[key].quantity += qtyUsed;
+                // Calculate portions: each order unit needs 1 portion of this material
+                if (ing.yieldPerUnit) {
+                  materialTotals[key].portions += qty;
+                }
               });
               // Also check legacy rawMaterials/packagingMaterials arrays as fallback
               if ((!recipe.ingredients || recipe.ingredients.length === 0)) {
                 (recipe.rawMaterials || []).forEach(m => {
                   const key = m.name || m.materialName;
                   if (!key) return;
-                  if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'raw', quantity: 0, unit: m.unit || 'pcs' };
+                  if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'raw', quantity: 0, unit: m.unit || 'pcs', yieldPerUnit: null, portions: 0 };
                   materialTotals[key].quantity += (m.quantity || 1) * qty;
                 });
                 (recipe.packagingMaterials || []).forEach(m => {
                   const key = m.name || m.materialName;
                   if (!key) return;
-                  if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'packaging', quantity: 0, unit: m.unit || 'pcs' };
+                  if (!materialTotals[key]) materialTotals[key] = { name: key, type: 'packaging', quantity: 0, unit: m.unit || 'pcs', yieldPerUnit: null, portions: 0 };
                   materialTotals[key].quantity += (m.quantity || 1) * qty;
                 });
               }
