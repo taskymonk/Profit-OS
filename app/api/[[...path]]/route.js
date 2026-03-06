@@ -3948,6 +3948,19 @@ export async function POST(request) {
         if (Object.keys(updates).length > 0) {
           await db.collection('tenantConfig').updateOne({}, { $set: updates });
         }
+        
+        // If autoSync master toggle was turned OFF, disable all individual auto-syncs
+        if (body.autoSync === false) {
+          const syncUpdates = {};
+          const syncKeys = ['shopify', 'razorpay', 'metaAds', 'indiaPost', 'whatsapp'];
+          syncKeys.forEach(k => { syncUpdates[`${k}.autoSyncEnabled`] = false; });
+          await db.collection('syncSettings').updateOne(
+            { _id: 'sync-config' },
+            { $set: syncUpdates },
+            { upsert: true }
+          );
+        }
+        
         return json({ message: 'Module settings updated' });
       }
 

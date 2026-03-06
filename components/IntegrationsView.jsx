@@ -78,9 +78,24 @@ const CATEGORY_CONFIG = [
 ];
 
 // ==================== AUTO SYNC CONTROL COMPONENT ====================
-function AutoSyncControl({ integration, syncSettings, onUpdateSyncSettings }) {
+function AutoSyncControl({ integration, syncSettings, onUpdateSyncSettings, masterEnabled = true }) {
   const settings = syncSettings?.[integration] || {};
   const intervals = INTERVAL_OPTIONS[integration] || [];
+
+  if (!masterEnabled) {
+    return (
+      <div className="p-3 rounded-lg bg-muted/30 border border-dashed opacity-60">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Timer className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground">Auto-Sync</span>
+          </div>
+          <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-1">Master Auto-Sync is OFF. Enable it in Settings → Module Management.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-3 rounded-lg bg-muted/50 border border-dashed space-y-2.5">
@@ -152,11 +167,12 @@ function SetupGuide({ children, title = 'Setup Guide' }) {
 }
 
 // ==================== MAIN COMPONENT ====================
-export default function IntegrationsView() {
+export default function IntegrationsView({ moduleSettings = {} }) {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSecrets, setShowSecrets] = useState({});
+  const masterAutoSyncEnabled = moduleSettings?.autoSync?.enabled !== false;
 
   const [shopify, setShopify] = useState({ storeUrl: '', accessToken: '', active: false });
   const [indiaPost, setIndiaPost] = useState({
@@ -415,6 +431,7 @@ export default function IntegrationsView() {
                 integration="shopify"
                 syncSettings={syncSettings}
                 onUpdateSyncSettings={handleUpdateSyncSettings}
+                masterEnabled={masterAutoSyncEnabled}
               />
 
               {/* Sync Actions */}
@@ -496,6 +513,7 @@ export default function IntegrationsView() {
                 integration="razorpay"
                 syncSettings={syncSettings}
                 onUpdateSyncSettings={handleUpdateSyncSettings}
+                masterEnabled={masterAutoSyncEnabled}
               />
 
               <div className="flex flex-wrap gap-2 items-center">
@@ -574,6 +592,7 @@ export default function IntegrationsView() {
                 integration="metaAds"
                 syncSettings={syncSettings}
                 onUpdateSyncSettings={handleUpdateSyncSettings}
+                masterEnabled={masterAutoSyncEnabled}
               />
 
               <div className="flex flex-wrap gap-2 items-start">
@@ -689,6 +708,7 @@ export default function IntegrationsView() {
                 integration="indiaPost"
                 syncSettings={syncSettings}
                 onUpdateSyncSettings={handleUpdateSyncSettings}
+                masterEnabled={masterAutoSyncEnabled}
               />
 
               <div className="flex flex-wrap gap-2 items-start">

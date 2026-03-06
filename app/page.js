@@ -312,7 +312,7 @@ export default function App() {
       case 'finance': return <FinanceView />;
       case 'reports': return <ReportsView />;
       case 'whatsapp': return <WhatsAppView />;
-      case 'integrations': return <IntegrationsView />;
+      case 'integrations': return <IntegrationsView moduleSettings={moduleSettings} />;
       case 'data-management': return <DataManagementView />;
       case 'api-settings': return <ApiSettingsView />;
       case 'gamification': return <GamificationView onNavigate={(view) => setActiveView(view)} />;
