@@ -2273,6 +2273,24 @@ export async function GET(request) {
         return json({ googleConfigured });
       }
 
+      case 'api-keys': {
+        // GET /api/api-keys — List all API keys (masked)
+        const db = await getDb();
+        const keys = await db.collection('apiKeys').find({}).sort({ createdAt: -1 }).toArray();
+        const masked = keys.map(k => ({
+          _id: k._id,
+          name: k.name,
+          scope: k.scope,
+          maskedKey: k.keyPrefix ? `${k.keyPrefix}...${k.keySuffix || '****'}` : 'pos_****...****',
+          rateLimit: k.rateLimit || 100,
+          requestCount: k.requestCount || 0,
+          createdAt: k.createdAt,
+          lastUsedAt: k.lastUsedAt,
+          revoked: k.revoked || false,
+        }));
+        return json(masked);
+      }
+
       case 'users': {
         const db = await getDb();
         if (subResource && subResource !== 'me') {
@@ -2453,6 +2471,119 @@ export async function GET(request) {
         }
 
         return json({ error: 'Unknown data endpoint' }, 404);
+      }
+
+      case 'backups': {
+        const db = await getDb();
+        switch (subResource) {
+          case undefined:
+          case null:
+          case '': {
+            // GET /api/backups — List all backups (metadata only)
+            const backups = await db.collection('backups').find({}).project({ data: 0 }).sort({ createdAt: -1 }).toArray();
+            return json(backups);
+          }
+
+          case 'download': {
+            // GET /api/backups/download?id=XXX — Download a specific backup
+            const backupId = params.id;
+            if (!backupId) return json({ error: 'Backup ID required' }, 400);
+            const backup = await db.collection('backups').findOne({ _id: backupId });
+            if (!backup) return json({ error: 'Backup not found' }, 404);
+            const jsonStr = JSON.stringify(backup.data, null, 2);
+            return new NextResponse(jsonStr, {
+              headers: { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename=profitos-backup-${backup.createdAt?.split('T')[0] || 'unknown'}.json` },
+            });
+          }
+
+          case 'config': {
+            // GET /api/backups/config — Get backup configuration
+            const settings = await getSyncSettings();
+            return json({
+              autoEnabled: settings.backups?.autoEnabled || false,
+              frequency: settings.backups?.frequency || 'off',
+              retention: settings.backups?.retention || 5,
+              lastAutoBackup: settings.backups?.lastAutoBackup || null,
+              gdrive: {
+                connected: !!settings.gdrive?.refreshToken,
+                email: settings.gdrive?.email || null,
+                autoUpload: settings.gdrive?.autoUpload || false,
+                lastUpload: settings.gdrive?.lastUpload || null,
+                folderId: settings.gdrive?.folderId || null,
+              },
+            });
+          }
+
+          case 'gdrive': {
+            if (thirdSegment === 'auth-url') {
+              const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+              const clientId = integrations?.google?.clientId;
+              if (!clientId) return json({ error: 'Google Client ID not configured. Go to Integrations → Authentication.' }, 400);
+              const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+              const redirectUri = `${baseUrl}/api/backups/gdrive/callback`;
+              const scope = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email';
+              const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+              return json({ authUrl, redirectUri });
+            }
+
+            if (thirdSegment === 'callback') {
+              const code = params.code;
+              const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+              if (!code) {
+                const errorDesc = params.error_description || params.error || 'Unknown error';
+                return NextResponse.redirect(`${baseUrl}?view=data-management&gdrive=error&msg=${encodeURIComponent(errorDesc)}`);
+              }
+              const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+              const clientId = integrations?.google?.clientId;
+              const clientSecret = integrations?.google?.clientSecret;
+              if (!clientId || !clientSecret) {
+                return NextResponse.redirect(`${baseUrl}?view=data-management&gdrive=error&msg=Google+credentials+not+configured`);
+              }
+              const redirectUri = `${baseUrl}/api/backups/gdrive/callback`;
+              try {
+                const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: 'authorization_code' }),
+                });
+                const tokenData = await tokenRes.json();
+                if (!tokenRes.ok || !tokenData.refresh_token) {
+                  return NextResponse.redirect(`${baseUrl}?view=data-management&gdrive=error&msg=${encodeURIComponent(tokenData.error_description || 'Token exchange failed')}`);
+                }
+                let email = '';
+                try {
+                  const uRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { 'Authorization': `Bearer ${tokenData.access_token}` } });
+                  email = (await uRes.json()).email || '';
+                } catch {}
+                let folderId = null;
+                try {
+                  const fRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+                    method: 'POST', headers: { 'Authorization': `Bearer ${tokenData.access_token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Profit OS Backups', mimeType: 'application/vnd.google-apps.folder' }),
+                  });
+                  folderId = (await fRes.json()).id;
+                } catch {}
+                await updateSyncSettings({ 'gdrive.refreshToken': tokenData.refresh_token, 'gdrive.email': email, 'gdrive.folderId': folderId, 'gdrive.connectedAt': new Date().toISOString(), 'gdrive.autoUpload': false });
+                return NextResponse.redirect(`${baseUrl}?view=data-management&gdrive=success`);
+              } catch (err) {
+                return NextResponse.redirect(`${baseUrl}?view=data-management&gdrive=error&msg=${encodeURIComponent(err.message)}`);
+              }
+            }
+
+            if (thirdSegment === 'status') {
+              const settings = await getSyncSettings();
+              return json({ connected: !!settings.gdrive?.refreshToken, email: settings.gdrive?.email || null, folderId: settings.gdrive?.folderId || null, autoUpload: settings.gdrive?.autoUpload || false, lastUpload: settings.gdrive?.lastUpload || null, connectedAt: settings.gdrive?.connectedAt || null });
+            }
+
+            return json({ error: 'Unknown gdrive endpoint' }, 404);
+          }
+
+          default: {
+            const backup = await db.collection('backups').findOne({ _id: subResource }, { projection: { data: 0 } });
+            if (!backup) return json({ error: 'Backup not found' }, 404);
+            return json(backup);
+          }
+        }
       }
 
       case 'rto': {
@@ -3405,6 +3536,32 @@ export async function POST(request) {
     } catch (e) {}
 
     switch (resource) {
+      case 'api-keys': {
+        // POST /api/api-keys — Create a new API key
+        const { name, scope, rateLimit } = body;
+        if (!name) return json({ error: 'Key name is required' }, 400);
+        const validScopes = ['read', 'readwrite', 'full'];
+        const keyScope = validScopes.includes(scope) ? scope : 'read';
+        const rawKey = `pos_${crypto.randomBytes(24).toString('hex')}`;
+        const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+        const keyDoc = {
+          _id: uuidv4(),
+          name: name.trim(),
+          scope: keyScope,
+          keyHash,
+          keyPrefix: rawKey.slice(0, 8),
+          keySuffix: rawKey.slice(-4),
+          rateLimit: Math.min(Math.max(parseInt(rateLimit) || 100, 10), 1000),
+          requestCount: 0,
+          revoked: false,
+          createdAt: new Date().toISOString(),
+          lastUsedAt: null,
+        };
+        const db = await getDb();
+        await db.collection('apiKeys').insertOne(keyDoc);
+        return json({ _id: keyDoc._id, key: rawKey, name: keyDoc.name, scope: keyDoc.scope, rateLimit: keyDoc.rateLimit, createdAt: keyDoc.createdAt }, 201);
+      }
+
       case 'seed':
         return json(await seedData());
 
@@ -3829,6 +3986,226 @@ export async function POST(request) {
         }
 
         return json({ error: 'Unknown data endpoint' }, 404);
+      }
+
+      case 'backups': {
+        const db = await getDb();
+        switch (subResource) {
+          case 'create': {
+            // POST /api/backups/create — Create a manual backup
+            const label = body.label || `Manual backup`;
+
+            // Collect all data (same as export all)
+            const backupPayload = {
+              _meta: { version: '1.0', createdAt: new Date().toISOString(), type: 'backup' },
+              orders: await db.collection('orders').find({}).toArray(),
+              skuRecipes: await db.collection('skuRecipes').find({}).toArray(),
+              recipeTemplates: await db.collection('recipeTemplates').find({}).toArray(),
+              overheadExpenses: await db.collection('overheadExpenses').find({}).toArray(),
+              expenseCategories: await db.collection('expenseCategories').find({}).toArray(),
+              bills: await db.collection('bills').find({}).toArray(),
+              vendors: await db.collection('vendors').find({}).toArray(),
+              inventoryItems: await db.collection('inventoryItems').find({}).toArray(),
+              inventoryCategories: await db.collection('inventoryCategories').find({}).toArray(),
+              rawMaterials: await db.collection('rawMaterials').find({}).toArray(),
+              packagingMaterials: await db.collection('packagingMaterials').find({}).toArray(),
+              employees: await db.collection('employees').find({}).toArray(),
+              kdsAssignments: await db.collection('kdsAssignments').find({}).toArray(),
+              wastageLog: await db.collection('wastageLog').find({}).toArray(),
+              materialRequests: await db.collection('materialRequests').find({}).toArray(),
+              whatsappTemplates: await db.collection('whatsappTemplates').find({}).toArray(),
+              whatsappMessages: await db.collection('whatsappMessages').find({}).toArray(),
+              whatsappOptOuts: await db.collection('whatsappOptOuts').find({}).toArray(),
+              rtoParcels: await db.collection('rtoParcels').find({}).toArray(),
+              tenantConfig: await db.collection('tenantConfig').findOne({ _id: 'config' }),
+              users: (await db.collection('users').find({}).toArray()).map(u => ({ _id: u._id, email: u.email, name: u.name, role: u.role, createdAt: u.createdAt })),
+            };
+
+            // Calculate summary and size
+            const summary = {};
+            let totalRecords = 0;
+            for (const [key, value] of Object.entries(backupPayload)) {
+              if (key === '_meta') continue;
+              if (Array.isArray(value)) { summary[key] = value.length; totalRecords += value.length; }
+              else if (value) { summary[key] = 1; totalRecords += 1; }
+            }
+            backupPayload._meta.summary = summary;
+
+            const dataStr = JSON.stringify(backupPayload);
+            const sizeBytes = Buffer.byteLength(dataStr, 'utf8');
+
+            const backupDoc = {
+              _id: uuidv4(),
+              label,
+              trigger: body.trigger || 'manual',
+              totalRecords,
+              sizeBytes,
+              summary,
+              data: backupPayload,
+              createdAt: new Date().toISOString(),
+            };
+
+            await db.collection('backups').insertOne(backupDoc);
+
+            // Enforce retention (keep only N most recent)
+            const settings = await getSyncSettings();
+            const retention = settings.backups?.retention || 5;
+            const allBackups = await db.collection('backups').find({}).sort({ createdAt: -1 }).project({ _id: 1 }).toArray();
+            if (allBackups.length > retention) {
+              const toDelete = allBackups.slice(retention).map(b => b._id);
+              await db.collection('backups').deleteMany({ _id: { $in: toDelete } });
+            }
+
+            return json({ _id: backupDoc._id, label: backupDoc.label, totalRecords, sizeBytes, summary, createdAt: backupDoc.createdAt, trigger: backupDoc.trigger });
+          }
+
+          case 'restore': {
+            // POST /api/backups/restore — Restore from a backup ID
+            const { backupId, selectedModules, conflictStrategy } = body;
+            if (!backupId) return json({ error: 'backupId required' }, 400);
+
+            const backup = await db.collection('backups').findOne({ _id: backupId });
+            if (!backup || !backup.data) return json({ error: 'Backup not found or corrupted' }, 404);
+
+            // Reuse the import logic
+            const importData = backup.data;
+            const strategy = conflictStrategy || 'overwrite';
+            const modules = selectedModules || Object.keys(importData).filter(k => k !== '_meta');
+            const results = { imported: {}, errors: [] };
+
+            const collectionMapping = {
+              orders: 'orders', skuRecipes: 'skuRecipes', recipeTemplates: 'recipeTemplates',
+              overheadExpenses: 'overheadExpenses', expenseCategories: 'expenseCategories',
+              bills: 'bills', vendors: 'vendors',
+              inventoryItems: 'inventoryItems', inventoryCategories: 'inventoryCategories',
+              rawMaterials: 'rawMaterials', packagingMaterials: 'packagingMaterials',
+              employees: 'employees', kdsAssignments: 'kdsAssignments',
+              wastageLog: 'wastageLog', materialRequests: 'materialRequests',
+              whatsappTemplates: 'whatsappTemplates', whatsappMessages: 'whatsappMessages',
+              whatsappOptOuts: 'whatsappOptOuts', rtoParcels: 'rtoParcels',
+            };
+
+            for (const mod of modules) {
+              if (mod === '_meta' || mod === 'tenantConfig' || mod === 'users' || mod === 'integrations') continue;
+              const collName = collectionMapping[mod];
+              if (!collName || !importData[mod] || !Array.isArray(importData[mod])) continue;
+
+              let inserted = 0, updated = 0, skipped = 0;
+              for (const doc of importData[mod]) {
+                if (!doc._id) continue;
+                try {
+                  const existing = await db.collection(collName).findOne({ _id: doc._id });
+                  if (existing) {
+                    if (strategy === 'skip') { skipped++; }
+                    else { await db.collection(collName).replaceOne({ _id: doc._id }, doc); updated++; }
+                  } else {
+                    await db.collection(collName).insertOne(doc); inserted++;
+                  }
+                } catch (err) { results.errors.push({ module: mod, error: err.message }); }
+              }
+              results.imported[mod] = { inserted, updated, skipped, total: importData[mod].length };
+            }
+
+            return json({ success: true, results });
+          }
+
+          case 'delete': {
+            // POST /api/backups/delete — Delete a backup
+            const { backupId } = body;
+            if (!backupId) return json({ error: 'backupId required' }, 400);
+            const result = await db.collection('backups').deleteOne({ _id: backupId });
+            if (result.deletedCount === 0) return json({ error: 'Backup not found' }, 404);
+            return json({ success: true });
+          }
+
+          case 'config': {
+            // POST /api/backups/config — Update backup configuration
+            const updates = {};
+            if (body.autoEnabled !== undefined) updates['backups.autoEnabled'] = body.autoEnabled;
+            if (body.frequency !== undefined) updates['backups.frequency'] = body.frequency;
+            if (body.retention !== undefined) updates['backups.retention'] = parseInt(body.retention) || 5;
+            if (body.gdriveAutoUpload !== undefined) updates['gdrive.autoUpload'] = body.gdriveAutoUpload;
+            if (Object.keys(updates).length > 0) {
+              await updateSyncSettings(updates);
+            }
+            return json({ success: true });
+          }
+
+          case 'gdrive': {
+            if (thirdSegment === 'upload') {
+              // POST /api/backups/gdrive/upload — Upload a backup to Google Drive
+              const { backupId } = body;
+              if (!backupId) return json({ error: 'backupId required' }, 400);
+
+              const settings = await getSyncSettings();
+              if (!settings.gdrive?.refreshToken) return json({ error: 'Google Drive not connected' }, 400);
+
+              const backup = await db.collection('backups').findOne({ _id: backupId });
+              if (!backup) return json({ error: 'Backup not found' }, 404);
+
+              const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+              const clientId = integrations?.google?.clientId;
+              const clientSecret = integrations?.google?.clientSecret;
+              if (!clientId || !clientSecret) return json({ error: 'Google credentials not configured' }, 400);
+
+              try {
+                // Refresh access token
+                const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: new URLSearchParams({ refresh_token: settings.gdrive.refreshToken, client_id: clientId, client_secret: clientSecret, grant_type: 'refresh_token' }),
+                });
+                const tokenData = await tokenRes.json();
+                if (!tokenData.access_token) return json({ error: 'Failed to refresh Google Drive token' }, 500);
+
+                const accessToken = tokenData.access_token;
+                const fileName = `profitos-backup-${backup.createdAt?.split('T')[0] || 'unknown'}.json`;
+                const fileContent = JSON.stringify(backup.data, null, 2);
+
+                // Multipart upload to Drive
+                const boundary = '===PROFITOS_BOUNDARY===';
+                const metadata = JSON.stringify({
+                  name: fileName,
+                  mimeType: 'application/json',
+                  parents: settings.gdrive.folderId ? [settings.gdrive.folderId] : [],
+                });
+
+                const multipartBody = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${fileContent}\r\n--${boundary}--`;
+
+                const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': `multipart/related; boundary=${boundary}`,
+                  },
+                  body: multipartBody,
+                });
+
+                const uploadData = await uploadRes.json();
+                if (!uploadRes.ok) return json({ error: uploadData.error?.message || 'Drive upload failed' }, 500);
+
+                // Update backup with Drive file ID
+                await db.collection('backups').updateOne({ _id: backupId }, { $set: { driveFileId: uploadData.id, uploadedToDriveAt: new Date().toISOString() } });
+                await updateSyncSettings({ 'gdrive.lastUpload': new Date().toISOString() });
+
+                return json({ success: true, driveFileId: uploadData.id, fileName });
+              } catch (err) {
+                return json({ error: `Drive upload failed: ${err.message}` }, 500);
+              }
+            }
+
+            if (thirdSegment === 'disconnect') {
+              // POST /api/backups/gdrive/disconnect — Disconnect Google Drive
+              await updateSyncSettings({ 'gdrive.refreshToken': null, 'gdrive.email': null, 'gdrive.folderId': null, 'gdrive.connectedAt': null, 'gdrive.autoUpload': false, 'gdrive.lastUpload': null });
+              return json({ success: true });
+            }
+
+            return json({ error: 'Unknown gdrive action' }, 404);
+          }
+
+          default:
+            return json({ error: 'Unknown backup action' }, 404);
+        }
       }
 
       case 'rto': {
@@ -5690,6 +6067,17 @@ export async function DELETE(request) {
     const resource = segments[0];
     const id = segments[1];
     if (!id) return json({ error: 'ID required' }, 400);
+
+    // Handle API key revocation separately
+    if (resource === 'api-keys') {
+      const db = await getDb();
+      const result = await db.collection('apiKeys').updateOne(
+        { _id: id },
+        { $set: { revoked: true, revokedAt: new Date().toISOString() } }
+      );
+      if (result.matchedCount === 0) return json({ error: 'API key not found' }, 404);
+      return json({ message: 'API key revoked' });
+    }
 
     const collectionMap = {
       'vendors': 'vendors',

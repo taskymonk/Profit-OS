@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Comprehensive Authentication & RBAC API Testing for Profit OS
-Base URL: https://profit-calc-fixes.preview.emergentagent.com/api
+Base URL: https://backup-restore-phase.preview.emergentagent.com/api
 
 Tests the following endpoints:
 1. GET /api/auth-config
@@ -19,7 +19,7 @@ import json
 import sys
 from datetime import datetime
 
-BASE_URL = "https://profit-calc-fixes.preview.emergentagent.com/api"
+BASE_URL = "https://backup-restore-phase.preview.emergentagent.com/api"
 
 def print_test_header(test_name):
     print(f"\n{'='*60}")

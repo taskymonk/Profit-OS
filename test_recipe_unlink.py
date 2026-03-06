@@ -6,7 +6,7 @@ import requests
 import json
 from datetime import datetime
 
-BASE_URL = "https://profit-calc-fixes.preview.emergentagent.com/api"
+BASE_URL = "https://backup-restore-phase.preview.emergentagent.com/api"
 
 def log(message):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {message}")

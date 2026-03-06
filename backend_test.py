@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
 """
-Phase 6.2 Import/Export System Testing
-Base URL: https://profit-calc-fixes.preview.emergentagent.com/api
+Phase 6.4 - Public API with Swagger Documentation Testing
+Base URL: http://localhost:3000/api
+
+Test Areas:
+1. API Key Management (CRUD)
+2. Public API v1 Authentication  
+3. Public API v1 Endpoints (10 endpoints)
+4. OpenAPI Spec Validation
+5. Response Format Consistency
 """
 
 import requests
@@ -10,7 +17,8 @@ import sys
 import os
 from datetime import datetime
 
-BASE_URL = "https://profit-calc-fixes.preview.emergentagent.com/api"
+BASE_URL = "http://localhost:3000/api"
+TEST_API_KEY = "pos_test_api_key_for_testing_12345"
 
 def test_api(method, endpoint, data=None, headers=None):
     """Helper function to make API requests with error handling"""
@@ -27,485 +35,515 @@ def test_api(method, endpoint, data=None, headers=None):
         
         print(f"{method} {endpoint} -> Status: {response.status_code}")
         
-        if response.status_code >= 400:
-            print(f"ERROR: {response.text}")
-            return None
-            
         try:
-            return response.json()
+            result = response.json()
         except:
-            return response.text
+            result = response.text
+            
+        return result, response.status_code
             
     except requests.exceptions.RequestException as e:
         print(f"Request failed: {e}")
-        return None
+        return None, None
 
-def test_1_export_counts():
-    """Test 1: Export Counts - Should return record counts"""
-    print("\n🎯 TEST 1: EXPORT COUNTS")
+def test_1_api_key_management_crud():
+    """Test 1: API Key Management CRUD Operations"""
+    print("\n🎯 TEST 1: API KEY MANAGEMENT CRUD")
     print("=" * 50)
     
-    result = test_api("GET", "/data/export-counts")
-    if not result:
-        print("❌ Export counts failed")
+    # GET /api/api-keys — Should return array of API keys with masked keys
+    result, status = test_api("GET", "/api-keys")
+    if status != 200:
+        print("❌ GET /api/api-keys failed")
         return False
         
-    # Verify expected fields exist
-    required_fields = ['orders', 'recipes']
-    for field in required_fields:
-        if field not in result:
-            print(f"❌ Missing field: {field}")
-            return False
-            
-    print(f"✅ Orders count: {result.get('orders', 0)}")
-    print(f"✅ SKU Recipes count: {result.get('recipes', 0)}")
+    if not isinstance(result, list):
+        print("❌ Expected array response for GET /api/api-keys")
+        return False
+        
+    print(f"✅ GET /api/api-keys returned {len(result)} keys")
     
-    # Verify orders > 0, recipes > 0 as per test plan
-    if result.get('orders', 0) <= 0:
-        print("❌ No orders found - expected > 0")
-        return False
-    if result.get('recipes', 0) <= 0:
-        print("❌ No recipes found - expected > 0") 
-        return False
-        
-    print("✅ Export counts test passed")
-    return result
-
-def test_2_export_single_module():
-    """Test 2: Export JSON (single module) - recipes"""
-    print("\n🎯 TEST 2: EXPORT SINGLE MODULE (RECIPES)")
-    print("=" * 50)
-    
-    result = test_api("GET", "/data/export?modules=recipes&format=json")
-    if not result:
-        print("❌ Single module export failed")
-        return False
-        
-    # Verify response structure
-    if '_meta' not in result:
-        print("❌ Missing _meta field")
-        return False
-        
-    meta = result['_meta']
-    required_meta_fields = ['exportedAt', 'version', 'modules', 'summary']
-    for field in required_meta_fields:
-        if field not in meta:
-            print(f"❌ Missing _meta field: {field}")
-            return False
-            
-    # Verify expected data arrays
-    if 'skuRecipes' not in result:
-        print("❌ Missing skuRecipes array")
-        return False
-    if 'recipeTemplates' not in result:
-        print("❌ Missing recipeTemplates array")
-        return False
-        
-    print(f"✅ Meta exportedAt: {meta['exportedAt']}")
-    print(f"✅ Meta version: {meta['version']}")
-    print(f"✅ Meta modules: {meta['modules']}")
-    print(f"✅ SKU Recipes count: {len(result.get('skuRecipes', []))}")
-    print(f"✅ Recipe Templates count: {len(result.get('recipeTemplates', []))}")
-    print(f"✅ Summary: {meta.get('summary', {})}")
-    
-    print("✅ Single module export test passed")
-    return result
-
-def test_3_export_multiple_modules():
-    """Test 3: Export JSON (multiple modules)"""
-    print("\n🎯 TEST 3: EXPORT MULTIPLE MODULES")
-    print("=" * 50)
-    
-    result = test_api("GET", "/data/export?modules=orders,recipes,expenses&format=json")
-    if not result:
-        print("❌ Multiple modules export failed")
-        return False
-        
-    # Verify expected arrays are present
-    expected_arrays = [
-        'orders', 'skuRecipes', 'overheadExpenses', 
-        'expenseCategories', 'bills', 'vendors'
-    ]
-    
-    for arr in expected_arrays:
-        if arr not in result:
-            print(f"❌ Missing array: {arr}")
-            return False
-        print(f"✅ {arr}: {len(result[arr])} items")
-        
-    # Verify most arrays are not empty (except maybe some)
-    if len(result.get('orders', [])) == 0:
-        print("⚠️  Warning: Orders array is empty")
-    if len(result.get('skuRecipes', [])) == 0:
-        print("⚠️  Warning: SKU Recipes array is empty")
-        
-    print("✅ Multiple modules export test passed")
-    return result
-
-def test_4_export_csv():
-    """Test 4: Export CSV format"""
-    print("\n🎯 TEST 4: EXPORT CSV FORMAT")
-    print("=" * 50)
-    
-    # Make request expecting CSV response
-    url = f"{BASE_URL}/data/export?modules=orders&format=csv"
-    try:
-        response = requests.get(url)
-        print(f"GET /data/export?modules=orders&format=csv -> Status: {response.status_code}")
-        
-        if response.status_code != 200:
-            print(f"❌ CSV export failed: {response.text}")
-            return False
-            
-        # Verify Content-Type is CSV
-        content_type = response.headers.get('Content-Type', '')
-        if 'text/csv' not in content_type:
-            print(f"❌ Expected text/csv, got: {content_type}")
-            return False
-            
-        # Verify CSV content
-        csv_content = response.text
-        lines = csv_content.split('\n')
-        if len(lines) < 1:
-            print("❌ CSV content is empty")
-            return False
-            
-        # Verify first line has headers
-        headers = lines[0]
-        expected_headers = ['orderId', 'shopifyOrderId', 'productName', 'customerName', 'salePrice']
-        for header in expected_headers:
-            if header not in headers:
-                print(f"❌ Missing CSV header: {header}")
+    # Verify structure of existing keys
+    if len(result) > 0:
+        key = result[0]
+        required_fields = ['_id', 'name', 'scope', 'maskedKey', 'rateLimit', 'revoked']
+        for field in required_fields:
+            if field not in key:
+                print(f"❌ Missing field in API key: {field}")
                 return False
-                
-        print(f"✅ Content-Type: {content_type}")
-        print(f"✅ CSV lines: {len(lines)}")
-        print(f"✅ Headers: {headers[:100]}...")
-        
-        print("✅ CSV export test passed")
-        return True
-        
-    except requests.exceptions.RequestException as e:
-        print(f"❌ CSV export request failed: {e}")
-        return False
-
-def test_5_export_all():
-    """Test 5: Export All modules"""
-    print("\n🎯 TEST 5: EXPORT ALL MODULES")
-    print("=" * 50)
+        print(f"✅ API key structure valid - masked key: {key['maskedKey']}")
     
-    result = test_api("GET", "/data/export?modules=all&format=json")
-    if not result:
-        print("❌ Export all failed")
-        return False
-        
-    # Verify comprehensive export
-    if '_meta' not in result or 'summary' not in result['_meta']:
-        print("❌ Missing _meta or summary")
-        return False
-        
-    summary = result['_meta']['summary']
-    print(f"✅ Full export summary: {summary}")
-    
-    # Check for major collections
-    major_collections = ['orders', 'skuRecipes']
-    for coll in major_collections:
-        if coll not in summary or summary[coll] == 0:
-            print(f"⚠️  Warning: {coll} has 0 records")
-            
-    print("✅ Export all test passed")
-    return result
-
-def test_6_export_with_date_filter():
-    """Test 6: Export with Date Filter"""
-    print("\n🎯 TEST 6: EXPORT WITH DATE FILTER")
-    print("=" * 50)
-    
-    result = test_api("GET", "/data/export?modules=orders&format=json&dateFrom=2025-01-01&dateTo=2025-12-31")
-    if not result:
-        print("❌ Date filter export failed")
-        return False
-        
-    # Verify date range in meta
-    meta = result.get('_meta', {})
-    if 'dateRange' not in meta or not meta['dateRange']:
-        print("❌ Missing dateRange in meta")
-        return False
-        
-    date_range = meta['dateRange']
-    print(f"✅ Date range: from={date_range.get('from')}, to={date_range.get('to')}")
-    
-    # Verify orders array
-    orders = result.get('orders', [])
-    print(f"✅ Filtered orders count: {len(orders)}")
-    
-    print("✅ Date filter export test passed")
-    return result
-
-def test_7_import_preview():
-    """Test 7: Import Preview - Use exported recipes data"""
-    print("\n🎯 TEST 7: IMPORT PREVIEW")
-    print("=" * 50)
-    
-    # First get export data for recipes
-    export_data = test_api("GET", "/data/export?modules=recipes&format=json")
-    if not export_data:
-        print("❌ Failed to get export data for preview")
-        return False
-        
-    # Test import preview
-    result = test_api("POST", "/data/import-preview", export_data)
-    if not result:
-        print("❌ Import preview failed")
-        return False
-        
-    # Verify preview structure
-    if not result.get('valid'):
-        print("❌ Import preview returned invalid")
-        return False
-        
-    if 'modules' not in result:
-        print("❌ Missing modules in preview")
-        return False
-        
-    modules = result['modules']
-    
-    # Check for skuRecipes module
-    if 'skuRecipes' not in modules:
-        print("❌ Missing skuRecipes in preview modules")
-        return False
-        
-    sku_recipes_info = modules['skuRecipes']
-    required_fields = ['importCount', 'existingCount', 'duplicateCount', 'newCount']
-    for field in required_fields:
-        if field not in sku_recipes_info:
-            print(f"❌ Missing field in skuRecipes preview: {field}")
-            return False
-            
-    print(f"✅ Preview valid: {result['valid']}")
-    print(f"✅ SKU Recipes - Import: {sku_recipes_info['importCount']}, Existing: {sku_recipes_info['existingCount']}, Duplicates: {sku_recipes_info['duplicateCount']}, New: {sku_recipes_info['newCount']}")
-    
-    print("✅ Import preview test passed")
-    return export_data, result
-
-def test_8_import_with_skip():
-    """Test 8: Import with Skip Strategy"""
-    print("\n🎯 TEST 8: IMPORT WITH SKIP STRATEGY")
-    print("=" * 50)
-    
-    # Get export data for recipes
-    export_data = test_api("GET", "/data/export?modules=recipes&format=json")
-    if not export_data:
-        print("❌ Failed to get export data for import")
-        return False
-        
-    # Test import with skip strategy
-    import_request = {
-        "importData": export_data,
-        "selectedModules": ["skuRecipes"],
-        "conflictStrategy": "skip"
+    # POST /api/api-keys — Create new API key
+    new_key_data = {
+        "name": "Agent Test Key",
+        "scope": "readwrite", 
+        "rateLimit": 200
     }
     
-    result = test_api("POST", "/data/import", import_request)
-    if not result:
-        print("❌ Import with skip failed")
+    result, status = test_api("POST", "/api-keys", new_key_data)
+    if status != 201:
+        print(f"❌ POST /api/api-keys failed with status {status}")
         return False
         
-    # Verify import results structure
-    if not result.get('success'):
-        print("❌ Import not successful")
+    if 'key' not in result or 'name' not in result:
+        print("❌ POST /api/api-keys missing key or name in response")
         return False
         
-    if 'results' not in result or 'imported' not in result['results']:
-        print("❌ Missing results/imported in response")
-        return False
-        
-    imported = result['results']['imported']
+    created_key_id = result['_id']
+    full_key = result['key']
+    print(f"✅ Created API key: {result['name']} (scope: {result['scope']}, rateLimit: {result['rateLimit']})")
+    print(f"✅ Full key returned: {full_key}")
     
-    # Check skuRecipes import results
-    if 'skuRecipes' not in imported:
-        print("❌ Missing skuRecipes in import results")
+    # GET /api/api-keys again — Should show new key (masked)
+    result, status = test_api("GET", "/api-keys")
+    if status != 200:
+        print("❌ Second GET /api/api-keys failed")
         return False
         
-    sku_results = imported['skuRecipes']
-    required_fields = ['inserted', 'skipped', 'updated']
-    for field in required_fields:
-        if field not in sku_results:
-            print(f"❌ Missing field in import results: {field}")
-            return False
+    # Find our created key
+    found_key = None
+    for key in result:
+        if key['_id'] == created_key_id:
+            found_key = key
+            break
             
-    print(f"✅ Import success: {result['success']}")
-    print(f"✅ SKU Recipes - Inserted: {sku_results['inserted']}, Skipped: {sku_results['skipped']}, Updated: {sku_results['updated']}")
-    
-    # For existing data, most should be skipped
-    if sku_results['skipped'] == 0:
-        print("⚠️  Warning: Expected some records to be skipped")
+    if not found_key:
+        print(f"❌ Created key {created_key_id} not found in list")
+        return False
         
-    print("✅ Import with skip test passed")
-    return result
+    print(f"✅ Created key found in list - masked: {found_key['maskedKey']}")
+    
+    # DELETE /api/api-keys/{id} — Should revoke the key
+    result, status = test_api("DELETE", f"/api-keys/{created_key_id}")
+    if status != 200:
+        print(f"❌ DELETE /api/api-keys/{created_key_id} failed")
+        return False
+        
+    print(f"✅ Key revoked: {result.get('message', 'Key revoked')}")
+    
+    # GET /api/api-keys again — Should show key as revoked  
+    result, status = test_api("GET", "/api-keys")
+    if status != 200:
+        print("❌ Final GET /api/api-keys failed")
+        return False
+        
+    # Find our revoked key
+    found_key = None
+    for key in result:
+        if key['_id'] == created_key_id:
+            found_key = key
+            break
+            
+    if not found_key:
+        print(f"❌ Revoked key {created_key_id} not found in list")
+        return False
+        
+    if not found_key.get('revoked', False):
+        print("❌ Key not marked as revoked")
+        return False
+        
+    print(f"✅ Key correctly marked as revoked")
+    
+    print("✅ API Key Management CRUD test passed")
+    return True
 
-def test_9_import_with_new_data():
-    """Test 9: Import with New Data (modify IDs)"""
-    print("\n🎯 TEST 9: IMPORT WITH NEW DATA")
+def test_2_public_api_authentication():
+    """Test 2: Public API v1 Authentication"""
+    print("\n🎯 TEST 2: PUBLIC API V1 AUTHENTICATION")
     print("=" * 50)
     
-    # Get export data for recipes  
-    export_data = test_api("GET", "/data/export?modules=recipes&format=json")
-    if not export_data:
-        print("❌ Failed to get export data for new data import")
+    # GET /api/v1/orders WITHOUT X-API-Key header — Should return 401
+    result, status = test_api("GET", "/v1/orders")
+    if status != 401:
+        print(f"❌ Expected 401 for missing API key, got {status}")
         return False
         
-    # Modify some _id values to simulate new data
-    if 'skuRecipes' in export_data and len(export_data['skuRecipes']) > 0:
-        # Take only first 2 recipes and give them new IDs
-        modified_recipes = export_data['skuRecipes'][:2]
-        for recipe in modified_recipes:
-            original_id = recipe.get('_id')
-            new_id = f"test-new-{original_id}"
-            recipe['_id'] = new_id
-            # Also modify sku to avoid conflicts
-            if 'sku' in recipe:
-                recipe['sku'] = f"TEST-NEW-{recipe['sku']}"
-                
-        # Create modified export data with only these new recipes
-        modified_export = {
-            '_meta': export_data['_meta'],
-            'skuRecipes': modified_recipes,
-            'recipeTemplates': []
-        }
+    if not isinstance(result, dict) or result.get('success') != False:
+        print("❌ Expected error response format for missing API key")
+        return False
         
-        import_request = {
-            "importData": modified_export,
-            "selectedModules": ["skuRecipes"],
-            "conflictStrategy": "skip"
-        }
+    expected_error = "Missing X-API-Key header"
+    if expected_error not in result.get('error', ''):
+        print(f"❌ Expected error '{expected_error}', got: {result.get('error')}")
+        return False
         
-        result = test_api("POST", "/data/import", import_request)
-        if not result:
-            print("❌ Import with new data failed")
+    print(f"✅ Missing API key correctly returns 401: {result['error']}")
+    
+    # GET /api/v1/orders with invalid key — Should return 401
+    invalid_headers = {"X-API-Key": "invalid_key"}
+    result, status = test_api("GET", "/v1/orders", headers=invalid_headers)
+    if status != 401:
+        print(f"❌ Expected 401 for invalid API key, got {status}")
+        return False
+        
+    expected_error = "Invalid or revoked API key"
+    if expected_error not in result.get('error', ''):
+        print(f"❌ Expected error '{expected_error}', got: {result.get('error')}")
+        return False
+        
+    print(f"✅ Invalid API key correctly returns 401: {result['error']}")
+    
+    # GET /api/v1/openapi.json WITHOUT auth — Should return 200 (public)
+    result, status = test_api("GET", "/v1/openapi.json")
+    if status != 200:
+        print(f"❌ Expected 200 for public OpenAPI spec, got {status}")
+        return False
+        
+    if not isinstance(result, dict) or 'openapi' not in result:
+        print("❌ OpenAPI spec should be accessible without auth")
+        return False
+        
+    print(f"✅ OpenAPI spec accessible without auth: {result.get('info', {}).get('title', 'Unknown')}")
+    
+    print("✅ Public API Authentication test passed")
+    return True
+
+def test_3_public_api_endpoints():
+    """Test 3: Public API v1 Endpoints (with valid API key)"""
+    print("\n🎯 TEST 3: PUBLIC API V1 ENDPOINTS")
+    print("=" * 50)
+    
+    headers = {"X-API-Key": TEST_API_KEY}
+    
+    # GET /api/v1/orders?page=1&limit=3 — Should return paginated orders
+    params = {"page": 1, "limit": 3}
+    result, status = test_api("GET", "/v1/orders", params, headers)
+    if status != 200:
+        print(f"❌ GET /v1/orders failed with status {status}")
+        return False
+        
+    if not isinstance(result, dict) or result.get('success') != True:
+        print("❌ Expected success response format")
+        return False
+        
+    if 'data' not in result or 'meta' not in result:
+        print("❌ Missing data or meta in orders response")
+        return False
+        
+    meta = result['meta']
+    required_meta_fields = ['page', 'limit', 'total', 'totalPages']
+    for field in required_meta_fields:
+        if field not in meta:
+            print(f"❌ Missing meta field: {field}")
             return False
             
-        if not result.get('success'):
-            print("❌ New data import not successful")
+    print(f"✅ GET /v1/orders: {len(result['data'])} orders, page {meta['page']}/{meta['totalPages']}, total: {meta['total']}")
+    
+    # Store order ID for single order test
+    order_id = None
+    if len(result['data']) > 0:
+        order_id = result['data'][0].get('orderId') or result['data'][0].get('_id')
+    
+    # GET /api/v1/orders/{id} — Should return single order with profit
+    if order_id:
+        result, status = test_api("GET", f"/v1/orders/{order_id}", headers=headers)
+        if status != 200:
+            print(f"❌ GET /v1/orders/{order_id} failed with status {status}")
             return False
             
-        imported = result['results']['imported']
-        sku_results = imported.get('skuRecipes', {})
-        
-        print(f"✅ New data import success: {result['success']}")
-        print(f"✅ SKU Recipes - Inserted: {sku_results.get('inserted', 0)}, Skipped: {sku_results.get('skipped', 0)}")
-        
-        # Should have some insertions since we used new IDs
-        if sku_results.get('inserted', 0) == 0:
-            print("⚠️  Warning: Expected some new records to be inserted")
+        if result.get('success') != True or 'data' not in result:
+            print("❌ Single order response invalid")
+            return False
             
-        # Store the new IDs for cleanup
-        new_ids = [recipe['_id'] for recipe in modified_recipes]
-        print(f"✅ Created {len(new_ids)} new test records")
-        
-        print("✅ Import with new data test passed")
-        return new_ids
+        order_data = result['data']
+        if 'profit' not in order_data:
+            print("❌ Order missing profit calculation")
+            return False
+            
+        print(f"✅ GET /v1/orders/{order_id}: profit calculation included")
     else:
-        print("⚠️  No SKU recipes available to modify")
-        return []
+        print("⚠️  No orders available to test single order endpoint")
+    
+    # GET /api/v1/products?limit=2 — Should return SKU recipes
+    params = {"limit": 2}
+    result, status = test_api("GET", "/v1/products", params, headers)
+    if status != 200:
+        print(f"❌ GET /v1/products failed with status {status}")
+        return False
+        
+    if result.get('success') != True:
+        print("❌ Products response invalid")
+        return False
+        
+    print(f"✅ GET /v1/products: {len(result.get('data', []))} products returned")
+    
+    # GET /api/v1/products with ?search=Rose — Should return filtered products
+    params = {"search": "Rose"}
+    result, status = test_api("GET", "/v1/products", params, headers)
+    if status != 200:
+        print(f"❌ GET /v1/products with search failed")
+        return False
+        
+    print(f"✅ GET /v1/products?search=Rose: {len(result.get('data', []))} filtered products")
+    
+    # GET /api/v1/expenses — Should return expenses
+    result, status = test_api("GET", "/v1/expenses", headers=headers)
+    if status != 200:
+        print(f"❌ GET /v1/expenses failed")
+        return False
+        
+    if result.get('success') != True:
+        print("❌ Expenses response invalid")
+        return False
+        
+    print(f"✅ GET /v1/expenses: {result.get('meta', {}).get('total', 0)} expenses")
+    
+    # GET /api/v1/dashboard?range=alltime — Should return metrics
+    params = {"range": "alltime"}
+    result, status = test_api("GET", "/v1/dashboard", params, headers)
+    if status != 200:
+        print(f"❌ GET /v1/dashboard failed")
+        return False
+        
+    if result.get('success') != True:
+        print("❌ Dashboard response invalid")
+        return False
+        
+    data = result['data']
+    required_fields = ['totalOrders', 'revenue', 'netProfit']
+    for field in required_fields:
+        if field not in data:
+            print(f"❌ Missing dashboard field: {field}")
+            return False
+            
+    if data['totalOrders'] <= 0 or data['revenue'] <= 0:
+        print("❌ Dashboard should have totalOrders > 0 and revenue > 0")
+        return False
+        
+    print(f"✅ GET /v1/dashboard: {data['totalOrders']} orders, ₹{data['revenue']} revenue, ₹{data['netProfit']} profit")
+    
+    # GET /api/v1/finance/bills — Should return bills
+    result, status = test_api("GET", "/v1/finance/bills", headers=headers)
+    if status != 200:
+        print(f"❌ GET /v1/finance/bills failed")
+        return False
+        
+    print(f"✅ GET /v1/finance/bills: {result.get('meta', {}).get('total', 0)} bills")
+    
+    # GET /api/v1/finance/vendors — Should return vendors  
+    result, status = test_api("GET", "/v1/finance/vendors", headers=headers)
+    if status != 200:
+        print(f"❌ GET /v1/finance/vendors failed")
+        return False
+        
+    print(f"✅ GET /v1/finance/vendors: {result.get('meta', {}).get('total', 0)} vendors")
+    
+    # GET /api/v1/inventory — Should return inventory items
+    result, status = test_api("GET", "/v1/inventory", headers=headers)
+    if status != 200:
+        print(f"❌ GET /v1/inventory failed")
+        return False
+        
+    print(f"✅ GET /v1/inventory: {result.get('meta', {}).get('total', 0)} inventory items")
+    
+    # GET /api/v1/employees — Should return employees
+    result, status = test_api("GET", "/v1/employees", headers=headers)
+    if status != 200:
+        print(f"❌ GET /v1/employees failed")
+        return False
+        
+    print(f"✅ GET /v1/employees: {result.get('meta', {}).get('total', 0)} employees")
+    
+    # GET /api/v1/unknown-resource — Should return 404
+    result, status = test_api("GET", "/v1/unknown-resource", headers=headers)
+    if status != 404:
+        print(f"❌ Expected 404 for unknown resource, got {status}")
+        return False
+        
+    if result.get('success') != False or 'error' not in result:
+        print("❌ Expected error response for unknown resource")
+        return False
+        
+    error_msg = result['error']
+    if 'Unknown resource' not in error_msg or 'Available:' not in error_msg:
+        print(f"❌ Error message should list available resources: {error_msg}")
+        return False
+        
+    print(f"✅ GET /v1/unknown-resource returns helpful 404: {error_msg}")
+    
+    print("✅ Public API Endpoints test passed")
+    return True
 
-def test_10_verify_counts_after_import():
-    """Test 10: Verify counts increased after import"""
-    print("\n🎯 TEST 10: VERIFY COUNTS AFTER IMPORT")
+def test_4_openapi_spec_validation():
+    """Test 4: OpenAPI Spec Validation"""
+    print("\n🎯 TEST 4: OPENAPI SPEC VALIDATION")
     print("=" * 50)
     
-    result = test_api("GET", "/data/export-counts")
-    if not result:
-        print("❌ Failed to get counts after import")
+    # GET /api/v1/openapi.json — Should return valid OpenAPI 3.0 spec
+    result, status = test_api("GET", "/v1/openapi.json")
+    if status != 200:
+        print(f"❌ GET /v1/openapi.json failed")
         return False
         
-    print(f"✅ Final counts after import:")
-    for key, value in result.items():
-        print(f"   {key}: {value}")
-        
-    # Verify recipe count is reasonable
-    recipe_count = result.get('recipes', 0)
-    if recipe_count <= 0:
-        print("❌ No recipes found after import")
+    if not isinstance(result, dict):
+        print("❌ OpenAPI spec should be JSON object")
         return False
         
-    print("✅ Counts verification test passed")
-    return result
-
-def cleanup_test_data(new_ids):
-    """Clean up any test data created during import tests"""
-    print("\n🧹 CLEANUP: Removing test data")
-    print("=" * 30)
+    # Verify OpenAPI 3.0 structure
+    required_top_level = ['openapi', 'info', 'paths', 'components']
+    for field in required_top_level:
+        if field not in result:
+            print(f"❌ Missing OpenAPI field: {field}")
+            return False
+            
+    # Verify info section
+    info = result['info']
+    if 'title' not in info or 'version' not in info:
+        print("❌ Missing title or version in info")
+        return False
+        
+    print(f"✅ OpenAPI title: {info['title']}")
+    print(f"✅ OpenAPI version: {info['version']}")
     
-    if not new_ids:
-        print("✅ No test data to clean up")
-        return
+    # Verify paths exist
+    paths = result['paths']
+    expected_paths = [
+        '/api/v1/orders',
+        '/api/v1/orders/{id}',
+        '/api/v1/products', 
+        '/api/v1/dashboard',
+        '/api/v1/expenses',
+        '/api/v1/finance/bills',
+        '/api/v1/inventory',
+        '/api/v1/employees'
+    ]
+    
+    for path in expected_paths:
+        if path not in paths:
+            print(f"❌ Missing path: {path}")
+            return False
+            
+    print(f"✅ All expected paths present: {len(paths)} total paths")
+    
+    # Verify components has security schemes
+    components = result['components']
+    if 'securitySchemes' not in components:
+        print("❌ Missing securitySchemes in components")
+        return False
         
-    # Note: The actual cleanup would require DELETE endpoints
-    # For now, just log what we would clean up
-    print(f"📝 Would clean up {len(new_ids)} test records with IDs: {new_ids[:3]}..." if len(new_ids) > 3 else new_ids)
-    print("✅ Cleanup logged")
+    security_schemes = components['securitySchemes']
+    if 'ApiKeyAuth' not in security_schemes:
+        print("❌ Missing ApiKeyAuth in securitySchemes")
+        return False
+        
+    api_key_auth = security_schemes['ApiKeyAuth']
+    if api_key_auth.get('type') != 'apiKey' or api_key_auth.get('name') != 'X-API-Key':
+        print(f"❌ Invalid ApiKeyAuth config: {api_key_auth}")
+        return False
+        
+    print(f"✅ ApiKeyAuth correctly configured")
+    
+    # Verify tags exist
+    if 'tags' not in result:
+        print("❌ Missing tags")
+        return False
+        
+    tags = result['tags']
+    expected_tag_names = ['Orders', 'Products', 'Expenses', 'Dashboard', 'Finance', 'Inventory', 'Employees']
+    tag_names = [tag.get('name') for tag in tags]
+    
+    for expected_tag in expected_tag_names:
+        if expected_tag not in tag_names:
+            print(f"❌ Missing tag: {expected_tag}")
+            return False
+            
+    print(f"✅ All expected tags present: {tag_names}")
+    
+    print("✅ OpenAPI Spec Validation test passed")
+    return True
+
+def test_5_response_format_consistency():
+    """Test 5: Response Format Consistency"""
+    print("\n🎯 TEST 5: RESPONSE FORMAT CONSISTENCY")
+    print("=" * 50)
+    
+    headers = {"X-API-Key": TEST_API_KEY}
+    
+    # Test multiple endpoints for consistent format
+    endpoints = [
+        "/v1/orders?limit=1",
+        "/v1/products?limit=1", 
+        "/v1/expenses",
+        "/v1/dashboard?range=today",
+        "/v1/finance/bills",
+        "/v1/inventory",
+        "/v1/employees"
+    ]
+    
+    for endpoint in endpoints:
+        result, status = test_api("GET", endpoint, headers=headers)
+        if status != 200:
+            print(f"❌ {endpoint} failed with status {status}")
+            return False
+            
+        # Verify response format: {success: true, data: ..., meta: ...}
+        if not isinstance(result, dict):
+            print(f"❌ {endpoint} should return JSON object")
+            return False
+            
+        if result.get('success') != True:
+            print(f"❌ {endpoint} should have success: true")
+            return False
+            
+        if 'data' not in result:
+            print(f"❌ {endpoint} missing data field")
+            return False
+            
+        # Most endpoints should have meta (except some dashboard)
+        if endpoint != "/v1/dashboard?range=today" and 'meta' not in result:
+            print(f"⚠️  {endpoint} missing meta field (may be expected)")
+            
+        print(f"✅ {endpoint} has correct response format")
+    
+    # Test error response format
+    result, status = test_api("GET", "/v1/orders", headers={"X-API-Key": "invalid"})
+    if status != 401:
+        print("❌ Error test failed")
+        return False
+        
+    # Verify error format: {success: false, error: "message"}
+    if result.get('success') != False or 'error' not in result:
+        print(f"❌ Error response format incorrect: {result}")
+        return False
+        
+    print(f"✅ Error responses have correct format: {{'success': False, 'error': '...'}}")
+    
+    print("✅ Response Format Consistency test passed")
+    return True
 
 def main():
-    """Run all import/export tests"""
-    print("🚀 PHASE 6.2 IMPORT/EXPORT SYSTEM TESTING")
-    print("=" * 60)
+    """Run all Phase 6.4 Public API tests"""
+    print("🚀 PHASE 6.4 - PUBLIC API WITH SWAGGER DOCUMENTATION TESTING")
+    print("=" * 70)
     print(f"Base URL: {BASE_URL}")
-    print(f"Test Plan: 10 comprehensive tests")
-    print("=" * 60)
+    print(f"Test API Key: {TEST_API_KEY}")
+    print("=" * 70)
     
     test_results = []
-    new_ids_to_cleanup = []
     
     try:
-        # Test 1: Export Counts
-        result1 = test_1_export_counts()
-        test_results.append(("Export Counts", result1 is not False))
+        # Test 1: API Key Management CRUD
+        result1 = test_1_api_key_management_crud()
+        test_results.append(("API Key Management CRUD", result1))
         
-        # Test 2: Export Single Module
-        result2 = test_2_export_single_module()
-        test_results.append(("Export Single Module", result2 is not False))
+        # Test 2: Public API Authentication  
+        result2 = test_2_public_api_authentication()
+        test_results.append(("Public API Authentication", result2))
         
-        # Test 3: Export Multiple Modules  
-        result3 = test_3_export_multiple_modules()
-        test_results.append(("Export Multiple Modules", result3 is not False))
+        # Test 3: Public API Endpoints
+        result3 = test_3_public_api_endpoints()
+        test_results.append(("Public API Endpoints", result3))
         
-        # Test 4: Export CSV
-        result4 = test_4_export_csv()
-        test_results.append(("Export CSV", result4 is not False))
+        # Test 4: OpenAPI Spec Validation
+        result4 = test_4_openapi_spec_validation()
+        test_results.append(("OpenAPI Spec Validation", result4))
         
-        # Test 5: Export All
-        result5 = test_5_export_all()
-        test_results.append(("Export All", result5 is not False))
-        
-        # Test 6: Export with Date Filter
-        result6 = test_6_export_with_date_filter()
-        test_results.append(("Export Date Filter", result6 is not False))
-        
-        # Test 7: Import Preview
-        result7 = test_7_import_preview()
-        test_results.append(("Import Preview", result7 is not False))
-        
-        # Test 8: Import with Skip
-        result8 = test_8_import_with_skip()
-        test_results.append(("Import Skip Strategy", result8 is not False))
-        
-        # Test 9: Import New Data
-        result9 = test_9_import_with_new_data()
-        test_results.append(("Import New Data", result9 is not False))
-        if isinstance(result9, list):
-            new_ids_to_cleanup = result9
-            
-        # Test 10: Verify Counts
-        result10 = test_10_verify_counts_after_import()
-        test_results.append(("Verify Counts", result10 is not False))
+        # Test 5: Response Format Consistency
+        result5 = test_5_response_format_consistency()
+        test_results.append(("Response Format Consistency", result5))
         
     except Exception as e:
         print(f"❌ Test execution error: {e}")
-    
-    finally:
-        # Always try cleanup
-        cleanup_test_data(new_ids_to_cleanup)
     
     # Print summary
     print("\n📊 FINAL TEST RESULTS SUMMARY")
@@ -524,7 +562,7 @@ def main():
     print(f"TOTAL: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
     
     if passed == total:
-        print("🎉 ALL TESTS PASSED! Import/Export system is fully functional!")
+        print("🎉 ALL TESTS PASSED! Public API system is fully functional!")
         return True
     else:
         print("⚠️  Some tests failed. Check the details above.")
