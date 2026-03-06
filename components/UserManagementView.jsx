@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import {
   Users, UserPlus, Trash2, Shield, ShieldCheck, ShieldAlert,
-  Loader2, Mail, Clock, Activity, MoreVertical, Edit, CheckCircle,
+  Loader2, Mail, Clock, Activity, MoreVertical, Edit, CheckCircle, Info,
   Eye, ChevronRight, Search, CalendarDays
 } from 'lucide-react';
 import { toast } from 'sonner';

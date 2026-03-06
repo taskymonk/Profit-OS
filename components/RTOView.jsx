@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import {
   Package, Camera, Upload, Loader2, CheckCircle, AlertCircle, ScanLine, Search,
-  RotateCcw, Truck, CreditCard, X, Ban, Send, ArrowRight, Clock, Eye,
+  RotateCcw, Truck, CreditCard, X, Ban, Send, ArrowRight, Clock, Eye, Info,
   TrendingDown, DollarSign, BarChart3, RefreshCw, ChevronRight, MessageSquare,
   PackageX, ArrowLeftRight, Archive, XCircle, Link2, ExternalLink
 } from 'lucide-react';

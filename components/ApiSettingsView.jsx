@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Key, Plus, Trash2, Copy, Eye, EyeOff, Shield, Clock,
-  ExternalLink, Code2, Loader2, CheckCircle, AlertCircle,
+  ExternalLink, Code2, Loader2, CheckCircle, AlertCircle, Info,
   BookOpen, Zap, Lock, Unlock, RefreshCw, Activity, FileJson
 } from 'lucide-react';
 import { toast } from 'sonner';
