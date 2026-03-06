@@ -136,8 +136,8 @@ export default function RTOView() {
         // Step 4: Direct regex scan on ALL text for S10-like patterns
         // This catches cases where extractTrackingInfo might miss due to context
         if (!extracted.trackingNumber) {
-          // UPU S10 format: 2 letters + 9 digits + 2 letter country code
-          const s10Regex = /\b([A-Z]{2}\s*\d[\d\s]{7,10}\d\s*[A-Z]{2})\b/gi;
+          // UPU S10 format: 2 letters + 9 digits + 2 letter country code (with possible OCR spaces)
+          const s10Regex = /([A-Z]{2}\s*\d[\d\s]{7,10}\d\s*[A-Z]{2})/gi;
           const fullText = ocrText.replace(/\n/g, ' ');
           let match;
           while ((match = s10Regex.exec(fullText)) !== null) {
@@ -145,6 +145,18 @@ export default function RTOView() {
             if (/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(cleaned)) {
               extracted = { trackingNumber: cleaned, carrier: 'indiapost', confidence: 0.9 };
               break;
+            }
+          }
+          // Also look for labeled tracking numbers of any carrier
+          if (!extracted.trackingNumber) {
+            const labeledRegex = /(?:awb|tracking|waybill|consignment|article|cn\s*no|docket|ref)[\s.:=#\-]*([A-Z0-9][\w\-]{7,21})/gi;
+            let m;
+            while ((m = labeledRegex.exec(fullText)) !== null) {
+              const val = m[1].replace(/\s/g, '');
+              if (val.length >= 8 && val.length <= 22 && !isNaN(val) ? !/^[6-9]\d{9}$/.test(val) : true) {
+                extracted = { trackingNumber: val, carrier: extracted.carrier || 'other', confidence: 0.85 };
+                break;
+              }
             }
           }
         }

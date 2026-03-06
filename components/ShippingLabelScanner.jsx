@@ -100,9 +100,9 @@ export default function ShippingLabelScanner({ open, onOpenChange, orderId, orde
         }
       }
 
-      // Step 4: Direct regex scan for S10 patterns (handles spaces in OCR)
+      // Step 4: Direct regex scan for S10 patterns and labeled tracking (handles spaces)
       if (!extracted.trackingNumber) {
-        const s10Regex = /\b([A-Z]{2}\s*\d[\d\s]{7,10}\d\s*[A-Z]{2})\b/gi;
+        const s10Regex = /([A-Z]{2}\s*\d[\d\s]{7,10}\d\s*[A-Z]{2})/gi;
         const fullText = ocrText.replace(/\n/g, ' ');
         let match;
         while ((match = s10Regex.exec(fullText)) !== null) {
@@ -110,6 +110,18 @@ export default function ShippingLabelScanner({ open, onOpenChange, orderId, orde
           if (/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(cleaned)) {
             extracted = { trackingNumber: cleaned, carrier: 'indiapost', confidence: 0.9 };
             break;
+          }
+        }
+        // Also look for labeled tracking numbers of any carrier
+        if (!extracted.trackingNumber) {
+          const labeledRegex = /(?:awb|tracking|waybill|consignment|article|cn\s*no|docket|ref)[\s.:=#\-]*([A-Z0-9][\w\-]{7,21})/gi;
+          let m;
+          while ((m = labeledRegex.exec(fullText)) !== null) {
+            const val = m[1].replace(/\s/g, '');
+            if (val.length >= 8 && val.length <= 22) {
+              extracted = { trackingNumber: val, carrier: extracted.carrier || 'other', confidence: 0.85 };
+              break;
+            }
           }
         }
       }
