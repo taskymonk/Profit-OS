@@ -6159,6 +6159,69 @@ export async function POST(request) {
       }
 
       case 'ocr': {
+        // POST /api/ocr/shipping-label — LLM-based shipping label scan
+        if (subResource === 'shipping-label') {
+          const { imageBase64, mimeType } = body;
+          if (!imageBase64) return json({ error: 'imageBase64 required' }, 400);
+          
+          const db = await getDb();
+          const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' }) || {};
+          const ocrSettings = integrations.ocrSettings || {};
+          
+          if (ocrSettings.method !== 'llm' || !ocrSettings.apiKey) {
+            return json({ error: 'LLM not configured' }, 400);
+          }
+          
+          const provider = ocrSettings.provider || 'gemini';
+          const apiKey = ocrSettings.apiKey;
+          const model = ocrSettings.model || (provider === 'gemini' ? 'gemini-2.0-flash-lite' : 'gpt-4o-mini');
+          
+          const prompt = `You are a shipping label reader. Extract the tracking/AWB number from this shipping label image.
+Look for:
+- India Post / Speed Post tracking: Format is 2 letters + 9 digits + 2 letter country code (e.g., EG560205521IN, RR123456789IN)
+- Delhivery AWB: 13-18 digit numbers
+- Blue Dart: 11 digit numbers or letter + 10 digits
+- Any barcode number printed on the label
+
+Return ONLY valid JSON (no markdown):
+{"trackingNumber": "the tracking number", "carrier": "indiapost or bluedart or delhivery or dtdc or other", "confidence": 0.95}
+If you cannot find a tracking number, return: {"trackingNumber": null, "carrier": null, "confidence": 0}`;
+
+          try {
+            let result;
+            if (provider === 'gemini') {
+              const { GoogleGenerativeAI } = await import('@google/generative-ai');
+              const genAI = new GoogleGenerativeAI(apiKey);
+              const genModel = genAI.getGenerativeModel({ model });
+              const imagePart = { inlineData: { mimeType: mimeType || 'image/jpeg', data: imageBase64 } };
+              const genResult = await genModel.generateContent([prompt, imagePart]);
+              result = genResult.response.text();
+            } else if (provider === 'openai') {
+              const OpenAI = (await import('openai')).default;
+              const openai = new OpenAI({ apiKey });
+              const chatResult = await openai.chat.completions.create({
+                model, messages: [
+                  { role: 'system', content: prompt },
+                  { role: 'user', content: [
+                    { type: 'text', text: 'Read the tracking number from this shipping label.' },
+                    { type: 'image_url', image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${imageBase64}` } }
+                  ] }
+                ], max_tokens: 200,
+              });
+              result = chatResult.choices[0]?.message?.content || '{}';
+            }
+            
+            let cleaned = (result || '{}').replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            let parsed;
+            try { parsed = JSON.parse(cleaned); } catch { parsed = { trackingNumber: null }; }
+            
+            return json(parsed);
+          } catch (err) {
+            console.error('LLM Shipping Label Error:', err);
+            return json({ error: err.message, trackingNumber: null }, 500);
+          }
+        }
+        
         // POST /api/ocr/invoice — Process invoice image with configured OCR method
         if (subResource === 'invoice') {
           const { imageBase64, mimeType, ocrText } = body;

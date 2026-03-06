@@ -95,35 +95,136 @@ export default function RTOView() {
 
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      setImageData(ev.target.result);
-      setImagePreview(ev.target.result);
+      const imageBase64 = ev.target.result;
+      setImageData(imageBase64);
+      setImagePreview(imageBase64);
       setIntakeStep('scanning');
       setScanning(true);
       setScanProgress(0);
 
-      try {
-        const Tesseract = await import('tesseract.js');
-        const progressInterval = setInterval(() => {
-          setScanProgress(prev => Math.min(prev + 5, 90));
-        }, 300);
+      let extracted = { trackingNumber: null, carrier: null, confidence: 0 };
+      let ocrText = '';
 
-        const result = await Tesseract.recognize(ev.target.result, 'eng', {
-          logger: m => { if (m.progress) setScanProgress(Math.round(m.progress * 100)); }
+      try {
+        // Step 1: Try barcode scanning (fast, if available)
+        setScanProgress(10);
+        try {
+          const barcodeReader = (await import('javascript-barcode-reader')).default;
+          const types = ['code-128', 'code-39', 'code-2of5'];
+          for (const type of types) {
+            try {
+              const bcResult = await barcodeReader({ image: imageBase64, barcode: type, options: { useAdaptiveThreshold: true } });
+              if (bcResult && bcResult.length >= 8) {
+                console.log(`Barcode found (${type}):`, bcResult);
+                const { extractTrackingInfo } = await import('@/lib/shipping');
+                const bcExtracted = extractTrackingInfo(bcResult + ' speed post india post');
+                if (bcExtracted.trackingNumber) {
+                  extracted = bcExtracted;
+                  break;
+                }
+                // Check S10 format directly
+                if (/^[A-Z]{2}\d{9}[A-Z]{2}$/i.test(bcResult)) {
+                  extracted = { trackingNumber: bcResult.toUpperCase(), carrier: 'indiapost', confidence: 0.95 };
+                  break;
+                }
+              }
+            } catch {}
+          }
+        } catch (err) { console.log('Barcode scanner:', err.message); }
+
+        // Step 2: Run Tesseract OCR
+        setScanProgress(20);
+        const Tesseract = await import('tesseract.js');
+        const result = await Tesseract.recognize(imageBase64, 'eng', {
+          logger: m => { if (m.progress) setScanProgress(20 + Math.round(m.progress * 60)); }
         });
 
-        clearInterval(progressInterval);
+        ocrText = result.data.text || '';
+        setOcrRawText(ocrText);
+
+        // Step 3: Extract from OCR text
+        if (!extracted.trackingNumber) {
+          const { extractTrackingInfo } = await import('@/lib/shipping');
+          extracted = extractTrackingInfo(ocrText);
+        }
+
+        // Step 4: Try relaxed OCR matching (fix common OCR errors: O→0, l→1, S→5)
+        if (!extracted.trackingNumber && ocrText) {
+          const { extractTrackingInfo } = await import('@/lib/shipping');
+          const relaxedText = ocrText.replace(/[oO]/g, '0').replace(/[lI]/g, '1').replace(/[sS]/g, '5');
+          const relaxedResult = extractTrackingInfo(relaxedText);
+          if (relaxedResult.trackingNumber && relaxedResult.confidence > 0.5) {
+            extracted = relaxedResult;
+          }
+        }
+
+        // Step 5: Try LLM-based scan if configured and still no result
+        if (!extracted.trackingNumber) {
+          try {
+            const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+            const mimeType = imageBase64.startsWith('data:') ? imageBase64.split(';')[0].split(':')[1] : 'image/jpeg';
+            const llmRes = await fetch('/api/ocr/shipping-label', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageBase64: base64Data, mimeType }),
+            });
+            if (llmRes.ok) {
+              const llmData = await llmRes.json();
+              if (llmData.trackingNumber) {
+                extracted = { trackingNumber: llmData.trackingNumber, carrier: llmData.carrier || 'indiapost', confidence: llmData.confidence || 0.9 };
+                toast.success('Tracking number found with AI Vision!');
+              }
+            }
+          } catch {}
+        }
+
+        // Step 6: Try enhanced image (grayscale + high contrast) with Tesseract
+        if (!extracted.trackingNumber) {
+          try {
+            const enhanced = await new Promise((resolve) => {
+              const img = new window.Image();
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width; canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const d = imgData.data;
+                for (let i = 0; i < d.length; i += 4) {
+                  const g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+                  const c = Math.min(255, Math.max(0, 1.5 * (g - 128) + 128));
+                  const f = c > 140 ? 255 : 0;
+                  d[i] = f; d[i+1] = f; d[i+2] = f;
+                }
+                ctx.putImageData(imgData, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+              };
+              img.src = imageBase64;
+            });
+            const result2 = await Tesseract.recognize(enhanced, 'eng');
+            const enhancedText = result2.data.text || '';
+            if (enhancedText.length > 10) {
+              const { extractTrackingInfo } = await import('@/lib/shipping');
+              const enhancedExtracted = extractTrackingInfo(enhancedText);
+              if (enhancedExtracted.trackingNumber) {
+                extracted = enhancedExtracted;
+                ocrText = enhancedText;
+                setOcrRawText(enhancedText);
+              }
+            }
+          } catch {}
+        }
+
         setScanProgress(100);
-
-        const rawText = result.data.text;
-        setOcrRawText(rawText);
-
-        // Extract tracking info using dynamic import
-        const { extractTrackingInfo } = await import('@/lib/shipping');
-        const extracted = extractTrackingInfo(rawText);
-
         setExtractedAwb(extracted.trackingNumber || '');
         setExtractedCarrier(extracted.carrier || 'indiapost');
         setIntakeStep('match');
+
+        if (extracted.trackingNumber) {
+          toast.success(`Tracking number found: ${extracted.trackingNumber}`);
+        } else {
+          toast.info('Could not auto-detect tracking number. You can enter it manually, or try a clearer photo.');
+        }
       } catch (err) {
         console.error('OCR Error:', err);
         toast.error('OCR scan failed. You can enter the AWB manually.');
@@ -414,6 +515,15 @@ export default function RTOView() {
                             {matching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                           </Button>
                         </div>
+                        {/* Show raw OCR text for debugging */}
+                        {ocrRawText && (
+                          <details className="mt-2">
+                            <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-primary">Show raw OCR text (debug)</summary>
+                            <pre className="mt-1 p-2 rounded bg-muted text-[9px] max-h-24 overflow-y-auto whitespace-pre-wrap font-mono border text-muted-foreground">
+                              {ocrRawText}
+                            </pre>
+                          </details>
+                        )}
                       </div>
                       <div>
                         <Label className="text-xs font-medium">Carrier</Label>
