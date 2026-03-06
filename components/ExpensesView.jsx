@@ -13,8 +13,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from 'sonner';
 import {
   Plus, Trash2, Edit2, FolderTree, Save, Loader2, RefreshCw,
-  Calendar, Repeat, Infinity as InfinityIcon, StopCircle, ChevronDown, ChevronRight, Banknote, ReceiptText, Settings2, Package, X, Zap, CheckCircle2, Info
+  Calendar, Repeat, Infinity as InfinityIcon, StopCircle, ChevronDown, ChevronRight, Banknote, ReceiptText, Settings2, Package, X, Zap, CheckCircle2, Info, ScanLine, FileText
 } from 'lucide-react';
+import InvoiceScanner from '@/components/InvoiceScanner';
 
 const fmt = (val) => `₹${Math.abs(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -34,6 +35,7 @@ export default function ExpensesView() {
     gstInclusive: false, frequency: 'monthly', totalCycles: '12',
     infiniteCycles: false, date: new Date().toISOString().split('T')[0],
     inventoryItemId: '', inventoryItemName: '', purchaseQty: '',
+    vendorId: '', vendorName: '',
   });
 
   // Category manager state
@@ -42,21 +44,26 @@ export default function ExpensesView() {
   const [newSubCat, setNewSubCat] = useState({});
   const [inventoryItems, setInventoryItems] = useState([]);
   const [showGuide, setShowGuide] = useState(true);
+  const [vendors, setVendors] = useState([]);
+  const [showInvoiceScanner, setShowInvoiceScanner] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [expRes, catRes, invRes] = await Promise.all([
+      const [expRes, catRes, invRes, vendorRes] = await Promise.all([
         fetch('/api/overhead-expenses'),
         fetch('/api/expense-categories'),
         fetch('/api/inventory-items'),
+        fetch('/api/vendors'),
       ]);
       const expData = await expRes.json();
       const catData = await catRes.json();
       const invData = await invRes.json();
+      const vendorData = await vendorRes.json();
       setExpenses(Array.isArray(expData) ? expData : []);
       setCategories(Array.isArray(catData) ? catData : []);
       setInventoryItems(Array.isArray(invData) ? invData : []);
+      setVendors(Array.isArray(vendorData) ? vendorData : []);
     } catch (err) { console.error(err); }
     setLoading(false);
   }, []);
@@ -132,6 +139,7 @@ export default function ExpensesView() {
       gstInclusive: false, frequency: 'monthly', totalCycles: '12',
       infiniteCycles: false, date: new Date().toISOString().split('T')[0],
       inventoryItemId: '', inventoryItemName: '', purchaseQty: '',
+      vendorId: '', vendorName: '',
     });
   };
 
@@ -198,6 +206,9 @@ export default function ExpensesView() {
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => { setCatEditing(categories.map(c => ({ ...c }))); setShowCatManager(true); }}>
             <Settings2 className="w-3.5 h-3.5 mr-1.5" /> Categories
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowInvoiceScanner(true)}>
+            <ScanLine className="w-3.5 h-3.5 mr-1.5" /> Scan Invoice
           </Button>
           <Button size="sm" onClick={() => { resetForm(); setEditingExpense(null); setShowForm(true); }}>
             <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Expense
@@ -337,6 +348,24 @@ export default function ExpensesView() {
             <div>
               <Label>Expense Name *</Label>
               <Input value={form.expenseName} onChange={e => setForm({ ...form, expenseName: e.target.value })} placeholder="e.g., Shopify Subscription" />
+            </div>
+            {/* Vendor Selection */}
+            <div>
+              <Label>Vendor</Label>
+              <Select value={form.vendorId || '__none__'} onValueChange={v => {
+                if (v === '__none__') {
+                  setForm({ ...form, vendorId: '', vendorName: '' });
+                } else {
+                  const vendor = vendors.find(vn => vn._id === v);
+                  setForm({ ...form, vendorId: v, vendorName: vendor?.name || '' });
+                }
+              }}>
+                <SelectTrigger><SelectValue placeholder="Select vendor (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— No vendor —</SelectItem>
+                  {vendors.map(v => <SelectItem key={v._id} value={v._id}>{v.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -541,6 +570,32 @@ export default function ExpensesView() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Invoice Scanner */}
+      <InvoiceScanner
+        open={showInvoiceScanner}
+        onOpenChange={setShowInvoiceScanner}
+        vendors={vendors}
+        categories={categories}
+        onConfirm={(data) => {
+          // Pre-fill expense form with extracted data
+          const matchedVendor = vendors.find(v => v.name?.toLowerCase() === data.vendor?.toLowerCase());
+          const matchedCategory = categories.find(c => c.name === data.category);
+          setForm(prev => ({
+            ...prev,
+            expenseName: data.description || data.invoiceNumber || 'Invoice Expense',
+            amount: String(data.amount || ''),
+            category: matchedCategory ? data.category : (data.category || prev.category),
+            date: data.date || prev.date,
+            vendorId: matchedVendor?._id || '',
+            vendorName: data.vendor || '',
+            gstInclusive: (data.taxAmount || 0) > 0,
+            frequency: 'one-time',
+          }));
+          setEditingExpense(null);
+          setShowForm(true);
+        }}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 """
 Complete Phase 4: WhatsApp Automation Backend API Testing
 Tests all 15 WhatsApp API endpoints as specified in review requirements.
-Base URL: https://backup-restore-phase.preview.emergentagent.com/api
+Base URL: https://erp-ocr-fix-1.preview.emergentagent.com/api
 """
 
 import requests
@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 
 # Base URL for the application
-BASE_URL = "https://backup-restore-phase.preview.emergentagent.com/api"
+BASE_URL = "https://erp-ocr-fix-1.preview.emergentagent.com/api"
 
 def test_all_whatsapp_endpoints():
     """Test all 15 WhatsApp automation endpoints"""

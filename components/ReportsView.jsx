@@ -76,6 +76,8 @@ export default function ReportsView() {
   const [loading, setLoading] = useState(true);
   const [adSpendTaxRate, setAdSpendTaxRate] = useState(18);
   const LEDGER_PAGE_SIZE = 15;
+  const [teamPerfData, setTeamPerfData] = useState(null);
+  const [teamPerfLoading, setTeamPerfLoading] = useState(false);
 
   // Payments & Settlements state
   const [paymentsData, setPaymentsData] = useState({
@@ -161,7 +163,18 @@ export default function ReportsView() {
 
   useEffect(() => {
     if (activeTab === 'payments') fetchPaymentsData();
+    if (activeTab === 'team-performance') fetchTeamPerformance();
   }, [activeTab]);
+
+  const fetchTeamPerformance = async () => {
+    setTeamPerfLoading(true);
+    try {
+      const res = await fetch(`/api/reports/team-performance?startDate=${startDate}&endDate=${endDate}`);
+      const data = await res.json();
+      setTeamPerfData(data);
+    } catch (err) { console.error('Team performance fetch error:', err); }
+    setTeamPerfLoading(false);
+  };
 
   // Resolve unmatched payment
   const resolvePayment = async (paymentId, status) => {
@@ -290,6 +303,7 @@ export default function ReportsView() {
           <TabsTrigger value="payments" className="gap-1 text-xs"><CreditCard className="w-3.5 h-3.5" /> Payments</TabsTrigger>
           <TabsTrigger value="rto" className="gap-1 text-xs"><MapPin className="w-3.5 h-3.5" /> RTO Map</TabsTrigger>
           <TabsTrigger value="employees" className="gap-1 text-xs"><Users className="w-3.5 h-3.5" /> Team</TabsTrigger>
+          <TabsTrigger value="team-performance" className="gap-1 text-xs"><Clock className="w-3.5 h-3.5" /> Team Performance</TabsTrigger>
           <TabsTrigger value="ledger" className="gap-1 text-xs"><DollarSign className="w-3.5 h-3.5" /> Ad Ledger</TabsTrigger>
         </TabsList>
 
@@ -700,6 +714,169 @@ export default function ReportsView() {
               <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
               <p className="font-medium">No employee data</p>
               <p className="text-sm mt-1">Add employees and assign orders to see performance reports.</p>
+            </CardContent></Card>
+          )}
+        </TabsContent>
+
+        {/* Team Performance - detailed KDS metrics */}
+        <TabsContent value="team-performance" className="space-y-4 mt-4">
+          {teamPerfLoading ? <Skeleton className="h-80 rounded-xl" /> : teamPerfData ? (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <Card><CardContent className="pt-4 pb-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Employees</p>
+                  <p className="text-2xl font-bold">{teamPerfData.summary?.totalEmployees || 0}</p>
+                </CardContent></Card>
+                <Card><CardContent className="pt-4 pb-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Assignments</p>
+                  <p className="text-2xl font-bold">{teamPerfData.summary?.totalAssignments || 0}</p>
+                  <p className="text-[10px] text-emerald-600">{teamPerfData.summary?.totalCompleted || 0} completed</p>
+                </CardContent></Card>
+                <Card><CardContent className="pt-4 pb-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Avg Production</p>
+                  <p className="text-2xl font-bold">{teamPerfData.summary?.avgTeamProductionTime || 0}<span className="text-sm text-muted-foreground"> min</span></p>
+                </CardContent></Card>
+                <Card><CardContent className="pt-4 pb-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Avg Packing</p>
+                  <p className="text-2xl font-bold">{teamPerfData.summary?.avgTeamPackingTime || 0}<span className="text-sm text-muted-foreground"> min</span></p>
+                </CardContent></Card>
+                <Card><CardContent className="pt-4 pb-3">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Wastage</p>
+                  <p className="text-2xl font-bold text-red-600">{teamPerfData.summary?.totalWastage || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">{fmt(teamPerfData.summary?.totalWastageValue || 0)} value</p>
+                </CardContent></Card>
+              </div>
+
+              {/* Top Performer */}
+              {teamPerfData.summary?.topPerformer && teamPerfData.summary.topPerformer !== 'N/A' && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/30">
+                  <Crown className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm"><strong>{teamPerfData.summary.topPerformer}</strong> — Top performer by efficiency score</span>
+                </div>
+              )}
+
+              {/* Employee Detail Table */}
+              {teamPerfData.employees?.length > 0 ? (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Employee Performance Details</CardTitle>
+                    <CardDescription className="text-xs">Metrics from KDS assignments within the selected date range</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="text-left py-2 px-2 font-medium">Employee</th>
+                            <th className="text-center py-2 px-1 font-medium">Efficiency</th>
+                            <th className="text-center py-2 px-1 font-medium">Assigned</th>
+                            <th className="text-center py-2 px-1 font-medium">Completed</th>
+                            <th className="text-center py-2 px-1 font-medium">Rate</th>
+                            <th className="text-center py-2 px-1 font-medium">Avg Prod</th>
+                            <th className="text-center py-2 px-1 font-medium">Avg Pack</th>
+                            <th className="text-center py-2 px-1 font-medium">Avg Total</th>
+                            <th className="text-center py-2 px-1 font-medium">Fastest</th>
+                            <th className="text-center py-2 px-1 font-medium">Wastage</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {teamPerfData.employees.map((emp, i) => (
+                            <tr key={emp.employeeId} className="border-b last:border-0 hover:bg-muted/30">
+                              <td className="py-2.5 px-2">
+                                <div className="flex items-center gap-2">
+                                  {i === 0 && <Crown className="w-3.5 h-3.5 text-amber-500" />}
+                                  <div>
+                                    <p className="font-medium">{emp.employeeName}</p>
+                                    <p className="text-[10px] text-muted-foreground">{emp.role}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="text-center py-2.5 px-1">
+                                <Badge variant={emp.efficiencyScore >= 70 ? 'default' : emp.efficiencyScore >= 40 ? 'secondary' : 'outline'}
+                                  className="text-[10px] font-mono">
+                                  {emp.efficiencyScore}
+                                </Badge>
+                              </td>
+                              <td className="text-center py-2.5 px-1 font-mono">{emp.totalAssigned}</td>
+                              <td className="text-center py-2.5 px-1 font-mono text-emerald-600">{emp.completed}</td>
+                              <td className="text-center py-2.5 px-1">
+                                <span className={emp.completionRate >= 80 ? 'text-emerald-600' : emp.completionRate >= 50 ? 'text-amber-600' : 'text-red-500'}>
+                                  {emp.completionRate}%
+                                </span>
+                              </td>
+                              <td className="text-center py-2.5 px-1 font-mono">{emp.avgProductionTime || '—'}<span className="text-muted-foreground">m</span></td>
+                              <td className="text-center py-2.5 px-1 font-mono">{emp.avgPackingTime || '—'}<span className="text-muted-foreground">m</span></td>
+                              <td className="text-center py-2.5 px-1 font-mono font-semibold">{emp.avgTotalTime || '—'}<span className="text-muted-foreground">m</span></td>
+                              <td className="text-center py-2.5 px-1 font-mono text-blue-600">{emp.fastestTime || '—'}<span className="text-muted-foreground">m</span></td>
+                              <td className="text-center py-2.5 px-1">
+                                {emp.wastageCount > 0 ? (
+                                  <span className="text-red-500 font-medium">{emp.wastageCount} ({emp.wastageRate}%)</span>
+                                ) : (
+                                  <span className="text-emerald-600">0</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              {/* Efficiency Chart */}
+              {teamPerfData.employees?.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Efficiency Score Comparison</CardTitle>
+                    <CardDescription className="text-xs">Composite score based on completion rate, speed, volume, and wastage</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={teamPerfData.employees} layout="vertical" margin={{ left: 80 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                        <XAxis type="number" domain={[0, 100]} />
+                        <YAxis dataKey="employeeName" type="category" tick={{ fontSize: 11 }} width={80} />
+                        <Tooltip content={({ active, payload }) => {
+                          if (active && payload?.length) {
+                            const d = payload[0].payload;
+                            return (
+                              <div className="bg-card border rounded-lg shadow-lg p-3 text-xs space-y-1">
+                                <p className="font-semibold">{d.employeeName}</p>
+                                <p>Efficiency: <strong>{d.efficiencyScore}</strong>/100</p>
+                                <p>Completed: {d.completed}/{d.totalAssigned}</p>
+                                <p>Avg Time: {d.avgTotalTime}min</p>
+                                <p>Wastage: {d.wastageCount} ({d.wastageRate}%)</p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }} />
+                        <Bar dataKey="efficiencyScore" radius={[0, 4, 4, 0]}>
+                          {(teamPerfData.employees || []).map((entry, i) => (
+                            <Cell key={i} fill={entry.efficiencyScore >= 70 ? '#10b981' : entry.efficiencyScore >= 40 ? '#f59e0b' : '#ef4444'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+
+              {teamPerfData.employees?.length === 0 && (
+                <Card><CardContent className="py-12 text-center text-muted-foreground">
+                  <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                  <p className="font-medium">No KDS data in this date range</p>
+                  <p className="text-sm mt-1">Assign orders to employees in KDS to see performance metrics here.</p>
+                </CardContent></Card>
+              )}
+            </>
+          ) : (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">
+              <Clock className="w-10 h-10 mx-auto mb-2 opacity-50" />
+              <p className="font-medium">Click to load team performance data</p>
+              <p className="text-sm mt-1">Select a date range above and this tab will load detailed KDS metrics.</p>
             </CardContent></Card>
           )}
         </TabsContent>

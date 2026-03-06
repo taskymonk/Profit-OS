@@ -16,7 +16,7 @@ import {
   ShoppingBag, Truck, Megaphone, RefreshCw, Save, Eye, EyeOff, Globe, Loader2,
   CheckCircle, AlertCircle, CreditCard, Clock, History, ChevronDown, ChevronRight,
   Zap, Timer, Lock, Unlock, Webhook, Shield, Settings2, Play, Pause, RotateCcw,
-  MessageSquare
+  MessageSquare, ScanLine, Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -74,6 +74,7 @@ const CATEGORY_CONFIG = [
   { id: 'shipping', label: 'Shipping', icon: Truck, color: 'orange', integrations: ['indiaPost'] },
   { id: 'messaging', label: 'Messaging', icon: MessageSquare, color: 'emerald', integrations: ['whatsapp'] },
   { id: 'auth', label: 'Authentication', icon: Shield, color: 'purple', integrations: ['google'] },
+  { id: 'ai-ocr', label: 'AI & OCR', icon: Zap, color: 'amber', integrations: ['ocrSettings'] },
 ];
 
 // ==================== AUTO SYNC CONTROL COMPONENT ====================
@@ -169,6 +170,8 @@ export default function IntegrationsView() {
   const [exchangeRate, setExchangeRate] = useState({ apiKey: '', active: false });
   const [google, setGoogle] = useState({ clientId: '', clientSecret: '', active: false });
   const [whatsapp, setWhatsapp] = useState({ phoneNumberId: '', businessAccountId: '', accessToken: '', webhookVerifyToken: '', supportNumber: '', supportEmail: '', testPhone: '', active: false });
+  const [ocrSettings, setOcrSettings] = useState({ method: 'tesseract', provider: 'gemini', apiKey: '', model: '', active: false });
+  const [ocrTesting, setOcrTesting] = useState(false);
 
   const [syncing, setSyncing] = useState({});
   const [syncResults, setSyncResults] = useState({});
@@ -200,6 +203,7 @@ export default function IntegrationsView() {
           if (data.exchangeRate) setExchangeRate(prev => ({ ...prev, ...data.exchangeRate }));
           if (data.google) setGoogle(prev => ({ ...prev, ...data.google }));
           if (data.whatsapp) setWhatsapp(prev => ({ ...prev, ...data.whatsapp }));
+          if (data.ocrSettings) setOcrSettings(prev => ({ ...prev, ...data.ocrSettings }));
         }
         setSyncHistory(Array.isArray(histData) ? histData : []);
         if (settingsData) {
@@ -232,7 +236,7 @@ export default function IntegrationsView() {
       await fetch('/api/integrations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopify, indiaPost, metaAds, razorpay, exchangeRate, google, whatsapp }),
+        body: JSON.stringify({ shopify, indiaPost, metaAds, razorpay, exchangeRate, google, whatsapp, ocrSettings }),
       });
       toast.success('Integrations saved securely!');
     } catch (err) { toast.error('Failed to save'); }
@@ -853,6 +857,156 @@ export default function IntegrationsView() {
               <p className="text-[11px] text-muted-foreground">
                 Once configured and saved, the &quot;Sign in with Google&quot; button will appear on the login page.
               </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ==================== AI & OCR TAB ==================== */}
+        <TabsContent value="ai-ocr" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30"><Zap className="w-5 h-5 text-amber-600" /></div>
+                <div>
+                  <CardTitle className="text-base">AI & OCR Settings</CardTitle>
+                  <CardDescription>Configure how invoice scanning works in the Expenses section</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* OCR Method Selection */}
+              <div className="space-y-3">
+                <Label className="font-semibold text-sm">Invoice OCR Method</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${ocrSettings.method === 'tesseract' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30'}`}
+                    onClick={() => setOcrSettings(prev => ({ ...prev, method: 'tesseract' }))}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <ScanLine className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">Tesseract.js</p>
+                        <Badge variant="secondary" className="text-[9px] h-4">Free · Built-in</Badge>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Runs locally in the browser. Good for clear, printed invoices. No API key needed.
+                    </p>
+                  </div>
+                  <div
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${ocrSettings.method === 'llm' ? 'border-primary bg-primary/5 shadow-sm' : 'border-border hover:border-primary/30'}`}
+                    onClick={() => setOcrSettings(prev => ({ ...prev, method: 'llm' }))}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">AI / LLM Vision</p>
+                        <Badge variant="outline" className="text-[9px] h-4 text-purple-600 border-purple-300">API Key Required</Badge>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Uses AI vision models (Gemini/OpenAI) for high accuracy on complex invoices, handwritten text, etc.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* LLM Configuration */}
+              {ocrSettings.method === 'llm' && (
+                <div className="space-y-4 p-4 rounded-xl border border-purple-200 bg-purple-50/50 dark:border-purple-900/30 dark:bg-purple-950/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    <span className="text-sm font-semibold text-purple-800 dark:text-purple-300">LLM Configuration</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Provider</Label>
+                      <Select value={ocrSettings.provider || 'gemini'} onValueChange={v => setOcrSettings(prev => ({ ...prev, provider: v, model: '' }))}>
+                        <SelectTrigger className="bg-white dark:bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="gemini">Google Gemini</SelectItem>
+                          <SelectItem value="openai">OpenAI</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs">Model</Label>
+                      <Select value={ocrSettings.model || (ocrSettings.provider === 'gemini' ? 'gemini-2.0-flash-lite' : 'gpt-4o-mini')}
+                        onValueChange={v => setOcrSettings(prev => ({ ...prev, model: v }))}>
+                        <SelectTrigger className="bg-white dark:bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ocrSettings.provider === 'gemini' ? (
+                            <>
+                              <SelectItem value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Free)</SelectItem>
+                              <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash</SelectItem>
+                              <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
+                              <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                              <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs">API Key</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type={showSecrets.ocrKey ? 'text' : 'password'}
+                        value={ocrSettings.apiKey || ''}
+                        onChange={e => setOcrSettings(prev => ({ ...prev, apiKey: e.target.value }))}
+                        placeholder={ocrSettings.provider === 'gemini' ? 'AIzaSy...' : 'sk-...'}
+                        className="bg-white dark:bg-background font-mono text-xs"
+                      />
+                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => toggleSecret('ocrKey')}>
+                        {showSecrets.ocrKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {ocrSettings.provider === 'gemini'
+                        ? 'Get a free API key from Google AI Studio: aistudio.google.com/apikey'
+                        : 'Get your API key from platform.openai.com/api-keys'}
+                    </p>
+                  </div>
+
+                  <Button variant="outline" size="sm" disabled={ocrTesting || !ocrSettings.apiKey}
+                    onClick={async () => {
+                      setOcrTesting(true);
+                      try {
+                        const res = await fetch('/api/ocr/test', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ provider: ocrSettings.provider, apiKey: ocrSettings.apiKey, model: ocrSettings.model }),
+                        });
+                        const data = await res.json();
+                        if (data.success) toast.success('Connection successful! AI is ready.');
+                        else toast.error(data.error || 'Connection test failed');
+                      } catch (err) { toast.error('Test failed: ' + err.message); }
+                      setOcrTesting(false);
+                    }}>
+                    {ocrTesting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Play className="w-3.5 h-3.5 mr-1.5" />}
+                    Test Connection
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/30">
+                <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-blue-800 dark:text-blue-300">
+                  <p className="font-medium mb-0.5">How it works</p>
+                  <p>Go to <strong>Expenses → Scan Invoice</strong> to upload an invoice image. The selected OCR method will extract vendor, amount, date, and category fields automatically and pre-fill your expense form.</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

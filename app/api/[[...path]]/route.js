@@ -983,6 +983,130 @@ async function getReportProductCOGS(params) {
   }));
 }
 
+
+
+// Parse invoice text extracted by Tesseract.js into structured fields
+function parseInvoiceText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+  const fullText = lines.join(' ');
+  const fullLower = fullText.toLowerCase();
+  
+  // Extract amount — look for total/amount patterns
+  let amount = 0;
+  const amountPatterns = [
+    /(?:total|grand\s*total|amount\s*(?:due|payable)?|net\s*(?:total|amount)|balance\s*due)[\s:₹$]*([₹$]?\s*[\d,]+\.?\d{0,2})/gi,
+    /([₹$]\s*[\d,]+\.?\d{0,2})/g,
+  ];
+  for (const pat of amountPatterns) {
+    pat.lastIndex = 0;
+    const matches = [...fullText.matchAll(pat)];
+    if (matches.length > 0) {
+      // Take the last/largest match for "total" patterns
+      const vals = matches.map(m => parseFloat((m[1] || m[0]).replace(/[₹$,\s]/g, ''))).filter(v => v > 0);
+      if (vals.length > 0) {
+        amount = Math.max(...vals);
+        break;
+      }
+    }
+  }
+  
+  // Extract date
+  let date = null;
+  const datePatterns = [
+    /(?:date|dated|invoice\s*date|bill\s*date)[\s:]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/gi,
+    /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/g,
+    /(\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/g,
+  ];
+  for (const pat of datePatterns) {
+    pat.lastIndex = 0;
+    const m = pat.exec(fullText);
+    if (m) {
+      try {
+        const d = new Date(m[1].replace(/\./g, '/'));
+        if (!isNaN(d.getTime())) { date = d.toISOString().split('T')[0]; break; }
+      } catch {}
+    }
+  }
+  
+  // Extract invoice number
+  let invoiceNumber = null;
+  const invPatterns = [
+    /(?:invoice|inv|bill|receipt|ref)[\s.#:no]*[\s:]*([A-Z0-9\-\/]{3,20})/gi,
+  ];
+  for (const pat of invPatterns) {
+    pat.lastIndex = 0;
+    const m = pat.exec(fullText);
+    if (m) { invoiceNumber = m[1].trim(); break; }
+  }
+  
+  // Extract vendor — first non-numeric line or line after "from"
+  let vendor = null;
+  const vendorPatterns = [/(?:from|seller|vendor|company|billed\s*by|sold\s*by)[\s:]*([A-Za-z][\w\s&.\-,]{2,40})/gi];
+  for (const pat of vendorPatterns) {
+    pat.lastIndex = 0;
+    const m = pat.exec(fullText);
+    if (m) { vendor = m[1].trim(); break; }
+  }
+  if (!vendor && lines.length > 0) {
+    // Use first line that looks like a company name
+    for (const line of lines.slice(0, 5)) {
+      if (/^[A-Z][A-Za-z\s&.\-]{2,40}$/.test(line) && !/^(invoice|bill|receipt|date|total|gst|tax)/i.test(line)) {
+        vendor = line.trim(); break;
+      }
+    }
+  }
+  
+  // Detect category
+  let category = 'Miscellaneous';
+  const catMap = {
+    'Raw Material Purchases': ['ingredient', 'raw material', 'chocolate', 'sugar', 'flour', 'butter', 'cream', 'food', 'edible'],
+    'Packaging': ['box', 'carton', 'packaging', 'wrap', 'bag', 'tape', 'label', 'pouch'],
+    'Shipping': ['courier', 'shipping', 'freight', 'transport', 'delivery', 'postage'],
+    'Software & SaaS': ['software', 'subscription', 'saas', 'license', 'hosting', 'cloud', 'domain'],
+    'Utilities': ['electricity', 'water', 'gas', 'internet', 'phone', 'wifi', 'broadband'],
+    'Office Supplies': ['stationery', 'printer', 'paper', 'pen', 'office'],
+    'Marketing': ['advertising', 'marketing', 'campaign', 'promotion', 'ads'],
+    'Professional Services': ['consulting', 'legal', 'accounting', 'audit', 'chartered'],
+  };
+  for (const [cat, keywords] of Object.entries(catMap)) {
+    if (keywords.some(kw => fullLower.includes(kw))) { category = cat; break; }
+  }
+  
+  // Tax amount
+  let taxAmount = 0;
+  const taxPat = /(?:gst|tax|sgst|cgst|igst|vat)[\s:₹$]*([₹$]?\s*[\d,]+\.?\d{0,2})/gi;
+  const taxMatches = [...fullText.matchAll(taxPat)];
+  if (taxMatches.length > 0) {
+    taxAmount = taxMatches.reduce((s, m) => s + parseFloat((m[1] || '0').replace(/[₹$,\s]/g, '')), 0);
+  }
+  
+  return {
+    vendor, amount, date, invoiceNumber, category,
+    description: lines.slice(0, 3).join(', ').substring(0, 200),
+    taxAmount, currency: 'INR',
+    confidence: (vendor ? 0.2 : 0) + (amount > 0 ? 0.3 : 0) + (date ? 0.2 : 0) + (invoiceNumber ? 0.15 : 0) + (category !== 'Miscellaneous' ? 0.15 : 0),
+  };
+}
+
+function calculateEfficiency(m) {
+  let score = 0;
+  // Completion rate contributes 40%
+  const cr = m.totalAssigned > 0 ? (m.completed / m.totalAssigned) : 0;
+  score += cr * 40;
+  // Speed (lower avg time = higher score) contributes 30%
+  const avgT = m.totalTimes.length > 0 ? m.totalTimes.reduce((a, b) => a + b, 0) / m.totalTimes.length : 60;
+  const speedScore = Math.max(0, 1 - (avgT / 120)); // 0 min = 100%, 120 min+ = 0%
+  score += speedScore * 30;
+  // Volume contributes 20%
+  const volScore = Math.min(m.completed / 50, 1); // 50+ orders = max volume score
+  score += volScore * 20;
+  // Low wastage contributes 10%
+  const wastRate = m.completed > 0 ? (m.wastageCount / m.completed) : 0;
+  const wastScore = Math.max(0, 1 - wastRate * 5); // 20%+ wastage = 0
+  score += wastScore * 10;
+  return Math.round(score * 10) / 10;
+}
+
 async function getReportExpenseTrend(params) {
   const db = await getDb();
   const expenses = await db.collection('overheadExpenses').find({}).toArray();
@@ -3186,6 +3310,131 @@ export async function GET(request) {
             return json(await getReportProductCOGS(params));
           case 'expense-trend':
             return json(await getReportExpenseTrend(params));
+          case 'team-performance': {
+            // GET /api/reports/team-performance?startDate=X&endDate=X
+            const db = await getDb();
+            const tpStart = params.startDate ? new Date(params.startDate + 'T00:00:00+05:30') : new Date(new Date().setDate(new Date().getDate() - 30));
+            const tpEnd = params.endDate ? new Date(params.endDate + 'T23:59:59+05:30') : new Date();
+            
+            const allAssignments = await db.collection('kdsAssignments').find({}).toArray();
+            const users = await db.collection('users').find({ role: 'employee' }).toArray();
+            const orders = await db.collection('orders').find({}).toArray();
+            
+            // Filter assignments by date range
+            const rangeAssignments = allAssignments.filter(a => {
+              const aDate = new Date(a.assignedAt || a.createdAt);
+              return aDate >= tpStart && aDate <= tpEnd;
+            });
+            
+            // Build per-employee metrics
+            const empMetrics = {};
+            rangeAssignments.forEach(a => {
+              if (!empMetrics[a.employeeId]) {
+                const user = users.find(u => u._id === a.employeeId);
+                empMetrics[a.employeeId] = {
+                  employeeId: a.employeeId,
+                  employeeName: a.employeeName || user?.name || 'Unknown',
+                  role: user?.role || 'employee',
+                  totalAssigned: 0, completed: 0, inProgress: 0, pending: 0,
+                  productionTimes: [], packingTimes: [], totalTimes: [],
+                  wastageCount: 0, wastageValue: 0,
+                  ordersByDate: {},
+                };
+              }
+              const m = empMetrics[a.employeeId];
+              m.totalAssigned++;
+              
+              if (a.status === 'completed' || a.status === 'packed') {
+                m.completed++;
+                // Production time: startedAt -> completedAt
+                if (a.startedAt && a.completedAt) {
+                  const prodMin = (new Date(a.completedAt) - new Date(a.startedAt)) / 60000;
+                  if (prodMin > 0 && prodMin < 600) m.productionTimes.push(prodMin);
+                }
+                // Packing time: completedAt -> packedAt
+                if (a.completedAt && a.packedAt) {
+                  const packMin = (new Date(a.packedAt) - new Date(a.completedAt)) / 60000;
+                  if (packMin > 0 && packMin < 600) m.packingTimes.push(packMin);
+                }
+                // Total time: startedAt -> packedAt or completedAt
+                const end = a.packedAt || a.completedAt;
+                if (a.startedAt && end) {
+                  const totalMin = (new Date(end) - new Date(a.startedAt)) / 60000;
+                  if (totalMin > 0 && totalMin < 600) m.totalTimes.push(totalMin);
+                }
+              } else if (a.status === 'in_progress') {
+                m.inProgress++;
+              } else {
+                m.pending++;
+              }
+              
+              // Track orders by date for trend
+              const dateKey = (a.assignedAt || a.createdAt || '').substring(0, 10);
+              if (dateKey) {
+                m.ordersByDate[dateKey] = (m.ordersByDate[dateKey] || 0) + 1;
+              }
+            });
+            
+            // Check wastage from orders
+            const rtoOrders = orders.filter(o => o.status === 'RTO' || o.status === 'Returned');
+            rtoOrders.forEach(o => {
+              if (o.preparedBy && empMetrics[o.preparedBy]) {
+                empMetrics[o.preparedBy].wastageCount++;
+                empMetrics[o.preparedBy].wastageValue += (o.salePrice || 0);
+              }
+            });
+            
+            const avgArr = (arr) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 10) / 10 : 0;
+            const medianArr = (arr) => {
+              if (arr.length === 0) return 0;
+              const sorted = [...arr].sort((a, b) => a - b);
+              const mid = Math.floor(sorted.length / 2);
+              return Math.round((sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2) * 10) / 10;
+            };
+            
+            const teamPerf = Object.values(empMetrics).map(m => ({
+              employeeId: m.employeeId,
+              employeeName: m.employeeName,
+              role: m.role,
+              totalAssigned: m.totalAssigned,
+              completed: m.completed,
+              inProgress: m.inProgress,
+              pending: m.pending,
+              completionRate: m.totalAssigned > 0 ? Math.round((m.completed / m.totalAssigned) * 10000) / 100 : 0,
+              avgProductionTime: avgArr(m.productionTimes),
+              medianProductionTime: medianArr(m.productionTimes),
+              avgPackingTime: avgArr(m.packingTimes),
+              medianPackingTime: medianArr(m.packingTimes),
+              avgTotalTime: avgArr(m.totalTimes),
+              medianTotalTime: medianArr(m.totalTimes),
+              fastestTime: m.totalTimes.length > 0 ? Math.round(Math.min(...m.totalTimes) * 10) / 10 : 0,
+              slowestTime: m.totalTimes.length > 0 ? Math.round(Math.max(...m.totalTimes) * 10) / 10 : 0,
+              wastageCount: m.wastageCount,
+              wastageValue: Math.round(m.wastageValue),
+              wastageRate: m.completed > 0 ? Math.round((m.wastageCount / m.completed) * 10000) / 100 : 0,
+              dailyTrend: Object.entries(m.ordersByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count })),
+              efficiencyScore: calculateEfficiency(m),
+            })).sort((a, b) => b.efficiencyScore - a.efficiencyScore);
+            
+            // Team summary
+            const allProdTimes = teamPerf.flatMap(t => empMetrics[t.employeeId]?.productionTimes || []);
+            const allPackTimes = teamPerf.flatMap(t => empMetrics[t.employeeId]?.packingTimes || []);
+            
+            return json({
+              employees: teamPerf,
+              summary: {
+                totalEmployees: teamPerf.length,
+                totalAssignments: rangeAssignments.length,
+                totalCompleted: teamPerf.reduce((s, t) => s + t.completed, 0),
+                avgTeamProductionTime: avgArr(allProdTimes),
+                avgTeamPackingTime: avgArr(allPackTimes),
+                totalWastage: teamPerf.reduce((s, t) => s + t.wastageCount, 0),
+                totalWastageValue: teamPerf.reduce((s, t) => s + t.wastageValue, 0),
+                topPerformer: teamPerf[0]?.employeeName || 'N/A',
+              },
+              dateRange: { start: tpStart.toISOString(), end: tpEnd.toISOString() },
+            });
+          }
           default:
             return json({ error: 'Unknown report type' }, 404);
         }
@@ -3499,6 +3748,7 @@ export async function GET(request) {
           if (masked.razorpay?.keySecret) masked.razorpay.keySecret = masked.razorpay.keySecret.replace(/.(?=.{4})/g, '*');
           if (masked.google?.clientSecret) masked.google.clientSecret = masked.google.clientSecret.replace(/.(?=.{4})/g, '*');
           if (masked.whatsapp?.accessToken) masked.whatsapp.accessToken = masked.whatsapp.accessToken.replace(/.(?=.{4})/g, '*');
+          if (masked.ocrSettings?.apiKey) masked.ocrSettings.apiKey = masked.ocrSettings.apiKey.replace(/.(?=.{4})/g, '*');
           return json(masked);
         }
         return json({});
@@ -5880,6 +6130,109 @@ export async function POST(request) {
         return json({ error: 'Unknown stock action' }, 400);
       }
 
+      case 'ocr': {
+        // POST /api/ocr/invoice — Process invoice image with configured OCR method
+        if (subResource === 'invoice') {
+          const { imageBase64, mimeType, ocrText } = body;
+          const db = await getDb();
+          const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' }) || {};
+          const ocrSettings = integrations.ocrSettings || { method: 'tesseract' };
+          
+          // If method is 'tesseract' and ocrText is provided, parse it
+          if (ocrSettings.method === 'tesseract' || !ocrSettings.apiKey) {
+            if (!ocrText) return json({ error: 'ocrText required for Tesseract method' }, 400);
+            const parsed = parseInvoiceText(ocrText);
+            return json({ method: 'tesseract', ...parsed });
+          }
+          
+          // LLM method
+          if (!imageBase64) return json({ error: 'imageBase64 required for LLM method' }, 400);
+          
+          const provider = ocrSettings.provider || 'gemini';
+          const apiKey = ocrSettings.apiKey;
+          const model = ocrSettings.model || (provider === 'gemini' ? 'gemini-2.0-flash-lite' : 'gpt-4o-mini');
+          
+          if (!apiKey) return json({ error: 'LLM API key not configured. Go to Integrations > AI & OCR to set it up.' }, 400);
+          
+          const systemPrompt = `You are an expert invoice/receipt parser. Extract the following fields from the invoice image and return ONLY valid JSON (no markdown, no explanation):
+{
+  "vendor": "vendor/company name on the invoice",
+  "amount": numeric total amount (number, not string),
+  "date": "invoice date in YYYY-MM-DD format",
+  "invoiceNumber": "invoice/receipt number",
+  "category": "one of: Raw Material Purchases, Packaging, Shipping, Software & SaaS, Utilities, Office Supplies, Marketing, Professional Services, Miscellaneous",
+  "description": "brief description of items/services",
+  "taxAmount": numeric tax amount if visible (number or 0),
+  "currency": "INR or detected currency code"
+}
+If a field is not found, use null for strings and 0 for numbers.`;
+
+          try {
+            let result;
+            if (provider === 'gemini') {
+              const { GoogleGenerativeAI } = await import('@google/generative-ai');
+              const genAI = new GoogleGenerativeAI(apiKey);
+              const genModel = genAI.getGenerativeModel({ model });
+              const imagePart = { inlineData: { mimeType: mimeType || 'image/jpeg', data: imageBase64 } };
+              const genResult = await genModel.generateContent([systemPrompt, imagePart]);
+              result = genResult.response.text();
+            } else if (provider === 'openai') {
+              const OpenAI = (await import('openai')).default;
+              const openai = new OpenAI({ apiKey });
+              const chatResult = await openai.chat.completions.create({
+                model,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: [
+                    { type: 'text', text: 'Parse this invoice image and extract the fields as JSON.' },
+                    { type: 'image_url', image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${imageBase64}` } }
+                  ] }
+                ],
+                max_tokens: 1000,
+              });
+              result = chatResult.choices[0]?.message?.content || '{}';
+            } else {
+              return json({ error: `Unknown provider: ${provider}` }, 400);
+            }
+            
+            // Parse JSON from LLM response (strip markdown fences if present)
+            let cleaned = result.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            let parsed;
+            try { parsed = JSON.parse(cleaned); } catch { parsed = { vendor: null, amount: 0, date: null, invoiceNumber: null, category: 'Miscellaneous', description: result.substring(0, 200) }; }
+            
+            return json({ method: 'llm', provider, model, ...parsed });
+          } catch (err) {
+            console.error('LLM OCR Error:', err);
+            return json({ error: `LLM processing failed: ${err.message}`, method: 'llm', provider }, 500);
+          }
+        }
+        
+        // POST /api/ocr/test — Test LLM connection
+        if (subResource === 'test') {
+          const { provider, apiKey, model } = body;
+          if (!provider || !apiKey) return json({ error: 'Provider and API key required' }, 400);
+          try {
+            if (provider === 'gemini') {
+              const { GoogleGenerativeAI } = await import('@google/generative-ai');
+              const genAI = new GoogleGenerativeAI(apiKey);
+              const genModel = genAI.getGenerativeModel({ model: model || 'gemini-2.0-flash-lite' });
+              const result = await genModel.generateContent('Say "OK" in one word');
+              return json({ success: true, message: 'Connection successful', response: result.response.text().substring(0, 50) });
+            } else if (provider === 'openai') {
+              const OpenAI = (await import('openai')).default;
+              const openai = new OpenAI({ apiKey });
+              const result = await openai.chat.completions.create({ model: model || 'gpt-4o-mini', messages: [{ role: 'user', content: 'Say "OK" in one word' }], max_tokens: 10 });
+              return json({ success: true, message: 'Connection successful', response: result.choices[0]?.message?.content || '' });
+            }
+            return json({ error: 'Unknown provider' }, 400);
+          } catch (err) {
+            return json({ success: false, error: `Connection failed: ${err.message}` }, 400);
+          }
+        }
+        
+        return json({ error: 'Unknown OCR endpoint' }, 404);
+      }
+
       default:
         return json({ error: 'Not found' }, 404);
     }
@@ -5939,6 +6292,7 @@ export async function PUT(request) {
         mergeSection('exchangeRate', ['apiKey']);
         mergeSection('google', ['clientSecret']);
         mergeSection('whatsapp', ['accessToken']);
+        mergeSection('ocrSettings', ['apiKey']);
 
         await db.collection('integrations').updateOne({ _id: 'integrations-config' }, { $set: updateData }, { upsert: true });
         return json({ message: 'Integrations updated successfully' });
