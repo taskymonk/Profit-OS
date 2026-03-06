@@ -547,15 +547,12 @@ async function getDashboardData(params = {}) {
     }
   }
 
-  // STEP 2: Query only orders within date range (uses orderDate index)
-  // orderDate is stored as ISO string (e.g., '2026-03-06T16:37:25.000Z')
-  // startDate/endDate are IST date strings (e.g., '2026-02-28', '2026-03-06')
-  // Fix: Convert IST date bounds to UTC ISO range for correct string comparison
-  const queryStartUTC = new Date(startDate + 'T00:00:00+05:30').toISOString();
-  const queryEndUTC = new Date(endDate + 'T23:59:59.999+05:30').toISOString();
-  const orderQuery = { orderDate: { $gte: queryStartUTC, $lte: queryEndUTC } };
+  // STEP 2: Fetch ALL orders — profitCalculator handles IST-aware date filtering
+  // (DB-level string comparison on ISO dates causes boundary mismatches with IST dates)
+  // DO NOT add a DB-level date filter here — the profitCalculator's IST-aware
+  // Date object comparison is the LOCKED source of truth for Shopify parity.
   const [orders, skuRecipes, expenses, tenantConfig, integrations] = await Promise.all([
-    db.collection('orders').find(orderQuery).sort({ orderDate: -1 }).toArray(),
+    db.collection('orders').find({}).sort({ orderDate: -1 }).toArray(),
     db.collection('skuRecipes').find({}).toArray(),
     db.collection('overheadExpenses').find({}).toArray(),
     getCached('tenant-config', () => db.collection('tenantConfig').findOne({}) || {}, 60000),
@@ -640,27 +637,26 @@ async function getDashboardData(params = {}) {
     cd = new Date(cd.getTime() + dayMs);
   }
 
-  // All-time stats — use efficient count queries instead of recalculating
-  // (the 'orders' array is pre-filtered by date range, so allTimeMetrics would be wrong)
+  // All-time stats — use efficient aggregate queries for unique Shopify order counts
+  // Count unique shopifyOrderId values (not rows/line-items) for Shopify Analytics parity
   const EXCL_S = ['Cancelled', 'Voided', 'Pending'];
   const EXCL_F = ['pending', 'voided', 'refunded'];
-  const allTimeOrderCount = await db.collection('orders').countDocuments({
-    status: { $nin: EXCL_S },
-    $or: [
-      { financialStatus: { $nin: EXCL_F } },
-      { financialStatus: { $exists: false } }
-    ]
-  });
-  const allTimeRtoCount = await db.collection('orders').countDocuments({
-    status: 'RTO',
-    $or: [
-      { financialStatus: { $nin: EXCL_F } },
-      { financialStatus: { $exists: false } }
-    ]
-  });
+  const allTimeOrderAgg = await db.collection('orders').aggregate([
+    { $match: { status: { $nin: EXCL_S }, $or: [{ financialStatus: { $nin: EXCL_F } }, { financialStatus: { $exists: false } }] } },
+    { $group: { _id: '$shopifyOrderId' } },
+    { $count: 'total' }
+  ]).toArray();
+  const allTimeOrderCount = allTimeOrderAgg[0]?.total || 0;
+  const allTimeRtoAgg = await db.collection('orders').aggregate([
+    { $match: { status: 'RTO', $or: [{ financialStatus: { $nin: EXCL_F } }, { financialStatus: { $exists: false } }] } },
+    { $group: { _id: '$shopifyOrderId' } },
+    { $count: 'total' }
+  ]).toArray();
+  const allTimeRtoCount = allTimeRtoAgg[0]?.total || 0;
+  // Revenue: sum salePrice minus tipAmount for Shopify parity (Total Sales excludes tips)
   const allTimeRevAgg = await db.collection('orders').aggregate([
     { $match: { status: { $nin: EXCL_S } } },
-    { $group: { _id: null, totalRevenue: { $sum: '$salePrice' } } }
+    { $group: { _id: null, totalRevenue: { $sum: { $subtract: [{ $ifNull: ['$salePrice', 0] }, { $ifNull: ['$tipAmount', 0] }] } } } }
   ]).toArray();
   const allTimeRevenue = allTimeRevAgg[0]?.totalRevenue || 0;
 

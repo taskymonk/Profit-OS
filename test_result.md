@@ -5319,3 +5319,83 @@ agent_communication:
 **CRITICAL VALIDATION**: The correct waterfall formula is now: netProfit = netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead, where totalTxnFees includes Razorpay fees ONLY and totalShopifyFee is calculated separately. This ensures no double-deduction of Shopify transaction fees.
 
 **SYSTEM STATUS**: PHASE 7.7 DATA CONSISTENCY AUDIT COMPLETE - ALL FINANCIAL CALCULATIONS AND REPORTS FULLY OPERATIONAL!"
+    - agent: "testing"
+      message: "🎉 SHOPIFY ABSOLUTE PARITY RESTORATION TESTING COMPLETE - ALL 5 CRITICAL AREAS PASSED (12/12 tests = 100%)!
+
+✅ **EXACT ORDER COUNT PARITY**: 
+- Dashboard filtered.totalOrders = 39 (matches Shopify exactly)
+- MongoDB verification shows 39 unique shopifyOrderIds with proper date range and status filters
+- Perfect match between dashboard and direct database query
+
+✅ **EXACT REVENUE PARITY**: 
+- filtered.revenue = ₹21,990 (matches Shopify Total Sales exactly)
+- plBreakdown.gstOnRevenue = ₹3,354.43 (matches Shopify Taxes exactly)
+- plBreakdown.netRevenue = ₹18,635.57 (matches Shopify Gross Sales exactly)
+- plBreakdown.grossRevenue = filtered.revenue consistency confirmed
+
+✅ **TIP EXCLUSION VERIFIED**: 
+- Source code confirmed grossRevenue = (salePrice - tipAmount) formula
+- Verified netRevenue does NOT add tipAmount back (no double counting)
+- MongoDB shows ₹20 total tips in 7-day range (expected ~₹20)
+
+✅ **WATERFALL MATH ACCURATE**: 
+- Formula verified: netProfit = netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead
+- Calculation accuracy: difference of only ₹0.01 (well within ±1 tolerance)
+- All cost components properly segregated and calculated
+
+✅ **ALL-TIME UNIQUE ORDER COUNT**: 
+- Dashboard allTime.totalOrders = 2,015 (expected ~2015)
+- MongoDB verification shows 2,015 unique shopifyOrderIds excluding cancelled/voided/pending
+- Perfect consistency between dashboard and database
+
+**CRITICAL VALIDATION ACHIEVED**: All Shopify Analytics parity metrics achieved with exact financial reconciliation. System demonstrates complete accuracy in order counting (unique vs line-item distinction), revenue calculation (tip exclusion), tax handling (GST reconciliation), and waterfall mathematics. Ready for production use with complete Shopify data accuracy and financial integrity."
+
+  - task: "Shopify Absolute Parity Restoration"
+    implemented: true
+    working: true
+    file: "lib/profitCalculator.js, app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "critical"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Three fixes for exact Shopify parity: 1) Reverted Phase 7.4 DB-level date filter — dashboard now fetches ALL orders, profitCalculator handles IST-aware filtering (the LOCKED working state). 2) Order count now uses unique shopifyOrderId (Set) instead of row count — multi-line-item orders counted once. 3) Tip excluded from grossRevenue and netRevenue — salePrice includes tips but Shopify Total Sales does not."
+        - working: true
+          agent: "testing"
+          comment: "🎉 SHOPIFY ABSOLUTE PARITY RESTORATION COMPLETE - ALL 5 CRITICAL AREAS PASSED (12/12 tests = 100%)! ✅ EXACT ORDER COUNT PARITY: Dashboard filtered.totalOrders = 39 (matches Shopify exactly), MongoDB verification shows 39 unique shopifyOrderIds with proper date range and status filters. ✅ EXACT REVENUE PARITY: Perfect matches verified - filtered.revenue = ₹21,990 (Shopify Total Sales), plBreakdown.gstOnRevenue = ₹3,354.43 (Shopify Taxes), plBreakdown.netRevenue = ₹18,635.57 (Shopify Gross Sales), plBreakdown.grossRevenue = filtered.revenue consistency confirmed. ✅ TIP EXCLUSION VERIFIED: Source code confirmed grossRevenue = (salePrice - tipAmount) formula, netRevenue does NOT add tipAmount back, MongoDB shows ₹20 total tips in 7-day range (expected ~₹20). ✅ WATERFALL MATH ACCURATE: Formula verified netProfit = netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead with difference of only ₹0.01 (within ±1 tolerance). ✅ ALL-TIME UNIQUE ORDER COUNT: Dashboard allTime.totalOrders = 2,015 (expected ~2015), MongoDB verification shows 2,015 unique shopifyOrderIds excluding cancelled/voided/pending orders. CRITICAL VALIDATION: All Shopify Analytics parity metrics achieved with exact financial reconciliation. System ready for production with complete Shopify data accuracy."
+
+    - agent: "main"
+      message: "SHOPIFY ABSOLUTE PARITY RESTORATION - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data (2015+ unique orders, 2050+ rows). Test these 5 areas:
+
+1. **EXACT ORDER COUNT PARITY** (GET /api/dashboard?range=7days):
+   - filtered.totalOrders should be 39 (matches Shopify exactly)
+   - This is unique Shopify orders, not line-item rows
+   - Use pymongo (db: profitos) to verify: len(db.orders.distinct('shopifyOrderId', {'orderDate':{'$gte':'2026-02-27T18:30:00.000Z','$lte':'2026-03-06T18:29:59.999Z'}, 'status':{'$nin':['Cancelled','Voided','Pending']}})) should = 39
+
+2. **EXACT REVENUE PARITY** (GET /api/dashboard?range=7days):
+   - filtered.revenue should be EXACTLY 21990 (Shopify Total Sales = ₹21,990.00)
+   - plBreakdown.gstOnRevenue should be EXACTLY 3354.43 (Shopify Taxes)
+   - plBreakdown.netRevenue should be EXACTLY 18635.57 (Shopify Gross Sales)
+
+3. **TIP EXCLUSION VERIFIED** (source code + data check):
+   - Read /app/lib/profitCalculator.js
+   - Verify grossRevenue = (order.salePrice || 0) - (order.tipAmount || 0)
+   - Verify netRevenue does NOT add tipAmount (no '+ result.tipAmount')
+   - Use pymongo: sum tipAmount for orders in 7-day range = should be ~20
+
+4. **WATERFALL MATH** (GET /api/dashboard?range=7days):
+   - netProfit = netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead
+   - Difference should be < 1
+
+5. **ALL-TIME UNIQUE ORDER COUNT** (GET /api/dashboard?range=7days):
+   - allTime.totalOrders should be ~2015 (unique Shopify orders)
+   - Use pymongo to verify: len(db.orders.distinct('shopifyOrderId', {'status':{'$nin':['Cancelled','Voided','Pending']}}))
+
+DO NOT test Shopify sync by calling Shopify API. Clean up all test data."
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
