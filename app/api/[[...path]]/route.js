@@ -4013,14 +4013,24 @@ export async function POST(request) {
         }
 
         if (subResource === 'unlink') {
-          // POST /api/recipe-templates/unlink — unlink a recipe from its template
-          const { recipeId } = body;
-          if (!recipeId) return json({ error: 'recipeId required' }, 400);
-          await db.collection('skuRecipes').updateOne(
-            { _id: recipeId },
-            { $set: { templateId: null, templateName: null, updatedAt: new Date().toISOString() } }
-          );
-          return json({ message: 'Recipe unlinked from template' });
+          // POST /api/recipe-templates/unlink — unlink a recipe from its template and clear ingredients
+          const { recipeId, templateId: unlinkTemplateId } = body;
+          if (recipeId) {
+            // Unlink single recipe
+            await db.collection('skuRecipes').updateOne(
+              { _id: recipeId },
+              { $set: { templateId: null, templateName: null, ingredients: [], needsCostInput: true, updatedAt: new Date().toISOString() } }
+            );
+            return json({ message: 'Recipe unlinked and reset' });
+          } else if (unlinkTemplateId) {
+            // Unlink all recipes from a template (used before template deletion)
+            const result = await db.collection('skuRecipes').updateMany(
+              { templateId: unlinkTemplateId },
+              { $set: { templateId: null, templateName: null, ingredients: [], needsCostInput: true, updatedAt: new Date().toISOString() } }
+            );
+            return json({ message: `Unlinked ${result.modifiedCount} recipes`, unlinked: result.modifiedCount });
+          }
+          return json({ error: 'recipeId or templateId required' }, 400);
         }
 
         // Default: Create new template
@@ -4706,14 +4716,20 @@ export async function DELETE(request) {
     const collection = collectionMap[resource];
     if (!collection) return json({ error: 'Not found' }, 404);
 
-    // Special handling: when deleting a recipe template, unlink all associated SKU recipes
+    // Special handling: when deleting a recipe template, unlink AND reset all associated SKU recipes
     if (resource === 'recipe-templates') {
       const db = await getDb();
       const unlinkResult = await db.collection('skuRecipes').updateMany(
         { templateId: id },
-        { $set: { templateId: null, templateName: null, updatedAt: new Date().toISOString() } }
+        { $set: { 
+          templateId: null, 
+          templateName: null, 
+          ingredients: [],
+          needsCostInput: true,
+          updatedAt: new Date().toISOString() 
+        } }
       );
-      console.log(`Unlinked ${unlinkResult.modifiedCount} SKU recipes from template ${id}`);
+      console.log(`Unlinked & reset ${unlinkResult.modifiedCount} SKU recipes from template ${id}`);
     }
 
     const deleted = await deleteDoc(collection, id);

@@ -28,6 +28,7 @@ export default function SkuRecipesView() {
   const [filter, setFilter] = useState('all'); // 'all' | 'needs-setup' | 'has-recipe'
   const [sortBy, setSortBy] = useState('orders'); // 'orders' | 'name' | 'revenue'
   const [searchTerm, setSearchTerm] = useState('');
+  const [applySearch, setApplySearch] = useState('');
   const [expandedId, setExpandedId] = useState(null);
 
   // Dialogs
@@ -768,79 +769,132 @@ export default function SkuRecipesView() {
       </Dialog>
 
       {/* Apply Template Dialog */}
-      <Dialog open={applyDialogOpen} onOpenChange={v => { setApplyDialogOpen(v); if (!v) { setApplyingTemplate(null); setSelectedRecipeIds([]); } }}>
+      <Dialog open={applyDialogOpen} onOpenChange={v => { setApplyDialogOpen(v); if (!v) { setApplyingTemplate(null); setSelectedRecipeIds([]); setApplySearch(''); } }}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Apply Template: {applyingTemplate?.name}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="p-3 rounded-lg border border-blue-200 bg-blue-50 text-xs text-blue-700">
-              <Info className="w-3.5 h-3.5 inline mr-1" />
-              Select products to apply this template to. This will <strong>replace</strong> their current ingredients with the template's ingredients. Products will be linked to this template for future re-pushes.
-            </div>
+          {(() => {
+            // Local filtered list for the apply dialog — separate from page search
+            const applyFiltered = recipes
+              .filter(r => !applySearch.trim() || r.productName?.toLowerCase().includes(applySearch.toLowerCase()) || r.sku?.toLowerCase().includes(applySearch.toLowerCase()))
+              .sort((a, b) => {
+                // Sort: needs-setup first, then by order count
+                const aNeeds = (a.needsCostInput || (a.ingredients || []).length === 0) ? 1 : 0;
+                const bNeeds = (b.needsCostInput || (b.ingredients || []).length === 0) ? 1 : 0;
+                if (aNeeds !== bNeeds) return bNeeds - aNeeds;
+                return (b.orderCount || 0) - (a.orderCount || 0);
+              });
+            const allFilteredIds = applyFiltered.map(r => r._id);
+            const allFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedRecipeIds.includes(id));
+            const needsSetupFiltered = applyFiltered.filter(r => r.needsCostInput || (r.ingredients || []).length === 0);
+            
+            return (
+              <div className="space-y-4">
+                <div className="p-3 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300">
+                  <Info className="w-3.5 h-3.5 inline mr-1" />
+                  Select products to apply this template. This will <strong>replace</strong> their current ingredients. Products will be linked for future re-pushes.
+                </div>
 
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">{selectedRecipeIds.length} of {recipes.length} selected</p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="h-7 text-xs"
-                  onClick={() => setSelectedRecipeIds(recipes.filter(r => r.needsCostInput || (r.ingredients || []).length === 0).map(r => r._id))}>
-                  Select Needs Setup
-                </Button>
-                <Button size="sm" variant="outline" className="h-7 text-xs"
-                  onClick={() => setSelectedRecipeIds(selectedRecipeIds.length === recipes.length ? [] : recipes.map(r => r._id))}>
-                  {selectedRecipeIds.length === recipes.length ? 'Deselect All' : 'Select All'}
+                {/* Search - separate from page search */}
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                  <Input className="pl-8 h-9 text-sm" placeholder="Search products by name or SKU..."
+                    value={applySearch} onChange={e => setApplySearch(e.target.value)} />
+                  {applySearch && (
+                    <Button size="icon" variant="ghost" className="absolute right-1 top-1 h-7 w-7" onClick={() => setApplySearch('')}>
+                      <X className="w-3 h-3" />
+                    </Button>
+                  )}
+                </div>
+
+                {/* Selection controls */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-sm">
+                    <span className="font-semibold text-primary">{selectedRecipeIds.length}</span>
+                    <span className="text-muted-foreground"> selected</span>
+                    {applySearch && <span className="text-muted-foreground"> · {applyFiltered.length} shown</span>}
+                  </p>
+                  <div className="flex gap-1.5">
+                    {needsSetupFiltered.length > 0 && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs"
+                        onClick={() => {
+                          const needsIds = needsSetupFiltered.map(r => r._id);
+                          setSelectedRecipeIds(prev => [...new Set([...prev, ...needsIds])]);
+                        }}>
+                        Select Needs Setup ({needsSetupFiltered.length})
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" className="h-7 text-xs"
+                      onClick={() => {
+                        if (allFilteredSelected) {
+                          // Deselect only the filtered ones
+                          setSelectedRecipeIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+                        } else {
+                          // Select all filtered ones (merge with existing)
+                          setSelectedRecipeIds(prev => [...new Set([...prev, ...allFilteredIds])]);
+                        }
+                      }}>
+                      {allFilteredSelected ? `Deselect${applySearch ? ' Shown' : ' All'}` : `Select${applySearch ? ' Shown' : ' All'} (${applyFiltered.length})`}
+                    </Button>
+                    {selectedRecipeIds.length > 0 && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive"
+                        onClick={() => setSelectedRecipeIds([])}>
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Product list */}
+                <div className="max-h-[350px] overflow-y-auto border rounded-lg">
+                  {applyFiltered.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">No products match "{applySearch}"</p>
+                  ) : applyFiltered.map(recipe => {
+                    const checked = selectedRecipeIds.includes(recipe._id);
+                    const hasIngredients = (recipe.ingredients || []).length > 0;
+                    const needsSetup = recipe.needsCostInput || !hasIngredients;
+                    const hasOtherTemplate = recipe.templateId && recipe.templateId !== applyingTemplate?._id;
+                    const isAlreadyLinked = recipe.templateId === applyingTemplate?._id;
+                    return (
+                      <div key={recipe._id}
+                        className={`flex items-center gap-3 px-3 py-2 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer transition-colors ${checked ? 'bg-primary/5 dark:bg-primary/10' : ''}`}
+                        onClick={() => {
+                          setSelectedRecipeIds(prev => checked ? prev.filter(id => id !== recipe._id) : [...prev, recipe._id]);
+                        }}>
+                        <Checkbox checked={checked} className="shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm truncate">{recipe.productName}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{recipe.sku}</p>
+                        </div>
+                        <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+                          <span className="text-xs text-muted-foreground">{recipe.orderCount || 0} orders</span>
+                          {needsSetup && <Badge variant="destructive" className="text-[9px] px-1.5 h-4">Needs Setup</Badge>}
+                          {hasOtherTemplate && (
+                            <Badge variant="outline" className="text-[9px] text-orange-600 border-orange-300">
+                              <Unlink className="w-2.5 h-2.5 mr-0.5" /> {recipe.templateName}
+                            </Badge>
+                          )}
+                          {isAlreadyLinked && (
+                            <Badge variant="outline" className="text-[9px] text-green-600 border-green-300">
+                              <Link2 className="w-2.5 h-2.5 mr-0.5" /> Linked
+                            </Badge>
+                          )}
+                          {hasIngredients && !needsSetup && !hasOtherTemplate && !isAlreadyLinked && (
+                            <Badge variant="outline" className="text-[9px] text-muted-foreground">Has Recipe</Badge>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <Button onClick={handleApplyTemplate} className="w-full" disabled={selectedRecipeIds.length === 0}>
+                  Apply to {selectedRecipeIds.length} Product{selectedRecipeIds.length !== 1 ? 's' : ''}
                 </Button>
               </div>
-            </div>
-
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
-              <Input className="pl-8 h-8 text-sm" placeholder="Search products..."
-                value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            </div>
-
-            <div className="max-h-[350px] overflow-y-auto border rounded-lg">
-              {recipes
-                .filter(r => !searchTerm.trim() || r.productName?.toLowerCase().includes(searchTerm.toLowerCase()) || r.sku?.toLowerCase().includes(searchTerm.toLowerCase()))
-                .sort((a, b) => (b.orderCount || 0) - (a.orderCount || 0))
-                .map(recipe => {
-                  const checked = selectedRecipeIds.includes(recipe._id);
-                  const hasIngredients = (recipe.ingredients || []).length > 0;
-                  const hasOtherTemplate = recipe.templateId && recipe.templateId !== applyingTemplate?._id;
-                  return (
-                    <div key={recipe._id}
-                      className={`flex items-center gap-3 px-3 py-2 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer ${checked ? 'bg-primary/5' : ''} ${hasOtherTemplate ? 'bg-amber-50/50' : ''}`}
-                      onClick={() => {
-                        setSelectedRecipeIds(prev => checked ? prev.filter(id => id !== recipe._id) : [...prev, recipe._id]);
-                      }}>
-                      <Checkbox checked={checked} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">{recipe.productName}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono">{recipe.sku}</p>
-                      </div>
-                      <div className="text-right shrink-0 space-y-0.5">
-                        <p className="text-xs">{recipe.orderCount || 0} orders</p>
-                        {!hasIngredients && !recipe.templateId && <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-300">No recipe</Badge>}
-                        {hasOtherTemplate && (
-                          <Badge variant="outline" className="text-[9px] text-orange-600 border-orange-300">
-                            <Unlink className="w-2.5 h-2.5 mr-0.5" /> Will replace: {recipe.templateName}
-                          </Badge>
-                        )}
-                        {recipe.templateId === applyingTemplate?._id && (
-                          <Badge variant="outline" className="text-[9px] text-green-600 border-green-300">
-                            <Link2 className="w-2.5 h-2.5 mr-0.5" /> Already linked
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-
-            <Button onClick={handleApplyTemplate} className="w-full" disabled={selectedRecipeIds.length === 0}>
-              Apply to {selectedRecipeIds.length} Products
-            </Button>
-          </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
