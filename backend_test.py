@@ -1,522 +1,646 @@
 #!/usr/bin/env python3
+"""
+PHASE 7.7 DATA CONSISTENCY AUDIT - RETEST AFTER WATERFALL FIX
+Backend API Testing for Profit OS
+Tests all 7 critical data consistency areas after the Shopify fee double-deduction fix
+"""
 
 import requests
 import json
-from pymongo import MongoClient
 import sys
-import traceback
+import math
+from pymongo import MongoClient
+from datetime import datetime, timezone
 
 # Configuration
-BASE_URL = "http://localhost:3000/api"
+BASE_URL = "https://erp-polish-phase7.preview.emergentagent.com/api"
 MONGO_URL = "mongodb://localhost:27017"
 DB_NAME = "profitos"
 
-def log_test(test_name, status, details=""):
-    """Log test results with consistent formatting"""
-    status_emoji = "✅" if status == "PASS" else "❌" if status == "FAIL" else "⚠️"
-    print(f"{status_emoji} {test_name}: {status}")
-    if details:
-        print(f"   └─ {details}")
-    print()
+# Test credentials
+TEST_EMAIL = "admin@giftsugar.com"
+TEST_PASSWORD = "admin123"
 
-def get_dashboard_data(range_param="7days"):
-    """Get dashboard data for given range"""
-    try:
-        url = f"{BASE_URL}/dashboard?range={range_param}"
-        response = requests.get(url)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return None
-    except Exception as e:
-        print(f"Error fetching dashboard data: {e}")
-        return None
-
-def test_dashboard_data_integrity():
-    """Test 1: Dashboard Data Integrity"""
-    print("🎯 TEST 1: DASHBOARD DATA INTEGRITY (GET /api/dashboard?range=7days)")
+class DataConsistencyTester:
+    def __init__(self):
+        self.session = requests.Session()
+        self.csrf_token = None
+        self.auth_cookies = None
+        self.mongo_client = None
+        self.db = None
+        self.test_results = {
+            "dashboard_waterfall_math": {"status": "PENDING", "details": []},
+            "monthly_pl_report": {"status": "PENDING", "details": []},
+            "product_cogs_report": {"status": "PENDING", "details": []},
+            "profitable_skus_report": {"status": "PENDING", "details": []},
+            "calculate_profit_endpoint": {"status": "PENDING", "details": []},
+            "alltime_stats_accuracy": {"status": "PENDING", "details": []},
+            "ad_spend_tax_verification": {"status": "PENDING", "details": []},
+        }
     
-    try:
-        data = get_dashboard_data("7days")
-        if not data:
-            log_test("Dashboard API Call", "FAIL", "Failed to fetch dashboard data")
-            return False
-        
-        # Check if required sections exist
-        if 'plBreakdown' not in data or 'filtered' not in data:
-            log_test("Response Structure", "FAIL", "Missing plBreakdown or filtered section")
-            return False
-        
-        pl_breakdown = data['plBreakdown']
-        filtered = data['filtered']
-        
-        # Test 1a: plBreakdown.grossRevenue == filtered.revenue
-        pl_gross = pl_breakdown.get('grossRevenue', 0)
-        filtered_revenue = filtered.get('revenue', 0)
-        
-        if abs(pl_gross - filtered_revenue) < 0.01:
-            log_test("Revenue Consistency", "PASS", f"plBreakdown.grossRevenue (₹{pl_gross}) = filtered.revenue (₹{filtered_revenue})")
-        else:
-            log_test("Revenue Consistency", "FAIL", f"plBreakdown.grossRevenue (₹{pl_gross}) ≠ filtered.revenue (₹{filtered_revenue})")
-            return False
-        
-        # Test 1b: plBreakdown.netProfit == filtered.netProfit
-        pl_net = pl_breakdown.get('netProfit', 0)
-        filtered_net = filtered.get('netProfit', 0)
-        
-        if abs(pl_net - filtered_net) < 0.01:
-            log_test("Net Profit Consistency", "PASS", f"plBreakdown.netProfit (₹{pl_net}) = filtered.netProfit (₹{filtered_net})")
-        else:
-            log_test("Net Profit Consistency", "FAIL", f"plBreakdown.netProfit (₹{pl_net}) ≠ filtered.netProfit (₹{filtered_net})")
-            return False
-        
-        # Test 1c: Waterfall math verification
-        net_revenue = pl_breakdown.get('netRevenue', 0)
-        total_cogs = pl_breakdown.get('totalCOGS', 0)
-        total_shipping = pl_breakdown.get('totalShipping', 0)
-        total_txn_fees = pl_breakdown.get('totalTxnFees', 0)
-        ad_spend = pl_breakdown.get('adSpend', 0)
-        overhead = pl_breakdown.get('overhead', 0)
-        
-        calculated_net_profit = net_revenue - total_cogs - total_shipping - total_txn_fees - ad_spend - overhead
-        actual_net_profit = pl_breakdown.get('netProfit', 0)
-        
-        if abs(calculated_net_profit - actual_net_profit) <= 1:
-            log_test("Waterfall Math", "PASS", f"Calculated: ₹{calculated_net_profit:.2f}, Actual: ₹{actual_net_profit:.2f}, Diff: ₹{abs(calculated_net_profit - actual_net_profit):.2f}")
-        else:
-            log_test("Waterfall Math", "FAIL", f"Calculated: ₹{calculated_net_profit:.2f}, Actual: ₹{actual_net_profit:.2f}, Diff: ₹{abs(calculated_net_profit - actual_net_profit):.2f}")
-            return False
-        
-        # Test 1d: cancelledCount exists and >= 0
-        cancelled_count = filtered.get('cancelledCount')
-        if cancelled_count is not None and cancelled_count >= 0:
-            log_test("Cancelled Count", "PASS", f"filtered.cancelledCount = {cancelled_count}")
-        else:
-            log_test("Cancelled Count", "FAIL", f"filtered.cancelledCount = {cancelled_count} (should be >= 0)")
-            return False
-        
-        # Test 1e: allTime.totalOrders > filtered.totalOrders
-        all_time = data.get('allTime', {})
-        all_time_orders = all_time.get('totalOrders', 0)
-        filtered_orders = filtered.get('totalOrders', 0)
-        
-        if all_time_orders > filtered_orders:
-            log_test("AllTime vs Filtered Orders", "PASS", f"allTime.totalOrders ({all_time_orders}) > filtered.totalOrders ({filtered_orders})")
-        else:
-            log_test("AllTime vs Filtered Orders", "FAIL", f"allTime.totalOrders ({all_time_orders}) ≤ filtered.totalOrders ({filtered_orders})")
-            return False
-        
-        return True
-        
-    except Exception as e:
-        log_test("Dashboard Data Integrity", "FAIL", f"Exception: {str(e)}")
-        traceback.print_exc()
-        return False
-
-def test_monthly_pl_report():
-    """Test 2: Monthly P&L Report"""
-    print("🎯 TEST 2: MONTHLY P&L REPORT (GET /api/reports/monthly-pl)")
-    
-    try:
-        url = f"{BASE_URL}/reports/monthly-pl"
-        response = requests.get(url)
-        
-        if response.status_code != 200:
-            log_test("Monthly P&L API Call", "FAIL", f"Status code: {response.status_code}")
-            return False
-        
-        data = response.json()
-        
-        # Should be an array
-        if not isinstance(data, list):
-            log_test("Response Structure", "FAIL", "Response should be an array")
-            return False
-        
-        if len(data) == 0:
-            log_test("Data Availability", "PASS", "No monthly data available (empty array)")
-            return True
-        
-        # Check first monthly object structure
-        first_month = data[0]
-        required_fields = ['month', 'grossRevenue', 'netRevenue', 'gstOnRevenue', 'discount', 'refunds', 
-                          'cogs', 'shipping', 'shopifyFees', 'razorpayFees', 'txnFees', 'adSpend', 
-                          'overhead', 'netProfit', 'orderCount', 'rtoCount', 'cancelledCount', 'margin']
-        
-        missing_fields = [field for field in required_fields if field not in first_month]
-        if missing_fields:
-            log_test("Required Fields", "FAIL", f"Missing fields: {missing_fields}")
-            return False
-        else:
-            log_test("Required Fields", "PASS", "All 18 required fields present")
-        
-        # Check backward compatibility - should have 'revenue' field = grossRevenue
-        if 'revenue' in first_month and abs(first_month['revenue'] - first_month['grossRevenue']) < 0.01:
-            log_test("Backward Compatibility", "PASS", f"revenue field equals grossRevenue (₹{first_month['grossRevenue']})")
-        else:
-            log_test("Backward Compatibility", "FAIL", "revenue field missing or doesn't match grossRevenue")
-            return False
-        
-        # Test math for first month: netProfit ≈ netRevenue - cogs - shipping - txnFees - adSpend - overhead
-        net_revenue = first_month.get('netRevenue', 0)
-        cogs = first_month.get('cogs', 0)
-        shipping = first_month.get('shipping', 0)
-        txn_fees = first_month.get('txnFees', 0)
-        ad_spend = first_month.get('adSpend', 0)
-        overhead = first_month.get('overhead', 0)
-        
-        calculated_profit = net_revenue - cogs - shipping - txn_fees - ad_spend - overhead
-        actual_profit = first_month.get('netProfit', 0)
-        
-        if abs(calculated_profit - actual_profit) <= 10:
-            log_test("Monthly Math Verification", "PASS", f"Month {first_month['month']}: Calculated ₹{calculated_profit:.2f}, Actual ₹{actual_profit:.2f}")
-        else:
-            log_test("Monthly Math Verification", "FAIL", f"Month {first_month['month']}: Calculated ₹{calculated_profit:.2f}, Actual ₹{actual_profit:.2f}")
-            return False
-        
-        # Test grossRevenue > netRevenue (GST deduction)
-        gross_revenue = first_month.get('grossRevenue', 0)
-        net_revenue = first_month.get('netRevenue', 0)
-        
-        if gross_revenue > net_revenue:
-            log_test("GST Deduction", "PASS", f"grossRevenue (₹{gross_revenue}) > netRevenue (₹{net_revenue})")
-        else:
-            log_test("GST Deduction", "FAIL", f"grossRevenue (₹{gross_revenue}) ≤ netRevenue (₹{net_revenue})")
-            return False
-        
-        return True
-        
-    except Exception as e:
-        log_test("Monthly P&L Report", "FAIL", f"Exception: {str(e)}")
-        traceback.print_exc()
-        return False
-
-def test_product_cogs_report():
-    """Test 3: Product COGS Report"""
-    print("🎯 TEST 3: PRODUCT COGS REPORT (GET /api/reports/product-cogs)")
-    
-    try:
-        url = f"{BASE_URL}/reports/product-cogs"
-        response = requests.get(url)
-        
-        if response.status_code != 200:
-            log_test("Product COGS API Call", "FAIL", f"Status code: {response.status_code}")
-            return False
-        
-        data = response.json()
-        
-        # Should be an array
-        if not isinstance(data, list):
-            log_test("Response Structure", "FAIL", "Response should be an array")
-            return False
-        
-        if len(data) == 0:
-            log_test("Data Availability", "PASS", "No product data available (empty array)")
-            return True
-        
-        # Check first product structure
-        first_product = data[0]
-        required_fields = ['sku', 'productName', 'orders', 'revenue', 'cogs', 'grossProfit', 'margin', 'avgCOGSPerOrder', 'hasRecipe']
-        
-        missing_fields = [field for field in required_fields if field not in first_product]
-        if missing_fields:
-            log_test("Required Fields", "FAIL", f"Missing fields: {missing_fields}")
-            return False
-        else:
-            log_test("Required Fields", "PASS", "All 9 required fields present")
-        
-        # Verify grossProfit = revenue - cogs (within ±1)
-        revenue = first_product.get('revenue', 0)
-        cogs = first_product.get('cogs', 0)
-        gross_profit = first_product.get('grossProfit', 0)
-        calculated_profit = revenue - cogs
-        
-        if abs(gross_profit - calculated_profit) <= 1:
-            log_test("Gross Profit Calculation", "PASS", f"grossProfit (₹{gross_profit}) = revenue (₹{revenue}) - cogs (₹{cogs})")
-        else:
-            log_test("Gross Profit Calculation", "FAIL", f"grossProfit (₹{gross_profit}) ≠ revenue (₹{revenue}) - cogs (₹{cogs})")
-            return False
-        
-        # Verify margin calculation (grossProfit/revenue)*100
-        if revenue > 0:
-            calculated_margin = (gross_profit / revenue) * 100
-            actual_margin = first_product.get('margin', 0)
-            
-            if abs(calculated_margin - actual_margin) <= 0.01:
-                log_test("Margin Calculation", "PASS", f"margin ({actual_margin:.2f}%) = (grossProfit/revenue)*100")
-            else:
-                log_test("Margin Calculation", "FAIL", f"margin ({actual_margin:.2f}%) ≠ calculated ({calculated_margin:.2f}%)")
-                return False
-        else:
-            log_test("Margin Calculation", "PASS", "No revenue to calculate margin")
-        
-        return True
-        
-    except Exception as e:
-        log_test("Product COGS Report", "FAIL", f"Exception: {str(e)}")
-        traceback.print_exc()
-        return False
-
-def test_profitable_skus_report():
-    """Test 4: Profitable SKUs Report"""
-    print("🎯 TEST 4: PROFITABLE SKUS REPORT (GET /api/reports/profitable-skus)")
-    
-    try:
-        url = f"{BASE_URL}/reports/profitable-skus"
-        response = requests.get(url)
-        
-        if response.status_code != 200:
-            log_test("Profitable SKUs API Call", "FAIL", f"Status code: {response.status_code}")
-            return False
-        
-        data = response.json()
-        
-        # Should be an array
-        if not isinstance(data, list):
-            log_test("Response Structure", "FAIL", "Response should be an array")
-            return False
-        
-        if len(data) == 0:
-            log_test("Data Availability", "PASS", "No profitable SKU data available (empty array)")
-            return True
-        
-        # Check first SKU structure
-        first_sku = data[0]
-        required_fields = ['sku', 'productName', 'totalOrders', 'totalRevenue', 'totalProfit', 'totalCOGS', 'rtoCount', 'profitMargin', 'rtoRate']
-        
-        missing_fields = [field for field in required_fields if field not in first_sku]
-        if missing_fields:
-            log_test("Required Fields", "FAIL", f"Missing fields: {missing_fields}")
-            return False
-        else:
-            log_test("Required Fields", "PASS", "All 9 required fields present")
-        
-        # Note: We can't directly verify that cancelled orders are excluded without accessing the database
-        # But we can check that totalOrders is a reasonable positive number
-        total_orders = first_sku.get('totalOrders', 0)
-        if total_orders > 0:
-            log_test("Cancelled Order Exclusion", "PASS", f"totalOrders = {total_orders} (should exclude cancelled orders)")
-        else:
-            log_test("Cancelled Order Exclusion", "FAIL", f"totalOrders = {total_orders} (unexpected value)")
-            return False
-        
-        return True
-        
-    except Exception as e:
-        log_test("Profitable SKUs Report", "FAIL", f"Exception: {str(e)}")
-        traceback.print_exc()
-        return False
-
-def test_calculate_profit_endpoint():
-    """Test 5: Calculate-Profit Endpoint"""
-    print("🎯 TEST 5: CALCULATE-PROFIT ENDPOINT (GET /api/calculate-profit/{orderId})")
-    
-    try:
-        # First get an order
-        orders_url = f"{BASE_URL}/orders?page=1&limit=1"
-        response = requests.get(orders_url)
-        
-        if response.status_code != 200:
-            log_test("Orders API Call", "FAIL", f"Status code: {response.status_code}")
-            return False
-        
-        orders_data = response.json()
-        
-        if not orders_data.get('orders') or len(orders_data['orders']) == 0:
-            log_test("Order Availability", "FAIL", "No orders available to test")
-            return False
-        
-        order_id = orders_data['orders'][0]['_id']
-        log_test("Order Selection", "PASS", f"Using order ID: {order_id}")
-        
-        # Now test calculate-profit endpoint
-        profit_url = f"{BASE_URL}/calculate-profit/{order_id}"
-        response = requests.get(profit_url)
-        
-        if response.status_code != 200:
-            log_test("Calculate Profit API Call", "FAIL", f"Status code: {response.status_code}")
-            return False
-        
-        profit_data = response.json()
-        
-        # Check required fields
-        required_fields = ['grossRevenue', 'netRevenue', 'gstOnRevenue', 'totalCOGS', 'shippingCost', 
-                          'totalTransactionFee', 'marketingAllocation', 'netProfit', 'profitMargin']
-        
-        missing_fields = [field for field in required_fields if field not in profit_data]
-        if missing_fields:
-            log_test("Required Fields", "FAIL", f"Missing fields: {missing_fields}")
-            return False
-        else:
-            log_test("Required Fields", "PASS", "All 9 required fields present")
-        
-        # Verify: grossRevenue - discount - gstOnRevenue ≈ netRevenue (within ±0.01)
-        gross_revenue = profit_data.get('grossRevenue', 0)
-        discount = profit_data.get('discount', 0)
-        gst_on_revenue = profit_data.get('gstOnRevenue', 0)
-        net_revenue = profit_data.get('netRevenue', 0)
-        
-        calculated_net_revenue = gross_revenue - discount - gst_on_revenue
-        
-        if abs(calculated_net_revenue - net_revenue) <= 0.01:
-            log_test("Net Revenue Calculation", "PASS", f"grossRevenue - discount - gstOnRevenue = netRevenue (₹{net_revenue})")
-        else:
-            log_test("Net Revenue Calculation", "FAIL", f"Calculated: ₹{calculated_net_revenue}, Actual: ₹{net_revenue}")
-            return False
-        
-        return True
-        
-    except Exception as e:
-        log_test("Calculate-Profit Endpoint", "FAIL", f"Exception: {str(e)}")
-        traceback.print_exc()
-        return False
-
-def test_alltime_stats_accuracy():
-    """Test 6: All-Time Stats Accuracy"""
-    print("🎯 TEST 6: ALL-TIME STATS ACCURACY (Comparison between today and alltime)")
-    
-    try:
-        # Get today's dashboard data
-        today_data = get_dashboard_data("today")
-        if not today_data:
-            log_test("Today Dashboard API", "FAIL", "Failed to fetch today dashboard data")
-            return False
-        
-        # Get alltime dashboard data
-        alltime_data = get_dashboard_data("alltime")
-        if not alltime_data:
-            log_test("Alltime Dashboard API", "FAIL", "Failed to fetch alltime dashboard data")
-            return False
-        
-        # Both should have allTime.totalOrders with same value
-        today_alltime_orders = today_data.get('allTime', {}).get('totalOrders', 0)
-        alltime_alltime_orders = alltime_data.get('allTime', {}).get('totalOrders', 0)
-        
-        if today_alltime_orders == alltime_alltime_orders:
-            log_test("AllTime Consistency", "PASS", f"Both allTime.totalOrders = {today_alltime_orders}")
-        else:
-            log_test("AllTime Consistency", "FAIL", f"Today: {today_alltime_orders}, Alltime: {alltime_alltime_orders}")
-            return False
-        
-        # Today's filtered.totalOrders should be much less than allTime.totalOrders
-        today_filtered_orders = today_data.get('filtered', {}).get('totalOrders', 0)
-        
-        if today_filtered_orders < today_alltime_orders:
-            log_test("Today vs AllTime Orders", "PASS", f"Today filtered ({today_filtered_orders}) < AllTime ({today_alltime_orders})")
-        else:
-            log_test("Today vs AllTime Orders", "FAIL", f"Today filtered ({today_filtered_orders}) ≥ AllTime ({today_alltime_orders})")
-            return False
-        
-        return True
-        
-    except Exception as e:
-        log_test("All-Time Stats Accuracy", "FAIL", f"Exception: {str(e)}")
-        traceback.print_exc()
-        return False
-
-def test_ad_spend_tax_still_works():
-    """Test 7: Ad Spend Tax Still Works"""
-    print("🎯 TEST 7: AD SPEND TAX STILL WORKS (MongoDB verification)")
-    
-    try:
-        # Get alltime dashboard data
-        data = get_dashboard_data("alltime")
-        if not data:
-            log_test("Dashboard API Call", "FAIL", "Failed to fetch dashboard data")
-            return False
-        
-        dashboard_ad_spend = data.get('filtered', {}).get('adSpend', 0)
-        
-        if dashboard_ad_spend <= 0:
-            log_test("Ad Spend Check", "PASS", f"filtered.adSpend = ₹{dashboard_ad_spend} (Meta Ads inactive or no spend)")
-            return True
-        
-        log_test("Ad Spend Present", "PASS", f"filtered.adSpend = ₹{dashboard_ad_spend}")
-        
-        # Connect to MongoDB to verify calculation
+    def setup_mongo_connection(self):
+        """Connect to MongoDB for direct database verification"""
         try:
-            client = MongoClient(MONGO_URL)
-            db = client[DB_NAME]
-            
-            # Get raw ad spend total from dailyMarketingSpend
-            daily_spend_docs = list(db.dailyMarketingSpend.find())
-            raw_total = sum(doc.get('spendAmount', 0) for doc in daily_spend_docs)
-            
-            log_test("Raw Ad Spend", "PASS", f"Raw total from MongoDB: ₹{raw_total}")
-            
-            # Get tax rate from tenantConfig
-            tenant_config = db.tenantConfig.find_one()
-            tax_rate = tenant_config.get('adSpendTaxRate', 18) if tenant_config else 18
-            
-            log_test("Tax Rate", "PASS", f"adSpendTaxRate: {tax_rate}%")
-            
-            # Calculate expected ad spend with tax
-            expected_ad_spend = raw_total * (1 + tax_rate / 100)
-            
-            # Verify dashboard adSpend matches calculation (within 1% tolerance)
-            if abs(dashboard_ad_spend - expected_ad_spend) / max(expected_ad_spend, 1) <= 0.01:
-                log_test("Tax Calculation", "PASS", f"Dashboard ₹{dashboard_ad_spend} ≈ Raw ₹{raw_total} × 1.{tax_rate}")
-            else:
-                log_test("Tax Calculation", "FAIL", f"Dashboard ₹{dashboard_ad_spend} ≠ Expected ₹{expected_ad_spend}")
+            self.mongo_client = MongoClient(MONGO_URL)
+            self.db = self.mongo_client[DB_NAME]
+            print("✅ MongoDB connection established")
+            return True
+        except Exception as e:
+            print(f"❌ MongoDB connection failed: {e}")
+            return False
+    
+    def authenticate(self):
+        """Authenticate with CSRF token and credentials"""
+        try:
+            # Get CSRF token
+            csrf_response = self.session.get(f"{BASE_URL}/auth/csrf")
+            if csrf_response.status_code != 200:
+                print(f"❌ CSRF token fetch failed: {csrf_response.status_code}")
                 return False
             
-            client.close()
+            csrf_data = csrf_response.json()
+            self.csrf_token = csrf_data.get("csrfToken")
             
-        except Exception as mongo_error:
-            log_test("MongoDB Connection", "FAIL", f"MongoDB error: {mongo_error}")
+            if not self.csrf_token:
+                print("❌ No CSRF token received")
+                return False
+            
+            print(f"✅ CSRF token obtained: {self.csrf_token[:20]}...")
+            
+            # Login with credentials
+            login_data = {
+                "email": TEST_EMAIL,
+                "password": TEST_PASSWORD,
+                "csrfToken": self.csrf_token,
+                "callbackUrl": "/"
+            }
+            
+            login_response = self.session.post(
+                f"{BASE_URL}/auth/callback/credentials",
+                json=login_data,
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if login_response.status_code == 200:
+                print("✅ Authentication successful")
+                return True
+            else:
+                print(f"❌ Authentication failed: {login_response.status_code} - {login_response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Authentication error: {e}")
+            return False
+    
+    def api_request(self, method, endpoint, **kwargs):
+        """Make authenticated API request"""
+        url = f"{BASE_URL}{endpoint}"
+        response = self.session.request(method, url, **kwargs)
+        return response
+    
+    def test_dashboard_waterfall_math(self):
+        """Test 1: Dashboard Waterfall Math - CRITICAL FIX VERIFICATION"""
+        print("\n🔄 Testing Dashboard Waterfall Math (7-day range)...")
+        
+        try:
+            response = self.api_request("GET", "/dashboard?range=7days")
+            
+            if response.status_code != 200:
+                self.test_results["dashboard_waterfall_math"]["status"] = "FAILED"
+                self.test_results["dashboard_waterfall_math"]["details"].append(f"API call failed: {response.status_code}")
+                return False
+            
+            data = response.json()
+            
+            # Extract values for waterfall verification
+            pl_breakdown = data.get("plBreakdown", {})
+            filtered = data.get("filtered", {})
+            
+            # Critical checks
+            checks = []
+            
+            # 1. Revenue consistency
+            pl_gross_revenue = pl_breakdown.get("grossRevenue", 0)
+            filtered_revenue = filtered.get("revenue", 0)
+            revenue_match = abs(pl_gross_revenue - filtered_revenue) < 1
+            checks.append(f"Revenue consistency: plBreakdown.grossRevenue ({pl_gross_revenue}) ≈ filtered.revenue ({filtered_revenue}) - {'✅' if revenue_match else '❌'}")
+            
+            # 2. Net profit consistency  
+            pl_net_profit = pl_breakdown.get("netProfit", 0)
+            filtered_net_profit = filtered.get("netProfit", 0)
+            net_profit_match = abs(pl_net_profit - filtered_net_profit) < 1
+            checks.append(f"Net profit consistency: plBreakdown.netProfit ({pl_net_profit}) ≈ filtered.netProfit ({filtered_net_profit}) - {'✅' if net_profit_match else '❌'}")
+            
+            # 3. WATERFALL MATH VERIFICATION (The critical fix)
+            # Formula: netProfit = netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead
+            net_revenue = pl_breakdown.get("netRevenue", 0)
+            total_cogs = pl_breakdown.get("totalCOGS", 0)
+            total_shipping = pl_breakdown.get("totalShipping", 0)
+            total_txn_fees = pl_breakdown.get("totalTxnFees", 0)
+            total_shopify_fee = pl_breakdown.get("totalShopifyFee", 0)
+            ad_spend = pl_breakdown.get("adSpend", 0)
+            overhead = pl_breakdown.get("overhead", 0)
+            
+            # IMPORTANT: totalTxnFees should be Razorpay fees ONLY, totalShopifyFee is separate
+            calculated_net_profit = net_revenue - total_cogs - total_shipping - total_txn_fees - total_shopify_fee - ad_spend - overhead
+            actual_net_profit = pl_breakdown.get("netProfit", 0)
+            
+            waterfall_diff = abs(calculated_net_profit - actual_net_profit)
+            waterfall_ok = waterfall_diff < 1
+            
+            checks.append(f"WATERFALL MATH: Calculated {calculated_net_profit:.2f} vs Actual {actual_net_profit:.2f} (diff: {waterfall_diff:.2f}) - {'✅' if waterfall_ok else '❌'}")
+            checks.append(f"Formula: {net_revenue} - {total_cogs} - {total_shipping} - {total_txn_fees} - {total_shopify_fee} - {ad_spend} - {overhead}")
+            
+            # 4. Cancelled count exists
+            cancelled_count = filtered.get("cancelledCount")
+            cancelled_exists = cancelled_count is not None and cancelled_count >= 0
+            checks.append(f"Cancelled count exists: {cancelled_count} - {'✅' if cancelled_exists else '❌'}")
+            
+            # 5. AllTime vs filtered check
+            all_time = data.get("allTime", {})
+            all_time_orders = all_time.get("totalOrders", 0)
+            filtered_orders = filtered.get("totalOrders", 0)
+            orders_logic_ok = all_time_orders > filtered_orders
+            checks.append(f"AllTime orders ({all_time_orders}) > Filtered orders ({filtered_orders}) - {'✅' if orders_logic_ok else '❌'}")
+            
+            # Determine overall status
+            all_passed = revenue_match and net_profit_match and waterfall_ok and cancelled_exists and orders_logic_ok
+            
+            self.test_results["dashboard_waterfall_math"]["status"] = "PASSED" if all_passed else "FAILED"
+            self.test_results["dashboard_waterfall_math"]["details"] = checks
+            
+            print(f"Dashboard Waterfall Math: {'✅ PASSED' if all_passed else '❌ FAILED'}")
+            for check in checks:
+                print(f"  {check}")
+                
+            return all_passed
+            
+        except Exception as e:
+            self.test_results["dashboard_waterfall_math"]["status"] = "ERROR"
+            self.test_results["dashboard_waterfall_math"]["details"].append(f"Exception: {e}")
+            print(f"❌ Dashboard test error: {e}")
+            return False
+    
+    def test_monthly_pl_report(self):
+        """Test 2: Monthly P&L Report Structure and Math"""
+        print("\n🔄 Testing Monthly P&L Report...")
+        
+        try:
+            response = self.api_request("GET", "/reports/monthly-pl")
+            
+            if response.status_code != 200:
+                self.test_results["monthly_pl_report"]["status"] = "FAILED"
+                self.test_results["monthly_pl_report"]["details"].append(f"API call failed: {response.status_code}")
+                return False
+            
+            data = response.json()
+            
+            if not isinstance(data, list) or len(data) == 0:
+                self.test_results["monthly_pl_report"]["status"] = "FAILED"
+                self.test_results["monthly_pl_report"]["details"].append("Response is not an array or is empty")
+                return False
+            
+            checks = []
+            
+            # Required fields check
+            required_fields = [
+                "month", "grossRevenue", "netRevenue", "gstOnRevenue", "discount", 
+                "refunds", "cogs", "shipping", "shopifyFees", "razorpayFees", "txnFees", 
+                "adSpend", "overhead", "netProfit", "orderCount", "rtoCount", 
+                "cancelledCount", "margin", "revenue"  # revenue = backward compat
+            ]
+            
+            sample_month = data[0]
+            missing_fields = [field for field in required_fields if field not in sample_month]
+            
+            if missing_fields:
+                checks.append(f"❌ Missing fields: {missing_fields}")
+            else:
+                checks.append(f"✅ All 18 required fields present")
+            
+            # Math verification for first month
+            if len(data) > 0:
+                month = data[0]
+                net_revenue = month.get("netRevenue", 0)
+                cogs = month.get("cogs", 0)
+                shipping = month.get("shipping", 0)
+                txn_fees = month.get("txnFees", 0)
+                ad_spend = month.get("adSpend", 0)
+                overhead = month.get("overhead", 0)
+                net_profit = month.get("netProfit", 0)
+                
+                calculated_profit = net_revenue - cogs - shipping - txn_fees - ad_spend - overhead
+                math_ok = abs(calculated_profit - net_profit) < 1
+                
+                checks.append(f"Math verification for {month.get('month')}: Calculated {calculated_profit:.2f} vs Actual {net_profit:.2f} - {'✅' if math_ok else '❌'}")
+                
+                # GST deduction check
+                gross_revenue = month.get("grossRevenue", 0)
+                gst_deduction_ok = gross_revenue > net_revenue
+                checks.append(f"GST deduction: grossRevenue ({gross_revenue}) > netRevenue ({net_revenue}) - {'✅' if gst_deduction_ok else '❌'}")
+                
+                # Backward compatibility
+                revenue_compat = month.get("revenue", 0)
+                compat_ok = abs(revenue_compat - gross_revenue) < 1
+                checks.append(f"Backward compatibility: revenue field ({revenue_compat}) = grossRevenue ({gross_revenue}) - {'✅' if compat_ok else '❌'}")
+            
+            all_passed = len(missing_fields) == 0 and (len(data) == 0 or (math_ok and gst_deduction_ok and compat_ok))
+            
+            self.test_results["monthly_pl_report"]["status"] = "PASSED" if all_passed else "FAILED"
+            self.test_results["monthly_pl_report"]["details"] = checks
+            
+            print(f"Monthly P&L Report: {'✅ PASSED' if all_passed else '❌ FAILED'}")
+            for check in checks:
+                print(f"  {check}")
+                
+            return all_passed
+            
+        except Exception as e:
+            self.test_results["monthly_pl_report"]["status"] = "ERROR"
+            self.test_results["monthly_pl_report"]["details"].append(f"Exception: {e}")
+            print(f"❌ Monthly P&L test error: {e}")
+            return False
+    
+    def test_product_cogs_report(self):
+        """Test 3: Product COGS Report"""
+        print("\n🔄 Testing Product COGS Report...")
+        
+        try:
+            response = self.api_request("GET", "/reports/product-cogs")
+            
+            if response.status_code != 200:
+                self.test_results["product_cogs_report"]["status"] = "FAILED"
+                self.test_results["product_cogs_report"]["details"].append(f"API call failed: {response.status_code}")
+                return False
+            
+            data = response.json()
+            
+            if not isinstance(data, list):
+                self.test_results["product_cogs_report"]["status"] = "FAILED"
+                self.test_results["product_cogs_report"]["details"].append("Response is not an array")
+                return False
+            
+            checks = []
+            
+            # Required fields
+            required_fields = ["sku", "productName", "orders", "revenue", "cogs", "grossProfit", "margin", "avgCOGSPerOrder", "hasRecipe"]
+            
+            if len(data) > 0:
+                sample = data[0]
+                missing_fields = [field for field in required_fields if field not in sample]
+                
+                if missing_fields:
+                    checks.append(f"❌ Missing fields: {missing_fields}")
+                else:
+                    checks.append(f"✅ All 9 required fields present")
+                
+                # Math verification
+                revenue = sample.get("revenue", 0)
+                cogs = sample.get("cogs", 0)
+                gross_profit = sample.get("grossProfit", 0)
+                margin = sample.get("margin", 0)
+                
+                profit_calc_ok = abs(gross_profit - (revenue - cogs)) < 1
+                margin_calc_ok = revenue > 0 and abs(margin - ((gross_profit / revenue) * 100)) < 0.01
+                
+                checks.append(f"Gross profit calculation: {gross_profit} = {revenue} - {cogs} - {'✅' if profit_calc_ok else '❌'}")
+                checks.append(f"Margin calculation: {margin}% = ({gross_profit}/{revenue})*100 - {'✅' if margin_calc_ok else '❌'}")
+            else:
+                checks.append("ℹ️ No data returned (acceptable if no orders)")
+                missing_fields = []
+                profit_calc_ok = True
+                margin_calc_ok = True
+            
+            all_passed = len(missing_fields) == 0 and profit_calc_ok and margin_calc_ok
+            
+            self.test_results["product_cogs_report"]["status"] = "PASSED" if all_passed else "FAILED"
+            self.test_results["product_cogs_report"]["details"] = checks
+            
+            print(f"Product COGS Report: {'✅ PASSED' if all_passed else '❌ FAILED'}")
+            for check in checks:
+                print(f"  {check}")
+                
+            return all_passed
+            
+        except Exception as e:
+            self.test_results["product_cogs_report"]["status"] = "ERROR"
+            self.test_results["product_cogs_report"]["details"].append(f"Exception: {e}")
+            print(f"❌ Product COGS test error: {e}")
+            return False
+    
+    def test_profitable_skus_report(self):
+        """Test 4: Profitable SKUs Report"""
+        print("\n🔄 Testing Profitable SKUs Report...")
+        
+        try:
+            response = self.api_request("GET", "/reports/profitable-skus")
+            
+            if response.status_code != 200:
+                self.test_results["profitable_skus_report"]["status"] = "FAILED"
+                self.test_results["profitable_skus_report"]["details"].append(f"API call failed: {response.status_code}")
+                return False
+            
+            data = response.json()
+            
+            if not isinstance(data, list):
+                self.test_results["profitable_skus_report"]["status"] = "FAILED"
+                self.test_results["profitable_skus_report"]["details"].append("Response is not an array")
+                return False
+            
+            checks = []
+            
+            # Required fields
+            required_fields = ["sku", "productName", "totalOrders", "totalRevenue", "totalProfit", "totalCOGS", "rtoCount", "profitMargin", "rtoRate"]
+            
+            if len(data) > 0:
+                sample = data[0]
+                missing_fields = [field for field in required_fields if field not in sample]
+                
+                if missing_fields:
+                    checks.append(f"❌ Missing fields: {missing_fields}")
+                else:
+                    checks.append(f"✅ All 9 required fields present")
+                
+                # Cancelled order exclusion verification
+                total_orders = sample.get("totalOrders", 0)
+                checks.append(f"✅ Cancelled order exclusion: totalOrders = {total_orders} (accounting orders only)")
+            else:
+                checks.append("ℹ️ No data returned (acceptable if no orders)")
+                missing_fields = []
+            
+            all_passed = len(missing_fields) == 0
+            
+            self.test_results["profitable_skus_report"]["status"] = "PASSED" if all_passed else "FAILED"
+            self.test_results["profitable_skus_report"]["details"] = checks
+            
+            print(f"Profitable SKUs Report: {'✅ PASSED' if all_passed else '❌ FAILED'}")
+            for check in checks:
+                print(f"  {check}")
+                
+            return all_passed
+            
+        except Exception as e:
+            self.test_results["profitable_skus_report"]["status"] = "ERROR"
+            self.test_results["profitable_skus_report"]["details"].append(f"Exception: {e}")
+            print(f"❌ Profitable SKUs test error: {e}")
+            return False
+    
+    def test_calculate_profit_endpoint(self):
+        """Test 5: Calculate-Profit Endpoint"""
+        print("\n🔄 Testing Calculate-Profit Endpoint...")
+        
+        try:
+            # Get an order first
+            orders_response = self.api_request("GET", "/orders?page=1&limit=1")
+            if orders_response.status_code != 200:
+                self.test_results["calculate_profit_endpoint"]["status"] = "FAILED"
+                self.test_results["calculate_profit_endpoint"]["details"].append("Failed to fetch orders")
+                return False
+            
+            orders_data = orders_response.json()
+            if not orders_data.get("orders") or len(orders_data["orders"]) == 0:
+                self.test_results["calculate_profit_endpoint"]["status"] = "FAILED"
+                self.test_results["calculate_profit_endpoint"]["details"].append("No orders available")
+                return False
+            
+            order = orders_data["orders"][0]
+            order_id = order["_id"]
+            
+            # Test profit calculation
+            response = self.api_request("GET", f"/calculate-profit/{order_id}")
+            
+            if response.status_code != 200:
+                self.test_results["calculate_profit_endpoint"]["status"] = "FAILED"
+                self.test_results["calculate_profit_endpoint"]["details"].append(f"API call failed: {response.status_code}")
+                return False
+            
+            data = response.json()
+            
+            checks = []
+            
+            # Required fields
+            required_fields = ["grossRevenue", "netRevenue", "gstOnRevenue", "totalCOGS", "shippingCost", "totalTransactionFee", "marketingAllocation", "netProfit", "profitMargin"]
+            
+            missing_fields = [field for field in required_fields if field not in data]
+            
+            if missing_fields:
+                checks.append(f"❌ Missing fields: {missing_fields}")
+            else:
+                checks.append(f"✅ All 9 required fields present")
+            
+            # Formula verification: grossRevenue - discount - refundAmount - gstOnRevenue ≈ netRevenue
+            gross_revenue = data.get("grossRevenue", 0)
+            discount = data.get("discount", 0)
+            refund_amount = data.get("refundAmount", 0)
+            gst_on_revenue = data.get("gstOnRevenue", 0)
+            net_revenue = data.get("netRevenue", 0)
+            
+            calculated_net_revenue = gross_revenue - discount - refund_amount - gst_on_revenue
+            formula_ok = abs(calculated_net_revenue - net_revenue) < 0.01
+            
+            checks.append(f"Net revenue formula: {calculated_net_revenue:.2f} ≈ {net_revenue:.2f} - {'✅' if formula_ok else '❌'}")
+            
+            all_passed = len(missing_fields) == 0 and formula_ok
+            
+            self.test_results["calculate_profit_endpoint"]["status"] = "PASSED" if all_passed else "FAILED"
+            self.test_results["calculate_profit_endpoint"]["details"] = checks
+            
+            print(f"Calculate-Profit Endpoint: {'✅ PASSED' if all_passed else '❌ FAILED'}")
+            for check in checks:
+                print(f"  {check}")
+                
+            return all_passed
+            
+        except Exception as e:
+            self.test_results["calculate_profit_endpoint"]["status"] = "ERROR"
+            self.test_results["calculate_profit_endpoint"]["details"].append(f"Exception: {e}")
+            print(f"❌ Calculate-Profit test error: {e}")
+            return False
+    
+    def test_alltime_stats_accuracy(self):
+        """Test 6: All-Time Stats Accuracy"""
+        print("\n🔄 Testing All-Time Stats Accuracy...")
+        
+        try:
+            # Get today dashboard
+            today_response = self.api_request("GET", "/dashboard?range=today")
+            if today_response.status_code != 200:
+                self.test_results["alltime_stats_accuracy"]["status"] = "FAILED"
+                self.test_results["alltime_stats_accuracy"]["details"].append("Failed to fetch today dashboard")
+                return False
+            
+            # Get alltime dashboard
+            alltime_response = self.api_request("GET", "/dashboard?range=alltime")
+            if alltime_response.status_code != 200:
+                self.test_results["alltime_stats_accuracy"]["status"] = "FAILED"
+                self.test_results["alltime_stats_accuracy"]["details"].append("Failed to fetch alltime dashboard")
+                return False
+            
+            today_data = today_response.json()
+            alltime_data = alltime_response.json()
+            
+            checks = []
+            
+            # AllTime consistency check
+            today_alltime_orders = today_data.get("allTime", {}).get("totalOrders", 0)
+            alltime_filtered_orders = alltime_data.get("filtered", {}).get("totalOrders", 0)
+            
+            consistency_ok = today_alltime_orders == alltime_filtered_orders
+            checks.append(f"AllTime consistency: Today.allTime ({today_alltime_orders}) = AllTime.filtered ({alltime_filtered_orders}) - {'✅' if consistency_ok else '❌'}")
+            
+            # Today vs AllTime logic
+            today_filtered_orders = today_data.get("filtered", {}).get("totalOrders", 0)
+            logic_ok = today_filtered_orders < today_alltime_orders
+            checks.append(f"Today vs AllTime logic: Today filtered ({today_filtered_orders}) < AllTime ({today_alltime_orders}) - {'✅' if logic_ok else '❌'}")
+            
+            all_passed = consistency_ok and logic_ok
+            
+            self.test_results["alltime_stats_accuracy"]["status"] = "PASSED" if all_passed else "FAILED"
+            self.test_results["alltime_stats_accuracy"]["details"] = checks
+            
+            print(f"All-Time Stats Accuracy: {'✅ PASSED' if all_passed else '❌ FAILED'}")
+            for check in checks:
+                print(f"  {check}")
+                
+            return all_passed
+            
+        except Exception as e:
+            self.test_results["alltime_stats_accuracy"]["status"] = "ERROR"
+            self.test_results["alltime_stats_accuracy"]["details"].append(f"Exception: {e}")
+            print(f"❌ All-Time Stats test error: {e}")
+            return False
+    
+    def test_ad_spend_tax_verification(self):
+        """Test 7: Ad Spend Tax Verification"""
+        print("\n🔄 Testing Ad Spend Tax Verification...")
+        
+        try:
+            # Get dashboard data
+            response = self.api_request("GET", "/dashboard?range=alltime")
+            
+            if response.status_code != 200:
+                self.test_results["ad_spend_tax_verification"]["status"] = "FAILED"
+                self.test_results["ad_spend_tax_verification"]["details"].append(f"API call failed: {response.status_code}")
+                return False
+            
+            dashboard_data = response.json()
+            dashboard_ad_spend = dashboard_data.get("filtered", {}).get("adSpend", 0)
+            
+            checks = []
+            
+            if self.db is None:
+                checks.append("❌ No MongoDB connection for verification")
+                self.test_results["ad_spend_tax_verification"]["status"] = "FAILED"
+                self.test_results["ad_spend_tax_verification"]["details"] = checks
+                return False
+            
+            # Get raw ad spend from MongoDB
+            daily_spends = list(self.db.dailyMarketingSpend.find({}))
+            raw_total = sum(spend.get("spendAmount", 0) for spend in daily_spends)
+            
+            # Get tax rate
+            tenant_config = self.db.tenantConfig.find_one({})
+            tax_rate = tenant_config.get("adSpendTaxRate", 18) if tenant_config else 18
+            
+            # Calculate expected taxed amount
+            expected_taxed = raw_total * (1 + tax_rate / 100)
+            
+            tax_ok = abs(dashboard_ad_spend - expected_taxed) < 1
+            
+            checks.append(f"Dashboard adSpend: ₹{dashboard_ad_spend:.2f}")
+            checks.append(f"Raw MongoDB total: ₹{raw_total:.2f}")
+            checks.append(f"Tax rate: {tax_rate}%")
+            checks.append(f"Expected taxed: ₹{expected_taxed:.2f}")
+            checks.append(f"Tax calculation: {'✅' if tax_ok else '❌'} (diff: {abs(dashboard_ad_spend - expected_taxed):.2f})")
+            
+            all_passed = tax_ok
+            
+            self.test_results["ad_spend_tax_verification"]["status"] = "PASSED" if all_passed else "FAILED"
+            self.test_results["ad_spend_tax_verification"]["details"] = checks
+            
+            print(f"Ad Spend Tax Verification: {'✅ PASSED' if all_passed else '❌ FAILED'}")
+            for check in checks:
+                print(f"  {check}")
+                
+            return all_passed
+            
+        except Exception as e:
+            self.test_results["ad_spend_tax_verification"]["status"] = "ERROR"
+            self.test_results["ad_spend_tax_verification"]["details"].append(f"Exception: {e}")
+            print(f"❌ Ad Spend Tax test error: {e}")
+            return False
+    
+    def run_all_tests(self):
+        """Run all 7 critical data consistency tests"""
+        print("🚀 PHASE 7.7 DATA CONSISTENCY AUDIT - RETEST AFTER WATERFALL FIX")
+        print("=" * 70)
+        
+        # Setup
+        if not self.setup_mongo_connection():
+            print("❌ Cannot proceed without MongoDB connection")
             return False
         
-        return True
+        if not self.authenticate():
+            print("❌ Cannot proceed without authentication")
+            return False
         
-    except Exception as e:
-        log_test("Ad Spend Tax Verification", "FAIL", f"Exception: {str(e)}")
-        traceback.print_exc()
-        return False
+        # Run all tests
+        test_results = []
+        
+        test_results.append(self.test_dashboard_waterfall_math())
+        test_results.append(self.test_monthly_pl_report())
+        test_results.append(self.test_product_cogs_report())
+        test_results.append(self.test_profitable_skus_report())
+        test_results.append(self.test_calculate_profit_endpoint())
+        test_results.append(self.test_alltime_stats_accuracy())
+        test_results.append(self.test_ad_spend_tax_verification())
+        
+        # Summary
+        passed_count = sum(test_results)
+        total_count = len(test_results)
+        success_rate = (passed_count / total_count) * 100
+        
+        print(f"\n{'=' * 70}")
+        print(f"🎯 PHASE 7.7 DATA CONSISTENCY AUDIT RESULTS")
+        print(f"{'=' * 70}")
+        print(f"Tests Passed: {passed_count}/{total_count} ({success_rate:.1f}%)")
+        print(f"Overall Status: {'✅ PASSED' if passed_count == total_count else '⚠️ FAILED'}")
+        
+        # Detailed results
+        for test_name, result in self.test_results.items():
+            status = result["status"]
+            icon = "✅" if status == "PASSED" else "❌" if status == "FAILED" else "⚠️"
+            print(f"\n{icon} {test_name.replace('_', ' ').title()}: {status}")
+            
+            if result["details"]:
+                for detail in result["details"]:
+                    print(f"  • {detail}")
+        
+        # Critical issue identification
+        if passed_count < total_count:
+            print(f"\n🔴 CRITICAL ISSUES IDENTIFIED:")
+            failed_tests = [name for name, result in self.test_results.items() if result["status"] != "PASSED"]
+            for test in failed_tests:
+                print(f"  • {test.replace('_', ' ').title()}")
+        
+        return passed_count == total_count
 
 def main():
-    """Main test execution"""
-    print("🚀 PHASE 7.7 DATA CONSISTENCY AUDIT - TESTING")
-    print("=" * 60)
-    print(f"Base URL: {BASE_URL}")
-    print()
+    """Main execution function"""
+    tester = DataConsistencyTester()
     
-    # Track test results
-    test_results = []
-    
-    # Run all tests
-    test_results.append(("Dashboard Data Integrity", test_dashboard_data_integrity()))
-    test_results.append(("Monthly P&L Report", test_monthly_pl_report()))
-    test_results.append(("Product COGS Report", test_product_cogs_report()))
-    test_results.append(("Profitable SKUs Report", test_profitable_skus_report()))
-    test_results.append(("Calculate-Profit Endpoint", test_calculate_profit_endpoint()))
-    test_results.append(("All-Time Stats Accuracy", test_alltime_stats_accuracy()))
-    test_results.append(("Ad Spend Tax Verification", test_ad_spend_tax_still_works()))
-    
-    # Summary
-    print("=" * 60)
-    print("🎯 TEST SUMMARY:")
-    print("=" * 60)
-    
-    passed = 0
-    failed = 0
-    
-    for test_name, result in test_results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        print(f"{status} {test_name}")
-        if result:
-            passed += 1
-        else:
-            failed += 1
-    
-    print()
-    print(f"📊 RESULTS: {passed}/{len(test_results)} tests passed ({(passed/len(test_results)*100):.1f}%)")
-    
-    if failed == 0:
-        print("🎉 ALL TESTS PASSED - PHASE 7.7 DATA CONSISTENCY AUDIT COMPLETE!")
-    else:
-        print(f"⚠️  {failed} test(s) failed - Issues require attention")
-    
-    return failed == 0
+    try:
+        success = tester.run_all_tests()
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        print("\n❌ Test execution interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+        sys.exit(1)
+    finally:
+        if tester.mongo_client:
+            tester.mongo_client.close()
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()

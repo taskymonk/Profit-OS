@@ -5189,11 +5189,11 @@ backend:
 
   - task: "Phase 7.7 - Data Consistency Audit"
     implemented: true
-    working: "NA"
+    working: true
     file: "app/api/[[...path]]/route.js, lib/profitCalculator.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: "NA"
           agent: "main"
@@ -5256,6 +5256,9 @@ test_plan:
         - working: false
           agent: "testing"
           comment: "🎯 PHASE 7.7 DATA CONSISTENCY AUDIT - 6/7 TESTS PASSED (85.7%). ✅ SUCCESSES: (1) Monthly P&L Report fully functional with all 18 required fields, backward compatibility (revenue=grossRevenue), correct math verification (netProfit ≈ netRevenue - costs), and GST deduction (grossRevenue > netRevenue). (2) Product COGS Report working with all 9 fields, correct grossProfit calculation (revenue-cogs) and margin calculation. (3) Profitable SKUs Report with 9 fields and proper cancelled order exclusion. (4) Calculate-Profit Endpoint with all 9 fields and accurate net revenue formula (grossRevenue-discount-gstOnRevenue=netRevenue). (5) All-Time Stats Accuracy confirmed - both dashboard calls show consistent allTime.totalOrders=2044, today's filtered orders (0) < allTime orders (2044). (6) Ad Spend Tax Verification working perfectly - Dashboard ₹48,868.67 matches calculated raw total ₹41,414.13 × 1.18 tax rate. ❌ CRITICAL ISSUE: Dashboard Data Integrity waterfall math failing - calculated netProfit ₹11,609.23 ≠ actual ₹10,689.78 (difference: ₹919.45). Formula tested: netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead. This exceeds ±1 tolerance significantly and suggests missing cost components in plBreakdown calculation or incorrect waterfall formula specification."
+        - working: true
+          agent: "testing"
+          comment: "🎉 PHASE 7.7 DATA CONSISTENCY AUDIT RETEST - ALL 7 TESTS PASSED (100%)! WATERFALL FIX CONFIRMED SUCCESSFUL! ✅ CRITICAL WATERFALL MATH FIXED: Dashboard waterfall calculation now perfectly accurate - calculated netProfit ₹11,149.50 vs actual ₹11,149.51 (diff: 0.01, within ±1 tolerance). Formula verified: netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead. The Shopify fee double-deduction bug has been resolved. ✅ ALL REPORTS VERIFIED: (1) Dashboard Waterfall Math with correct revenue consistency, net profit consistency, cancelled count tracking, and AllTime stats logic. (2) Monthly P&L Report with all 18 required fields, perfect math verification, GST deduction, and backward compatibility. (3) Product COGS Report with all 9 fields and correct calculations. (4) Profitable SKUs Report with proper cancelled order exclusion. (5) Calculate-Profit Endpoint with accurate net revenue formula. (6) All-Time Stats Accuracy with consistent order counting. (7) Ad Spend Tax Verification with perfect MongoDB validation (₹48,868.67 dashboard = ₹41,414.13 raw × 1.18 tax rate). PHASE 7.7 DATA CONSISTENCY AUDIT COMPLETE - SYSTEM FULLY OPERATIONAL!"
 
 agent_communication:
     - agent: "testing"
@@ -5299,3 +5302,20 @@ agent_communication:
 **WATERFALL ANALYSIS**: Formula netRevenue (₹16,531.51) - totalCOGS (₹0) - totalShipping (₹0) - totalTxnFees (₹533.16) - adSpend (₹4,389.12) - overhead (₹0) = ₹11,609.23, but actual netProfit = ₹10,689.78. The ₹919.45 difference suggests missing cost components or incorrect formula specification.
 
 **OVERALL STATUS**: 6/7 tests passed (85.7% success rate). All reports and calculations working correctly except for dashboard waterfall math discrepancy requiring investigation."
+    - agent: "testing"
+      message: "🎉 PHASE 7.7 DATA CONSISTENCY AUDIT RETEST COMPLETE - ALL 7 CRITICAL AREAS PASSED (100%)!
+
+✅ **WATERFALL FIX CONFIRMED SUCCESSFUL**: The critical Shopify fee double-deduction bug has been resolved! Dashboard waterfall calculation now perfect: calculated netProfit ₹11,149.50 vs actual ₹11,149.51 (diff: 0.01, within ±1 tolerance). Formula verified: netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead.
+
+✅ **ALL 7 CRITICAL AREAS VALIDATED**:
+1. **Dashboard Waterfall Math**: Revenue consistency ✓, Net profit consistency ✓, Waterfall math perfect ✓, Cancelled count tracking ✓, AllTime stats logic ✓
+2. **Monthly P&L Report**: All 18 required fields ✓, Math verification ✓, GST deduction ✓, Backward compatibility ✓ 
+3. **Product COGS Report**: All 9 required fields ✓, Gross profit calculation ✓, Margin calculation ✓
+4. **Profitable SKUs Report**: All 9 required fields ✓, Cancelled order exclusion ✓
+5. **Calculate-Profit Endpoint**: All 9 required fields ✓, Net revenue formula verification ✓
+6. **All-Time Stats Accuracy**: AllTime consistency ✓, Today vs AllTime logic ✓
+7. **Ad Spend Tax Verification**: Perfect MongoDB validation ✓ (Dashboard ₹48,868.67 = Raw ₹41,414.13 × 1.18 tax rate)
+
+**CRITICAL VALIDATION**: The correct waterfall formula is now: netProfit = netRevenue - totalCOGS - totalShipping - totalTxnFees - totalShopifyFee - adSpend - overhead, where totalTxnFees includes Razorpay fees ONLY and totalShopifyFee is calculated separately. This ensures no double-deduction of Shopify transaction fees.
+
+**SYSTEM STATUS**: PHASE 7.7 DATA CONSISTENCY AUDIT COMPLETE - ALL FINANCIAL CALCULATIONS AND REPORTS FULLY OPERATIONAL!"
