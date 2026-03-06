@@ -9,7 +9,7 @@ import {
   Settings, Plug, ChevronLeft, ChevronRight, Menu, X,
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
   Boxes, Moon, Sun, BarChart3, LogOut, UserCircle, Shield,
-  ChevronDown, ClipboardList, MessageSquare, Banknote
+  ChevronDown, ClipboardList, MessageSquare, Banknote, PackageX
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,11 +30,13 @@ import ReportsView from '@/components/ReportsView';
 import KDSView from '@/components/KDSView';
 import WhatsAppView from '@/components/WhatsAppView';
 import FinanceView from '@/components/FinanceView';
+import RTOView from '@/components/RTOView';
 
 const ALL_NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, minRole: 'admin' },
   { id: 'kds', label: 'Kitchen Display', icon: Boxes, minRole: 'employee' },
   { id: 'orders', label: 'Orders', icon: ShoppingCart, minRole: 'admin' },
+  { id: 'rto', label: 'Returns & RTO', icon: PackageX, minRole: 'admin' },
   { id: 'products', label: 'SKU Recipes', icon: Package, minRole: 'admin' },
   { id: 'inventory', label: 'Inventory', icon: Boxes, minRole: 'admin' },
   { id: 'employees', label: 'KDS Overview', icon: ClipboardList, minRole: 'admin' },
@@ -228,6 +230,7 @@ export default function App() {
       case 'dashboard': return <DashboardView />;
       case 'kds': return <KDSView />;
       case 'orders': return <OrdersView />;
+      case 'rto': return <RTOView />;
       case 'products': return <SkuRecipesView />;
       case 'inventory': return <InventoryView />;
       case 'employees': return <EmployeesView />;

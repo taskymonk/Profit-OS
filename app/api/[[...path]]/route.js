@@ -2302,6 +2302,114 @@ export async function GET(request) {
         return json(images);
       }
 
+      case 'rto': {
+        const db = await getDb();
+        switch (subResource) {
+          case 'parcels': {
+            // GET /api/rto/parcels — List all RTO parcels
+            const statusFilter = params.status;
+            const query = {};
+            if (statusFilter && statusFilter !== 'all') query.status = statusFilter;
+            const parcels = await db.collection('rtoParcels').find(query).sort({ createdAt: -1 }).toArray();
+            
+            // Enrich with order info
+            const enriched = [];
+            for (const p of parcels) {
+              let order = null;
+              if (p.orderId) {
+                order = await db.collection('orders').findOne({ _id: p.orderId });
+              }
+              enriched.push({ ...p, order: order ? { orderId: order.orderId, productName: order.productName, customerName: order.customerName, customerPhone: order.customerPhone, customerEmail: order.customerEmail, salePrice: order.salePrice, shippingCost: order.shippingCost, status: order.status, quantity: order.quantity } : null });
+            }
+            return json(enriched);
+          }
+
+          case 'stats': {
+            // GET /api/rto/stats — RTO dashboard metrics
+            const allRtoParcels = await db.collection('rtoParcels').find({}).toArray();
+            const allOrders = await db.collection('orders').find({}).toArray();
+            
+            const rtoOrders = allOrders.filter(o => o.status === 'RTO');
+            const totalOrders = allOrders.length;
+            const rtoCount = rtoOrders.length;
+            const rtoRate = totalOrders > 0 ? Math.round((rtoCount / totalOrders) * 10000) / 100 : 0;
+            
+            // Pipeline counts
+            const pendingAction = allRtoParcels.filter(p => p.status === 'pending_action').length;
+            const reshipping = allRtoParcels.filter(p => p.status === 'reshipping').length;
+            const refunded = allRtoParcels.filter(p => p.status === 'refunded').length;
+            const cancelled = allRtoParcels.filter(p => p.status === 'cancelled').length;
+            const reshipDelivered = allRtoParcels.filter(p => p.status === 'reship_delivered').length;
+            
+            // Financial impact
+            const totalDoubleShipping = rtoOrders.reduce((sum, o) => sum + ((o.shippingCost || 0) * 2), 0);
+            const recoveredViaReship = allRtoParcels.filter(p => p.status === 'reship_delivered' || (p.status === 'reshipping' && p.actionDetails?.paymentStatus === 'paid')).reduce((sum, p) => sum + (p.actionDetails?.reshippingCharges || 0), 0);
+            const totalRefunded = allRtoParcels.filter(p => p.status === 'refunded').reduce((sum, p) => sum + (p.actionDetails?.refundAmount || 0), 0);
+            
+            // Monthly RTO trend (last 6 months)
+            const sixMonthsAgo = new Date();
+            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+            const monthlyTrend = {};
+            allOrders.forEach(o => {
+              const d = new Date(o.orderDate);
+              if (d < sixMonthsAgo) return;
+              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+              if (!monthlyTrend[key]) monthlyTrend[key] = { month: key, total: 0, rto: 0 };
+              monthlyTrend[key].total++;
+              if (o.status === 'RTO') monthlyTrend[key].rto++;
+            });
+            
+            return json({
+              rtoCount, rtoRate, totalOrders,
+              pipeline: { pendingAction, reshipping, refunded, cancelled, reshipDelivered, total: allRtoParcels.length },
+              financial: { totalDoubleShipping: Math.round(totalDoubleShipping * 100) / 100, recoveredViaReship: Math.round(recoveredViaReship * 100) / 100, totalRefunded: Math.round(totalRefunded * 100) / 100 },
+              monthlyTrend: Object.values(monthlyTrend).sort((a, b) => a.month.localeCompare(b.month)),
+              unprocessedRtoOrders: rtoOrders.filter(o => {
+                const hasParcel = allRtoParcels.some(p => p.orderId === o._id);
+                return !hasParcel;
+              }).length,
+            });
+          }
+
+          case 'match-awb': {
+            // GET /api/rto/match-awb?awb=XXX — Find order by AWB/tracking number
+            const awb = params.awb;
+            if (!awb) return json({ error: 'AWB number required' }, 400);
+            
+            const order = await db.collection('orders').findOne({ trackingNumber: awb });
+            if (order) {
+              return json({ matched: true, matchMethod: 'tracking_number', order: { _id: order._id, orderId: order.orderId, productName: order.productName, customerName: order.customerName, customerPhone: order.customerPhone, customerEmail: order.customerEmail, salePrice: order.salePrice, status: order.status, trackingNumber: order.trackingNumber, shippingCost: order.shippingCost } });
+            }
+            
+            const existing = await db.collection('rtoParcels').findOne({ awbNumber: awb });
+            if (existing) {
+              return json({ matched: true, matchMethod: 'rto_parcel_exists', parcel: existing });
+            }
+            
+            return json({ matched: false, awb });
+          }
+
+          case 'search-orders': {
+            // GET /api/rto/search-orders?q=XXX — Search orders for manual matching
+            const q = params.q;
+            if (!q) return json([]);
+            const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            const orders = await db.collection('orders').find({
+              $or: [
+                { orderId: regex },
+                { customerName: regex },
+                { trackingNumber: regex },
+                { shopifyOrderId: regex },
+              ]
+            }).limit(10).toArray();
+            return json(orders.map(o => ({ _id: o._id, orderId: o.orderId, productName: o.productName, customerName: o.customerName, customerPhone: o.customerPhone, salePrice: o.salePrice, status: o.status, trackingNumber: o.trackingNumber, shippingCost: o.shippingCost, orderDate: o.orderDate })));
+          }
+
+          default:
+            return json({ error: 'Unknown RTO endpoint' }, 404);
+        }
+      }
+
       case 'whatsapp': {
         const db = await getDb();
         switch (subResource) {
@@ -3400,6 +3508,204 @@ export async function POST(request) {
         };
         await db.collection('parcelImages').insertOne(parcelImage);
         return json({ _id: parcelImage._id, message: 'Parcel image saved' });
+      }
+
+      case 'rto': {
+        const db = await getDb();
+        switch (subResource) {
+          case 'register': {
+            // POST /api/rto/register — Register a return parcel
+            const { awbNumber, carrier, orderId, parcelImageData, ocrText, matchMethod } = body;
+            if (!awbNumber) return json({ error: 'AWB number required' }, 400);
+
+            // Check if already registered
+            const existing = await db.collection('rtoParcels').findOne({ awbNumber });
+            if (existing) return json({ error: 'This AWB is already registered as an RTO parcel', existingParcel: existing }, 409);
+
+            // Validate order exists if provided
+            let orderData = null;
+            if (orderId) {
+              orderData = await db.collection('orders').findOne({ _id: orderId });
+              if (!orderData) return json({ error: 'Order not found' }, 404);
+
+              // Update order status to RTO
+              await db.collection('orders').updateOne({ _id: orderId }, { $set: { status: 'RTO', updatedAt: new Date().toISOString() } });
+            }
+
+            const parcel = {
+              _id: uuidv4(),
+              orderId: orderId || null,
+              shopifyOrderId: orderData?.shopifyOrderId || null,
+              awbNumber,
+              carrier: carrier || 'indiapost',
+              parcelImageData: parcelImageData || null,
+              ocrText: ocrText || '',
+              matchMethod: matchMethod || 'manual',
+              status: 'pending_action',
+              action: null,
+              actionDetails: {},
+              actionBy: null,
+              actionAt: null,
+              customerNotified: false,
+              whatsappMessages: [],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            await db.collection('rtoParcels').insertOne(parcel);
+            return json({ ...parcel, order: orderData ? { orderId: orderData.orderId, productName: orderData.productName, customerName: orderData.customerName } : null });
+          }
+
+          case 'action': {
+            // POST /api/rto/action — Take action on an RTO parcel
+            const { parcelId, action, details, actionBy } = body;
+            if (!parcelId || !action) return json({ error: 'parcelId and action required' }, 400);
+            if (!['reship', 'refund', 'cancel'].includes(action)) return json({ error: 'Invalid action. Must be: reship, refund, cancel' }, 400);
+
+            const parcel = await db.collection('rtoParcels').findOne({ _id: parcelId });
+            if (!parcel) return json({ error: 'RTO parcel not found' }, 404);
+
+            const now = new Date().toISOString();
+            let newStatus, actionDetails = {};
+
+            switch (action) {
+              case 'reship': {
+                newStatus = 'reshipping';
+                actionDetails = {
+                  reshippingCharges: details?.reshippingCharges || 0,
+                  paymentLink: details?.paymentLink || '',
+                  paymentStatus: details?.paymentStatus || 'pending',
+                  reshippingTrackingNumber: details?.reshippingTrackingNumber || null,
+                  note: details?.note || '',
+                };
+                break;
+              }
+              case 'refund': {
+                newStatus = 'refunded';
+                actionDetails = {
+                  refundAmount: details?.refundAmount || 0,
+                  refundMethod: details?.refundMethod || 'original',
+                  refundReference: details?.refundReference || '',
+                  note: details?.note || '',
+                };
+                // Update order status
+                if (parcel.orderId) {
+                  await db.collection('orders').updateOne(
+                    { _id: parcel.orderId },
+                    { $set: { status: 'Refunded', financialStatus: 'refunded', updatedAt: now } }
+                  );
+                }
+                break;
+              }
+              case 'cancel': {
+                newStatus = 'cancelled';
+                actionDetails = {
+                  cancelReason: details?.cancelReason || '',
+                  note: details?.note || '',
+                };
+                // Update order status
+                if (parcel.orderId) {
+                  await db.collection('orders').updateOne(
+                    { _id: parcel.orderId },
+                    { $set: { status: 'Cancelled', updatedAt: now } }
+                  );
+                }
+                break;
+              }
+            }
+
+            await db.collection('rtoParcels').updateOne(
+              { _id: parcelId },
+              { $set: { status: newStatus, action, actionDetails, actionBy: actionBy || 'admin', actionAt: now, updatedAt: now } }
+            );
+
+            return json({ success: true, parcelId, action, status: newStatus });
+          }
+
+          case 'update-reship': {
+            // POST /api/rto/update-reship — Update reshipping details (tracking, payment status)
+            const { parcelId, reshippingTrackingNumber, paymentStatus, newStatus: targetStatus } = body;
+            if (!parcelId) return json({ error: 'parcelId required' }, 400);
+
+            const parcel = await db.collection('rtoParcels').findOne({ _id: parcelId });
+            if (!parcel) return json({ error: 'RTO parcel not found' }, 404);
+
+            const updates = { updatedAt: new Date().toISOString() };
+            if (reshippingTrackingNumber) updates['actionDetails.reshippingTrackingNumber'] = reshippingTrackingNumber;
+            if (paymentStatus) updates['actionDetails.paymentStatus'] = paymentStatus;
+            if (targetStatus) updates.status = targetStatus;
+
+            await db.collection('rtoParcels').updateOne({ _id: parcelId }, { $set: updates });
+            return json({ success: true, parcelId });
+          }
+
+          case 'send-whatsapp': {
+            // POST /api/rto/send-whatsapp — Send WhatsApp notification to customer
+            const { parcelId, messageType, customMessage } = body;
+            if (!parcelId) return json({ error: 'parcelId required' }, 400);
+
+            const parcel = await db.collection('rtoParcels').findOne({ _id: parcelId });
+            if (!parcel || !parcel.orderId) return json({ error: 'Parcel or linked order not found' }, 404);
+
+            const order = await db.collection('orders').findOne({ _id: parcel.orderId });
+            if (!order || !order.customerPhone) return json({ error: 'Customer phone not available' }, 400);
+
+            const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+            if (!integrations?.whatsapp?.accessToken || !integrations?.whatsapp?.phoneNumberId) {
+              return json({ error: 'WhatsApp not configured' }, 400);
+            }
+
+            const { accessToken, phoneNumberId } = integrations.whatsapp;
+            const phone = order.customerPhone.replace(/\D/g, '');
+            const formattedPhone = phone.startsWith('91') ? phone : `91${phone}`;
+
+            let messageBody = customMessage || '';
+            if (!messageBody) {
+              switch (messageType) {
+                case 'reship_charges':
+                  messageBody = `Hi ${order.customerName || 'Customer'},\n\nYour order ${order.orderId} was returned to us. We'd love to reship it!\n\nReshipping charges: ₹${parcel.actionDetails?.reshippingCharges || 0}\nPayment link: ${parcel.actionDetails?.paymentLink || 'Will be shared shortly'}\n\nPlease complete the payment to initiate reshipping. Reply HELP for assistance.`;
+                  break;
+                case 'refund_confirmation':
+                  messageBody = `Hi ${order.customerName || 'Customer'},\n\nYour refund of ₹${parcel.actionDetails?.refundAmount || 0} for order ${order.orderId} has been initiated.\n\nRefund method: ${parcel.actionDetails?.refundMethod || 'Original payment method'}\n\nPlease allow 5-7 business days for processing.`;
+                  break;
+                case 'reship_dispatched':
+                  messageBody = `Hi ${order.customerName || 'Customer'},\n\nGreat news! Your reshipped order ${order.orderId} has been dispatched.\n\nTracking: ${parcel.actionDetails?.reshippingTrackingNumber || 'Will be updated shortly'}\n\nThank you for your patience!`;
+                  break;
+                default:
+                  messageBody = `Hi ${order.customerName || 'Customer'},\n\nUpdate regarding your order ${order.orderId}: ${customMessage || 'Please contact us for details.'}`;
+              }
+            }
+
+            try {
+              const waRes = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  messaging_product: 'whatsapp',
+                  to: formattedPhone,
+                  type: 'text',
+                  text: { body: messageBody },
+                }),
+              });
+              const waData = await waRes.json();
+              
+              // Log the message
+              const msgLog = { messageType, sentAt: new Date().toISOString(), phone: formattedPhone, status: waRes.ok ? 'sent' : 'failed', messageId: waData?.messages?.[0]?.id };
+              await db.collection('rtoParcels').updateOne(
+                { _id: parcelId },
+                { $push: { whatsappMessages: msgLog }, $set: { customerNotified: true, updatedAt: new Date().toISOString() } }
+              );
+
+              if (waRes.ok) return json({ success: true, messageId: waData?.messages?.[0]?.id });
+              return json({ error: waData?.error?.message || 'WhatsApp send failed', details: waData }, 500);
+            } catch (err) {
+              return json({ error: `WhatsApp error: ${err.message}` }, 500);
+            }
+          }
+
+          default:
+            return json({ error: 'Unknown RTO action' }, 404);
+        }
       }
 
       case 'whatsapp': {
