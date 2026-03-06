@@ -669,15 +669,7 @@ export default function DashboardView() {
                   <span className={`text-sm font-medium ${item.color}`}>-{fmt(item.value)}</span>
                 </div>
               ))}
-              {/* Net Revenue */}
-              <div className="flex items-center justify-between py-2.5 border-b border-border bg-muted/30 px-3 rounded-md my-1">
-                <div className="flex items-center gap-2">
-                  <ArrowRight className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-sm font-semibold">Net Revenue</span>
-                </div>
-                <span className="text-sm font-bold">{fmt(plBreakdown.netRevenue)}</span>
-              </div>
-              {/* Tips */}
+              {/* Tips — positive revenue line before Net Revenue */}
               {(plBreakdown.totalTips || 0) > 0 && (
                 <div className="flex items-center justify-between py-2 pl-6 border-b border-dashed border-border/60">
                   <div className="flex items-center gap-2">
@@ -687,6 +679,14 @@ export default function DashboardView() {
                   <span className="text-sm font-medium text-emerald-600">+{fmt(plBreakdown.totalTips)}</span>
                 </div>
               )}
+              {/* Net Revenue */}
+              <div className="flex items-center justify-between py-2.5 border-b border-border bg-muted/30 px-3 rounded-md my-1">
+                <div className="flex items-center gap-2">
+                  <ArrowRight className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-sm font-semibold">Net Revenue {(plBreakdown.totalTips || 0) > 0 ? '(incl. Tips)' : ''}</span>
+                </div>
+                <span className="text-sm font-bold">{fmt(plBreakdown.netRevenue)}</span>
+              </div>
               {/* Operating Costs */}
               {[
                 { label: 'Cost of Goods Sold (COGS)', value: plBreakdown.totalCOGS, color: 'text-amber-600', icon: Package },
