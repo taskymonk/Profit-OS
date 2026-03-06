@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 # Test configuration
-BASE_URL = "https://settings-polish.preview.emergentagent.com/api"
+BASE_URL = "https://erp-polish-phase7.preview.emergentagent.com/api"
 
 class PurgeApiTester:
     def __init__(self):

@@ -363,7 +363,10 @@ export default function App() {
       )}
 
       {/* Sidebar */}
-      <aside className={`
+      <aside
+        role="navigation"
+        aria-label="Main navigation"
+        className={`
         fixed lg:static inset-y-0 left-0 z-50
         flex flex-col bg-sidebar border-r border-sidebar-border
         transition-all duration-300 ease-in-out
@@ -414,6 +417,8 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => { setActiveView(item.id); setMobileMenuOpen(false); }}
+                    aria-label={item.label}
+                    aria-current={isActive ? 'page' : undefined}
                     className={`
                       w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
                       transition-all duration-200 min-h-[38px]
@@ -455,11 +460,15 @@ export default function App() {
         {/* Sidebar Footer */}
         <div className="p-3 border-t border-sidebar-border space-y-1">
           {sidebarOpen && (
-            <p className="text-[10px] text-muted-foreground/60 text-center tracking-wide">Powered by <span className="font-semibold text-muted-foreground/80">Profit OS</span></p>
+            <div className="text-center space-y-0.5">
+              <p className="text-[10px] text-muted-foreground/60 tracking-wide">Powered by <span className="font-semibold text-muted-foreground/80">Profit OS</span></p>
+              <p className="text-[9px] text-muted-foreground/40">v4.0.0 · © {new Date().getFullYear()} All rights reserved</p>
+            </div>
           )}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="hidden lg:flex items-center justify-center w-full py-2 rounded-lg text-muted-foreground hover:bg-sidebar-accent transition-colors"
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
           >
             {sidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
           </button>
@@ -467,11 +476,11 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden" role="main" aria-label="Page content">
         {/* Top Bar */}
         <header className="h-16 border-b border-border flex items-center justify-between px-4 lg:px-6 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileMenuOpen(true)}>
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileMenuOpen(true)} aria-label="Open navigation menu">
               <Menu className="w-5 h-5" />
             </Button>
             <h2 className="text-lg font-semibold">

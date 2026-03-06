@@ -635,8 +635,29 @@ async function getDashboardData(params = {}) {
     cd = new Date(cd.getTime() + dayMs);
   }
 
-  // All-time stats
-  const allTimeMetrics = calculateDashboardMetrics(orders, skuRecipes, overheadExpenses, '2020-01-01', '2030-12-31', 1, adSpendMap, adSpendTaxMultiplier, calcOptions);
+  // All-time stats — use efficient count queries instead of recalculating
+  // (the 'orders' array is pre-filtered by date range, so allTimeMetrics would be wrong)
+  const EXCL_S = ['Cancelled', 'Voided', 'Pending'];
+  const EXCL_F = ['pending', 'voided', 'refunded'];
+  const allTimeOrderCount = await db.collection('orders').countDocuments({
+    status: { $nin: EXCL_S },
+    $or: [
+      { financialStatus: { $nin: EXCL_F } },
+      { financialStatus: { $exists: false } }
+    ]
+  });
+  const allTimeRtoCount = await db.collection('orders').countDocuments({
+    status: 'RTO',
+    $or: [
+      { financialStatus: { $nin: EXCL_F } },
+      { financialStatus: { $exists: false } }
+    ]
+  });
+  const allTimeRevAgg = await db.collection('orders').aggregate([
+    { $match: { status: { $nin: EXCL_S } } },
+    { $group: { _id: null, totalRevenue: { $sum: '$salePrice' } } }
+  ]).toArray();
+  const allTimeRevenue = allTimeRevAgg[0]?.totalRevenue || 0;
 
   return {
     tenant: tenantConfig,
@@ -701,11 +722,10 @@ async function getDashboardData(params = {}) {
       };
     })(),
     allTime: {
-      totalOrders: allTimeMetrics.totalOrders,
-      netProfit: allTimeMetrics.netProfit,
-      revenue: allTimeMetrics.revenue,
-      rtoCount: allTimeMetrics.rtoCount,
-      rtoRate: allTimeMetrics.totalOrders > 0 ? Math.round((allTimeMetrics.rtoCount / allTimeMetrics.totalOrders) * 10000) / 100 : 0,
+      totalOrders: allTimeOrderCount,
+      revenue: Math.round(allTimeRevenue * 100) / 100,
+      rtoCount: allTimeRtoCount,
+      rtoRate: allTimeOrderCount > 0 ? Math.round((allTimeRtoCount / allTimeOrderCount) * 10000) / 100 : 0,
     },
     dailyData,
     recentOrders: metrics.orderProfits.slice(0, 25).map(profit => {
@@ -746,19 +766,27 @@ async function getReportProfitableSkus(params) {
     return d >= startDate && d <= endDate;
   });
 
+  // Strict Financial Parity: exclude Cancelled/Voided/Pending (consistent with dashboard)
+  const EXCLUDED_STATUSES = ['Cancelled', 'Voided', 'Pending'];
+  const EXCLUDED_FINANCIAL = ['pending', 'voided', 'refunded'];
+  const accountingOrders = filteredOrders.filter(o =>
+    !EXCLUDED_STATUSES.includes(o.status) &&
+    !EXCLUDED_FINANCIAL.includes(o.financialStatus)
+  );
+
   const skuMap = {};
   skuRecipes.forEach(r => { skuMap[r.sku] = r; });
 
-  // Pre-compute orders per day using IST keys
+  // Pre-compute orders per day using IST keys (accounting orders only)
   const ordersPerDay = {};
-  filteredOrders.forEach(order => {
+  accountingOrders.forEach(order => {
     const dk = getISTDateKey(order.orderDate);
     ordersPerDay[dk] = (ordersPerDay[dk] || 0) + 1;
   });
 
-  // Group by SKU
+  // Group by SKU (accounting orders only)
   const skuStats = {};
-  filteredOrders.forEach(order => {
+  accountingOrders.forEach(order => {
     if (!skuStats[order.sku]) {
       skuStats[order.sku] = { sku: order.sku, productName: order.productName, totalOrders: 0, totalRevenue: 0, totalProfit: 0, totalCOGS: 0, rtoCount: 0 };
     }
@@ -771,7 +799,7 @@ async function getReportProfitableSkus(params) {
     const dayOrderCount = ordersPerDay[dateKey] || 1;
     const dayAd = adSpendMap[dateKey] || 0;
 
-    const profit = calculateOrderProfit(order, skuMap[order.sku], dayAd, dayOrderCount, 1, taxMul);
+    const profit = calculateOrderProfit(order, skuMap[order.sku], dayAd, dayOrderCount, 1, taxMul, { shopifyTxnFeeRate: tenantConfig?.shopifyTxnFeeRate || 0 });
     s.totalProfit += profit.netProfit;
     s.totalCOGS += profit.totalCOGS;
   });
@@ -855,11 +883,17 @@ async function getReportMonthlyPL(params) {
   const expenses = await db.collection('overheadExpenses').find({}).toArray();
   const dailySpends = await db.collection('dailyMarketingSpend').find({}).toArray();
   const tenantConfig = await db.collection('tenantConfig').findOne({}) || {};
+  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
   const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
   const skuMap = {};
   skuRecipes.forEach(r => { skuMap[r.sku] = r; });
   const taxMul = 1 + ((tenantConfig.adSpendTaxRate ?? 18) / 100);
-  const shopifyTxnRate = (tenantConfig.shopifyTxnFeeRate || 2) / 100;
+  const shopifyTxnFeeRate = tenantConfig.shopifyTxnFeeRate || 0;
+
+  // Build adSpendMap (only if Meta active)
+  const isMetaActive = integrations?.metaAds?.active === true;
+  const adSpendMap = {};
+  if (isMetaActive) dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
 
   // Date range filter
   const startDate = params.startDate ? new Date(params.startDate) : new Date(new Date().setDate(new Date().getDate() - 180));
@@ -872,35 +906,66 @@ async function getReportMonthlyPL(params) {
     return d >= startDate && d <= endDate;
   });
 
-  // Build monthly buckets from filtered orders only
-  const months = {};
-  filteredOrders.forEach(o => {
-    const d = new Date(o.orderDate);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    if (!months[key]) months[key] = { month: key, revenue: 0, cogs: 0, shopifyFees: 0, razorpayFees: 0, adSpend: 0, overhead: 0, netProfit: 0, orderCount: 0, rtoCount: 0 };
-    months[key].orderCount++;
-    months[key].revenue += o.salePrice || 0;
-    if (o.status === 'RTO') months[key].rtoCount++;
-    const recipe = skuMap[o.sku];
-    if (recipe?.ingredients?.length) {
-      const cogs = recipe.ingredients.reduce((s, ing) => s + ((ing.costPerUnit || 0) * (ing.quantityUsed || 0)), 0);
-      months[key].cogs += cogs;
-    }
-    months[key].shopifyFees += (o.salePrice || 0) * shopifyTxnRate;
-    months[key].razorpayFees += o.gatewayFee || 0;
+  // Strict Financial Parity: exclude Cancelled/Voided/Pending (same as dashboard)
+  const EXCLUDED_STATUSES = ['Cancelled', 'Voided', 'Pending'];
+  const EXCLUDED_FINANCIAL = ['pending', 'voided', 'refunded'];
+  const accountingOrders = filteredOrders.filter(o =>
+    !EXCLUDED_STATUSES.includes(o.status) &&
+    !EXCLUDED_FINANCIAL.includes(o.financialStatus)
+  );
+
+  // Pre-compute orders per day using IST keys (for marketing allocation)
+  const ordersPerDay = {};
+  accountingOrders.forEach(order => {
+    const dk = getISTDateKey(order.orderDate);
+    ordersPerDay[dk] = (ordersPerDay[dk] || 0) + 1;
   });
 
-  // Add ad spend per month (filtered by date range)
-  dailySpends.forEach(s => {
-    const d = new Date(s.date + 'T00:00:00+05:30');
-    if (d < startDate || d > endDate) return;
+  // Build monthly buckets using calculateOrderProfit for consistency
+  const months = {};
+  accountingOrders.forEach(o => {
+    const d = new Date(o.orderDate);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    if (months[key]) months[key].adSpend += (s.spendAmount || 0) * taxMul;
+    if (!months[key]) months[key] = {
+      month: key, grossRevenue: 0, netRevenue: 0, gstOnRevenue: 0, discount: 0, refunds: 0,
+      cogs: 0, shipping: 0, shopifyFees: 0, razorpayFees: 0, txnFees: 0,
+      adSpend: 0, overhead: 0, netProfit: 0, orderCount: 0, rtoCount: 0, cancelledCount: 0,
+    };
+    const m = months[key];
+    m.orderCount++;
+    if (o.status === 'RTO') m.rtoCount++;
+
+    // Use calculateOrderProfit for consistent P&L math
+    const dateKey = getISTDateKey(o.orderDate);
+    const dayOrderCount = ordersPerDay[dateKey] || 1;
+    const dayAdSpend = adSpendMap[dateKey] || 0;
+    const profit = calculateOrderProfit(o, skuMap[o.sku], dayAdSpend, dayOrderCount, 1, taxMul, { shopifyTxnFeeRate });
+
+    m.grossRevenue += profit.grossRevenue;
+    m.netRevenue += profit.netRevenue;
+    m.gstOnRevenue += profit.gstOnRevenue;
+    m.discount += profit.discount;
+    m.refunds += profit.refundAmount;
+    m.cogs += profit.totalCOGS;
+    m.shipping += profit.shippingCost;
+    m.shopifyFees += (profit.totalShopifyFee || 0);
+    m.razorpayFees += profit.totalTransactionFee;
+    m.txnFees += profit.totalTransactionFee + (profit.totalShopifyFee || 0);
+    m.adSpend += profit.marketingAllocation;
+    m.netProfit += profit.netProfit;
+  });
+
+  // Count cancelled orders per month
+  filteredOrders.filter(o => EXCLUDED_STATUSES.includes(o.status) || EXCLUDED_FINANCIAL.includes(o.financialStatus)).forEach(o => {
+    const d = new Date(o.orderDate);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    if (months[key]) months[key].cancelledCount++;
   });
 
   // Add overhead expenses per month (pro-rata, only for months in range)
+  const overheadExpenses = expenses.filter(e => e.category !== 'MetaAds');
   const monthKeys = Object.keys(months);
-  expenses.forEach(exp => {
+  overheadExpenses.forEach(exp => {
     const amt = exp.amount || 0;
     const freq = exp.frequency || 'monthly';
     let monthlyAmt = amt;
@@ -920,11 +985,16 @@ async function getReportMonthlyPL(params) {
     }
   });
 
-  // Calc net profit
+  // Finalize: subtract overhead from netProfit, add derived fields, round
   Object.values(months).forEach(m => {
-    m.netProfit = m.revenue - m.cogs - m.shopifyFees - m.razorpayFees - m.adSpend - m.overhead;
-    m.margin = m.revenue > 0 ? Math.round((m.netProfit / m.revenue) * 10000) / 100 : 0;
-    ['revenue', 'cogs', 'shopifyFees', 'razorpayFees', 'adSpend', 'overhead', 'netProfit'].forEach(k => { m[k] = Math.round(m[k]); });
+    m.netProfit = m.netProfit - m.overhead; // overhead was not in per-order calc
+    // Keep legacy 'revenue' field for backward compatibility
+    m.revenue = m.grossRevenue;
+    m.margin = m.grossRevenue > 0 ? Math.round((m.netProfit / m.grossRevenue) * 10000) / 100 : 0;
+    ['grossRevenue', 'netRevenue', 'gstOnRevenue', 'discount', 'refunds', 'revenue',
+     'cogs', 'shipping', 'shopifyFees', 'razorpayFees', 'txnFees', 'adSpend', 'overhead', 'netProfit'].forEach(k => {
+      m[k] = Math.round((m[k] || 0) * 100) / 100;
+    });
   });
 
   return Object.values(months).sort((a, b) => a.month.localeCompare(b.month));
@@ -981,25 +1051,50 @@ async function getReportProductCOGS(params) {
   endDate.setHours(23, 59, 59, 999);
 
   const filteredOrders = orders.filter(o => new Date(o.orderDate) >= startDate && new Date(o.orderDate) <= endDate);
+
+  // Strict Financial Parity: exclude Cancelled/Voided/Pending (consistent with dashboard)
+  const EXCLUDED_STATUSES = ['Cancelled', 'Voided', 'Pending'];
+  const EXCLUDED_FINANCIAL = ['pending', 'voided', 'refunded'];
+  const accountingOrders = filteredOrders.filter(o =>
+    !EXCLUDED_STATUSES.includes(o.status) &&
+    !EXCLUDED_FINANCIAL.includes(o.financialStatus)
+  );
+
   const recipeMap = {};
   recipes.forEach(r => { recipeMap[r.sku] = r; });
 
   const skuStats = {};
-  filteredOrders.forEach(o => {
+  accountingOrders.forEach(o => {
+    const orderQty = o.quantity || 1;
     if (!skuStats[o.sku]) skuStats[o.sku] = { sku: o.sku, productName: o.productName, orders: 0, revenue: 0, cogs: 0, hasRecipe: !!recipeMap[o.sku]?.ingredients?.length };
     skuStats[o.sku].orders++;
     skuStats[o.sku].revenue += o.salePrice || 0;
     const recipe = recipeMap[o.sku];
     if (recipe?.ingredients?.length) {
-      skuStats[o.sku].cogs += recipe.ingredients.reduce((s, i) => s + ((i.costPerUnit || 0) * (i.quantityUsed || 0)), 0);
+      // BOM: use baseCostPerUnit (with fallback to costPerUnit for legacy), quantityUsed (with fallback to quantity)
+      const recipeCogs = recipe.ingredients.reduce((s, i) => {
+        const cost = i.baseCostPerUnit || i.costPerUnit || 0;
+        const qty = i.quantityUsed || i.quantity || 0;
+        return s + (cost * qty);
+      }, 0) * orderQty;
+      const wastagePercent = recipe.monthlyWastageOverride || recipe.defaultWastageBuffer || 0;
+      skuStats[o.sku].cogs += recipeCogs * (1 + wastagePercent / 100);
+    } else if (recipe) {
+      // Legacy format fallback: rawMaterials + packaging + consumableCost
+      const rawCost = (recipe.rawMaterials || []).reduce((s, rm) => s + ((rm.pricePerUnit || 0) * (rm.quantity || 0)), 0) * orderQty;
+      const pkgCost = (recipe.packaging || []).reduce((s, pkg) => s + (pkg.pricePerUnit || 0), 0) * orderQty;
+      const consCost = (recipe.consumableCost || 0) * orderQty;
+      const subtotal = rawCost + pkgCost + consCost;
+      const wastagePercent = recipe.monthlyWastageOverride || recipe.defaultWastageBuffer || 0;
+      skuStats[o.sku].cogs += subtotal * (1 + wastagePercent / 100);
     }
   });
 
   return Object.values(skuStats).sort((a, b) => (b.revenue - b.cogs) - (a.revenue - a.cogs)).map(s => ({
-    ...s, revenue: Math.round(s.revenue), cogs: Math.round(s.cogs),
-    grossProfit: Math.round(s.revenue - s.cogs),
+    ...s, revenue: Math.round(s.revenue * 100) / 100, cogs: Math.round(s.cogs * 100) / 100,
+    grossProfit: Math.round((s.revenue - s.cogs) * 100) / 100,
     margin: s.revenue > 0 ? Math.round(((s.revenue - s.cogs) / s.revenue) * 10000) / 100 : 0,
-    avgCOGSPerOrder: s.orders > 0 ? Math.round(s.cogs / s.orders) : 0,
+    avgCOGSPerOrder: s.orders > 0 ? Math.round((s.cogs / s.orders) * 100) / 100 : 0,
   }));
 }
 
@@ -3921,9 +4016,17 @@ export async function GET(request) {
           dayAdSpend = dailySpend?.spendAmount || 0;
         }
 
-        // Count total orders on that day for per-order allocation
-        const allOrders = await db.collection('orders').find({}).toArray();
-        const dayOrders = allOrders.filter(o => getISTDateKey(o.orderDate) === dateKey);
+        // Count total accounting-eligible orders on that day for per-order allocation
+        // Exclude Cancelled/Voided/Pending to match dashboard marketing allocation logic
+        const EXCL_STATUS = ['Cancelled', 'Voided', 'Pending'];
+        const EXCL_FIN = ['pending', 'voided', 'refunded'];
+        // Query only orders on the same date range (optimized — uses orderDate index)
+        const dayOrderQuery = { orderDate: { $gte: dateKey, $lte: dateKey + 'T23:59:59.999Z' } };
+        const dayAllOrders = await db.collection('orders').find(dayOrderQuery).toArray();
+        const dayOrders = dayAllOrders.filter(o =>
+          !EXCL_STATUS.includes(o.status) &&
+          !EXCL_FIN.includes(o.financialStatus)
+        );
 
         const profit = calculateOrderProfit(order, recipe, dayAdSpend, dayOrders.length || 1, 1, taxMul, { shopifyTxnFeeRate: tc?.shopifyTxnFeeRate || 0 });
         return json(profit);

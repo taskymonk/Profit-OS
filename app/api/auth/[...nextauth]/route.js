@@ -95,6 +95,7 @@ const authOptions = {
           throw new Error('This account uses Google Sign-In. Please use the Google button.');
         }
 
+        console.log('[Auth] Login attempt for:', email);
         const isValid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!isValid) {
           throw new Error('Invalid password. Please try again.');

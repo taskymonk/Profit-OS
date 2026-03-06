@@ -721,7 +721,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://settings-polish.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -769,7 +769,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://settings-polish.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -808,7 +808,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://settings-polish.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -1787,7 +1787,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://settings-polish.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -1835,7 +1835,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://settings-polish.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -1874,7 +1874,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://settings-polish.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -2535,7 +2535,7 @@ Test these endpoints:
 
 **PHASE 9F FIFO INVENTORY + RECIPE TEMPLATES UI TESTING COMPLETE - ALL SYSTEMS FULLY FUNCTIONAL!** Frontend perfectly integrated with backend FIFO system, ready for production use."
     - agent: "main"
-      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://settings-polish.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
+      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
     - agent: "testing"
       message: "🎉 ICON UPLOAD & BRANDING SETTINGS TESTING COMPLETE - BOTH FEATURES FULLY FUNCTIONAL!
 
@@ -2574,7 +2574,7 @@ Test these endpoints:
 - ✅ Status validation confirmed - using valid status values (created, initiated, processed, failed)
 - ✅ Sample settlement verified: ID setl_SMD5fQBVgtJkzE, Amount ₹465.60, Status: processed
 
-**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://settings-polish.preview.emergentagent.com/api"
+**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
     - agent: "main"
       message: "PHASE 9F: FIFO INVENTORY COSTING TESTING NEEDED. Base URL: http://localhost:3000/api. Test these 8 areas:
 
@@ -2817,7 +2817,7 @@ Clean up: Reset the 3 test recipes back to needsCostInput=true, ingredients=[] u
 **MINOR ISSUE IDENTIFIED:**
 The GET /api/recipe-templates/{id} endpoint returns 200 with null for missing templates instead of 404. This is a minor API implementation issue - the deletion functionality works correctly (template is removed from database), but the HTTP status code should be 404 for missing resources.
 
-**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://settings-polish.preview.emergentagent.com/api"
+**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 9G COMPREHENSIVE UX OPTIMIZATION TESTING COMPLETE - ALL 7 BACKEND FEATURES FULLY TESTED!
 
@@ -3326,7 +3326,7 @@ backend:
 
 
 test_instructions: |
-  Base URL: https://settings-polish.preview.emergentagent.com/api
+  Base URL: https://erp-polish-phase7.preview.emergentagent.com/api
   
   NEW Auth Tests (Phase 1):
   1. GET /api/auth-config - should return { googleConfigured: boolean }
@@ -3833,7 +3833,7 @@ test_instructions: |
 - Role-based permission system functional ✓
 - First user auto-promotion to master_admin ✓
 
-**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://settings-polish.preview.emergentagent.com/api"
+**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 4: WHATSAPP AUTOMATION BACKEND TESTING COMPLETE - ALL 15 ENDPOINTS FULLY FUNCTIONAL!
 
@@ -3874,7 +3874,7 @@ test_instructions: |
 
 **PHASE 4 WHATSAPP AUTOMATION SYSTEM STATUS:** 🎉 ALL 15 CRITICAL ENDPOINTS PRODUCTION-READY
 **Test Results:** 15/15 endpoints passed (100% success rate)
-**Base URL:** https://settings-polish.preview.emergentagent.com/api
+**Base URL:** https://erp-polish-phase7.preview.emergentagent.com/api
 
 **PHASE 4: WHATSAPP AUTOMATION BACKEND FULLY TESTED AND OPERATIONAL!**"
 
@@ -3918,11 +3918,11 @@ test_instructions: |
 **KDS SYSTEM STATUS**: 🎉 ALL 10 CRITICAL ENDPOINTS PRODUCTION-READY
 **Test Results**: 8/8 test suites passed (100% success rate)  
 **Existing Data**: 6 KDS assignments, 2057+ orders, verified users system
-**Base URL**: https://settings-polish.preview.emergentagent.com/api
+**Base URL**: https://erp-polish-phase7.preview.emergentagent.com/api
 
 **PHASE 2: EMPLOYEE KDS + ERP SYSTEM FULLY TESTED AND OPERATIONAL!**"
     - agent: "main"
-      message: "PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING NEEDED. Base URL: https://settings-polish.preview.emergentagent.com/api. Test these 4 APIs: 1) POST /api/parcel-images - Save parcel image, 2) GET /api/parcel-images?orderId=xxx - Retrieve parcel images, 3) PUT /api/orders/{orderId} - Update order with tracking number and carrier, 4) GET /api/orders/{orderId} - Verify updated order has tracking info"
+      message: "PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING NEEDED. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Test these 4 APIs: 1) POST /api/parcel-images - Save parcel image, 2) GET /api/parcel-images?orderId=xxx - Retrieve parcel images, 3) PUT /api/orders/{orderId} - Update order with tracking number and carrier, 4) GET /api/orders/{orderId} - Verify updated order has tracking info"
     - agent: "testing"
       message: "🎉 PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING COMPLETE - ALL 4 APIS PASSED!
 
@@ -3946,7 +3946,7 @@ test_instructions: |
 
 **PHASE 3 SHIPPING & TRACKING ENHANCEMENT APIS FULLY FUNCTIONAL!** All 4 critical endpoints working correctly with proper data persistence and retrieval. Real order data tested with successful tracking number updates."
     - agent: "main"
-      message: "PHASE 5: BILLS & FINANCE MODULE TESTING NEEDED. Base URL: https://settings-polish.preview.emergentagent.com/api. Test all 16 Bills & Finance APIs: Bills CRUD (GET/POST/PUT/DELETE), Payment recording, Vendors CRUD, Purchase Orders CRUD with receive workflow, Cash Flow Summary, Payment Priority. Existing data: 3 bills, 1 vendor (Sunrise Packaging), 1 PO (PO-0001). Verify cash flow stats update correctly after creating/paying bills."
+      message: "PHASE 5: BILLS & FINANCE MODULE TESTING NEEDED. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Test all 16 Bills & Finance APIs: Bills CRUD (GET/POST/PUT/DELETE), Payment recording, Vendors CRUD, Purchase Orders CRUD with receive workflow, Cash Flow Summary, Payment Priority. Existing data: 3 bills, 1 vendor (Sunrise Packaging), 1 PO (PO-0001). Verify cash flow stats update correctly after creating/paying bills."
     - agent: "testing"
       message: "🎉 PHASE 5: BILLS & FINANCE MODULE TESTING COMPLETE - ALL 16 APIS PASSED!
 
@@ -3995,9 +3995,9 @@ test_instructions: |
 ✓ Existing data preserved (3 bills, 1 vendor, 1 PO)
 ✓ Test data cleanup successful (no residual test records)
 
-**PHASE 5: BILLS & FINANCE MODULE FULLY TESTED AND OPERATIONAL!** Base URL: https://settings-polish.preview.emergentagent.com/api"
+**PHASE 5: BILLS & FINANCE MODULE FULLY TESTED AND OPERATIONAL!** Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
     - agent: "main"
-      message: "PHASE 5 REFACTOR COMPLETE — 'Smart Approach' applied. PURCHASE ORDERS REMOVED entirely from backend. Base URL: https://settings-polish.preview.emergentagent.com/api. Test the following 12 Finance APIs (POs are gone, should return 404):
+      message: "PHASE 5 REFACTOR COMPLETE — 'Smart Approach' applied. PURCHASE ORDERS REMOVED entirely from backend. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Test the following 12 Finance APIs (POs are gone, should return 404):
 
 1. **Bills CRUD** (should still work):
    - GET /api/bills — list all bills
@@ -4037,7 +4037,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
     status_history:
         - working: true
           agent: "testing"
-          comment: "🎉 BUG FIXES BATCH TESTING COMPLETE - ALL 5 SCENARIOS PASSED! Base URL: https://settings-polish.preview.emergentagent.com/api. 
+          comment: "🎉 BUG FIXES BATCH TESTING COMPLETE - ALL 5 SCENARIOS PASSED! Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. 
 
 🎯 **TIP CLEANUP VERIFICATION**: ✅ PASSED (3/3 tests)
 - ✅ No orders found with productName='Tip' (checked 50 orders)
@@ -4054,7 +4054,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 - ✅ Created test template 'Test Unlink Template' with ingredients
 - ✅ Successfully linked template to SKU recipe
     - agent: "main"
-      message: "COMPREHENSIVE FIXES ROUND 2. Base URL: https://settings-polish.preview.emergentagent.com/api. Test these:
+      message: "COMPREHENSIVE FIXES ROUND 2. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Test these:
 
 1. **Profit Calculator - Tip included:**
    - GET /api/dashboard?range=alltime — verify plBreakdown has totalTips field (number >= 0)
@@ -4081,7 +4081,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 - ✅ Recipe template deletion functionality working correctly
 
     - agent: "main"
-      message: "ROUND 3 — Recipe Coverage + Apply UX + Template Lifecycle fixes. Base URL: https://settings-polish.preview.emergentagent.com/api. Test:
+      message: "ROUND 3 — Recipe Coverage + Apply UX + Template Lifecycle fixes. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Test:
 
 1. **Recipe Template Full Lifecycle (Create → Apply → Delete → Coverage Reset):**
    - POST /api/recipe-templates — create: {name:'Lifecycle Test',ingredients:[{name:'Test Paper',category:'Raw Materials',quantityUsed:0.5,baseCostPerUnit:20,unit:'sheets',inventoryItemId:'test-1'}]}
@@ -4121,7 +4121,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 **ALL 5 BUG FIX SCENARIOS FULLY VERIFIED AND FUNCTIONAL!** No critical issues found. All bug fixes working as designed with comprehensive validation completed."
 
     - agent: "main"
-      message: "BUG FIXES BATCH — 5 fixes applied. Base URL: https://settings-polish.preview.emergentagent.com/api. Test these scenarios:
+      message: "BUG FIXES BATCH — 5 fixes applied. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api. Test these scenarios:
 
 1. **Tip cleanup verification:**
    - GET /api/orders?page=1&limit=10 — verify NO orders with productName='Tip' exist
@@ -4192,7 +4192,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 ✓ Complete recipe template lifecycle with proper unlinking
 ✓ Finance module regression testing (bills/vendors working, PO removed)
 
-Base URL: https://settings-polish.preview.emergentagent.com/api"
+Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 ROUND 3 — RECIPE COVERAGE + APPLY UX + TEMPLATE LIFECYCLE TESTING COMPLETE - ALL 4/4 TESTS PASSED!
 
@@ -4236,7 +4236,7 @@ Base URL: https://settings-polish.preview.emergentagent.com/api"
 ✓ Profit Calculator Enhancement: tipAmount field included in individual order calculations
 ✓ Data Integrity: All test data properly cleaned up, no residual test templates remaining
 
-**ROUND 3 TESTING COMPLETE - ALL CRITICAL FEATURES FULLY FUNCTIONAL!** Template lifecycle system working as designed with proper reset behavior. Base URL: https://settings-polish.preview.emergentagent.com/api"
+**ROUND 3 TESTING COMPLETE - ALL CRITICAL FEATURES FULLY FUNCTIONAL!** Template lifecycle system working as designed with proper reset behavior. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 COMPREHENSIVE FRONTEND TESTING COMPLETE - CRITICAL DISPLAY ISSUES IDENTIFIED!
 
@@ -4365,7 +4365,7 @@ agent_communication:
 ✓ Conflict resolution: Duplicate detection and handling working correctly
 ✓ Data integrity: Counts verification confirms successful imports
 
-**PHASE 6.2 IMPORT/EXPORT SYSTEM FULLY FUNCTIONAL AND PRODUCTION-READY!** All 10 critical tests passed with comprehensive validation. Base URL: https://settings-polish.preview.emergentagent.com/api"
+**PHASE 6.2 IMPORT/EXPORT SYSTEM FULLY FUNCTIONAL AND PRODUCTION-READY!** All 10 critical tests passed with comprehensive validation. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
 
 
   - task: "Phase 6.1 - RTO Stats API"
@@ -4523,7 +4523,7 @@ agent_communication:
 ✓ WhatsApp API integration structure (ready for credentials)
 ✓ Data cleanup and restoration working correctly
 
-**PHASE 6.1 RTO/RETURNS MODULE BACKEND FULLY FUNCTIONAL AND PRODUCTION-READY!** All critical endpoints working perfectly with proper error handling and data integrity. Base URL: https://settings-polish.preview.emergentagent.com/api"
+**PHASE 6.1 RTO/RETURNS MODULE BACKEND FULLY FUNCTIONAL AND PRODUCTION-READY!** All critical endpoints working perfectly with proper error handling and data integrity. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
 
 
 
@@ -5118,7 +5118,7 @@ agent_communication:
 - GET /api/vendors: 1 vendor returned (status 200) 
 - GET /api/expense-categories: 5 categories returned (status 200)
 
-**SUMMARY**: 5/5 API areas functional with 1 minor parsing issue. Core OCR functionality working correctly. Base URL: https://settings-polish.preview.emergentagent.com/api"
+**SUMMARY**: 5/5 API areas functional with 1 minor parsing issue. Core OCR functionality working correctly. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
 
 
 ## Current Task: Settings Page Cleanup & Danger Zone Verification
@@ -5184,4 +5184,118 @@ backend:
 - ✅ GET /api/users returns preserved data: 3 users found
 - ✅ Critical collections (tenantConfig, integrations, syncSettings, users, apiKeys) successfully preserved
 
-**ALL PURGE API ENDPOINTS PRODUCTION-READY!** Complete selective purge functionality working with proper authentication, comprehensive collection targeting, and critical data preservation. Base URL: https://settings-polish.preview.emergentagent.com/api"
+**ALL PURGE API ENDPOINTS PRODUCTION-READY!** Complete selective purge functionality working with proper authentication, comprehensive collection targeting, and critical data preservation. Base URL: https://erp-polish-phase7.preview.emergentagent.com/api"
+
+
+  - task: "Phase 7.7 - Data Consistency Audit"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js, lib/profitCalculator.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Phase 7.7 Data Consistency Audit — Fixed 6 critical issues: 1) Monthly P&L report rewritten to use calculateOrderProfit for consistency with dashboard (was using wrong BOM field names costPerUnit instead of baseCostPerUnit, missing order quantity multiplier, not filtering cancelled orders, revenue missing GST/discount/refund deductions). 2) Product COGS report fixed: BOM fields updated to baseCostPerUnit with fallback, added order quantity multiplier, added wastage buffer, added legacy format fallback, filter excluded statuses. 3) Profitable SKUs report: added Cancelled/Voided/Pending exclusion filter. 4) calculate-profit endpoint: fixed day order count to exclude cancelled/voided orders (was inflating count), optimized to use date-range query instead of fetching all orders. 5) Dashboard allTime section: fixed to use efficient count queries instead of broken recalculation (was using pre-filtered orders). 6) All reports now consistently filter by EXCLUDED_STATUSES and EXCLUDED_FINANCIAL for financial parity."
+
+    - agent: "main"
+      message: "PHASE 7.7 DATA CONSISTENCY AUDIT - TESTING NEEDED. Base URL: http://localhost:3000/api. Real Shopify data (2044+ orders) and Meta Ads data exist. Test these 7 areas:
+
+1. **DASHBOARD DATA INTEGRITY** (GET /api/dashboard?range=7days):
+   - Verify plBreakdown.grossRevenue == filtered.revenue
+   - Verify plBreakdown.netProfit == filtered.netProfit
+   - Verify waterfall math: netProfit ≈ netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead (within ±1)
+   - Verify filtered.cancelledCount exists and >= 0
+   - Verify allTime.totalOrders is > filtered.totalOrders (should be ~2044 all-time vs ~35 in 7 days)
+
+2. **MONTHLY P&L REPORT** (GET /api/reports/monthly-pl):
+   - Response should be an array of monthly objects
+   - Each object should have: month, grossRevenue, netRevenue, gstOnRevenue, discount, refunds, cogs, shipping, shopifyFees, razorpayFees, txnFees, adSpend, overhead, netProfit, orderCount, rtoCount, cancelledCount, margin
+   - Verify backward compat: each object should also have 'revenue' field = grossRevenue
+   - Verify math for each month: netProfit ≈ netRevenue - cogs - shipping - txnFees - adSpend - overhead (within ±10)
+   - Verify grossRevenue > netRevenue (because GST is deducted)
+
+3. **PRODUCT COGS REPORT** (GET /api/reports/product-cogs):
+   - Response is array of SKU objects
+   - Each should have: sku, productName, orders, revenue, cogs, grossProfit, margin, avgCOGSPerOrder, hasRecipe
+   - Verify grossProfit = revenue - cogs (within ±1)
+   - Verify margin = (grossProfit/revenue)*100 (within ±0.01)
+
+4. **PROFITABLE SKUS REPORT** (GET /api/reports/profitable-skus):
+   - Response is array of SKU objects
+   - Each should have: sku, productName, totalOrders, totalRevenue, totalProfit, totalCOGS, rtoCount, profitMargin, rtoRate
+   - Verify none of the SKUs include cancelled orders (totalOrders should match accounting orders only)
+
+5. **CALCULATE-PROFIT ENDPOINT** (GET /api/calculate-profit/{orderId}):
+   - Get an order: GET /api/orders?page=1&limit=1 → use the _id
+   - GET /api/calculate-profit/{_id}
+   - Verify response has all expected fields: grossRevenue, netRevenue, gstOnRevenue, totalCOGS, shippingCost, totalTransactionFee, marketingAllocation, netProfit, profitMargin
+   - Verify: grossRevenue - discount - gstOnRevenue ≈ netRevenue (within ±0.01)
+
+6. **ALL-TIME STATS ACCURACY** (GET /api/dashboard?range=today vs range=alltime):
+   - GET /api/dashboard?range=today → note allTime.totalOrders
+   - GET /api/dashboard?range=alltime → note filtered.totalOrders
+   - Both allTime.totalOrders should be the same number (~2044)
+   - The filtered.totalOrders for 'today' should be MUCH LESS than allTime.totalOrders
+
+7. **AD SPEND TAX STILL WORKS** (GET /api/dashboard?range=alltime):
+   - Verify filtered.adSpend > 0 if Meta Ads was active
+   - Use pymongo (mongodb://localhost:27017, db: profitos) to read dailyMarketingSpend totals and tenantConfig.adSpendTaxRate
+   - Dashboard adSpend should be approximately rawTotal * (1 + adSpendTaxRate/100)
+
+DO NOT test Shopify sync by calling the actual Shopify API. Clean up all test data."
+
+test_plan:
+  current_focus:
+    - "Phase 7.7 - Data Consistency Audit"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+        - working: false
+          agent: "testing"
+          comment: "🎯 PHASE 7.7 DATA CONSISTENCY AUDIT - 6/7 TESTS PASSED (85.7%). ✅ SUCCESSES: (1) Monthly P&L Report fully functional with all 18 required fields, backward compatibility (revenue=grossRevenue), correct math verification (netProfit ≈ netRevenue - costs), and GST deduction (grossRevenue > netRevenue). (2) Product COGS Report working with all 9 fields, correct grossProfit calculation (revenue-cogs) and margin calculation. (3) Profitable SKUs Report with 9 fields and proper cancelled order exclusion. (4) Calculate-Profit Endpoint with all 9 fields and accurate net revenue formula (grossRevenue-discount-gstOnRevenue=netRevenue). (5) All-Time Stats Accuracy confirmed - both dashboard calls show consistent allTime.totalOrders=2044, today's filtered orders (0) < allTime orders (2044). (6) Ad Spend Tax Verification working perfectly - Dashboard ₹48,868.67 matches calculated raw total ₹41,414.13 × 1.18 tax rate. ❌ CRITICAL ISSUE: Dashboard Data Integrity waterfall math failing - calculated netProfit ₹11,609.23 ≠ actual ₹10,689.78 (difference: ₹919.45). Formula tested: netRevenue - totalCOGS - totalShipping - totalTxnFees - adSpend - overhead. This exceeds ±1 tolerance significantly and suggests missing cost components in plBreakdown calculation or incorrect waterfall formula specification."
+
+agent_communication:
+    - agent: "testing"
+      message: "🎯 PHASE 7.7 DATA CONSISTENCY AUDIT TESTING COMPLETE - 6/7 CRITICAL AREAS PASSED!
+
+✅ **MONTHLY P&L REPORT**: Full compliance verified
+- All 18 required fields present (month, grossRevenue, netRevenue, gstOnRevenue, discount, refunds, cogs, shipping, shopifyFees, razorpayFees, txnFees, adSpend, overhead, netProfit, orderCount, rtoCount, cancelledCount, margin)
+- Backward compatibility confirmed: revenue field = grossRevenue (₹22,100)
+- Math verification passed: Month 2025-09 calculated ₹17,625 = actual ₹17,625
+- GST deduction working: grossRevenue (₹22,100) > netRevenue (₹18,740.52)
+
+✅ **PRODUCT COGS REPORT**: Structure and calculations verified
+- All 9 required fields present (sku, productName, orders, revenue, cogs, grossProfit, margin, avgCOGSPerOrder, hasRecipe)
+- Gross profit calculation correct: ₹16,800 = ₹16,800 revenue - ₹0 cogs
+- Margin calculation accurate: 100.00% = (grossProfit/revenue)*100
+
+✅ **PROFITABLE SKUS REPORT**: Cancelled order exclusion confirmed
+- All 9 required fields present (sku, productName, totalOrders, totalRevenue, totalProfit, totalCOGS, rtoCount, profitMargin, rtoRate)
+- Cancelled order exclusion working: totalOrders = 34 (accounting orders only)
+
+✅ **CALCULATE-PROFIT ENDPOINT**: Field validation and formulas correct
+- All 9 required fields present (grossRevenue, netRevenue, gstOnRevenue, totalCOGS, shippingCost, totalTransactionFee, marketingAllocation, netProfit, profitMargin)
+- Net revenue formula verified: grossRevenue - discount - gstOnRevenue = netRevenue (₹500)
+
+✅ **ALL-TIME STATS ACCURACY**: Consistency across date ranges
+- AllTime consistency: Both dashboard calls show allTime.totalOrders = 2,044
+- Today vs AllTime logic: Today filtered orders (0) < AllTime orders (2,044)
+
+✅ **AD SPEND TAX MULTIPLIER**: MongoDB verification successful
+- Dashboard filtered.adSpend = ₹48,868.67
+- Raw MongoDB total = ₹41,414.13, Tax rate = 18%
+- Calculation verified: ₹48,868.67 ≈ ₹41,414.13 × 1.18
+
+❌ **DASHBOARD DATA INTEGRITY**: Waterfall math discrepancy (CRITICAL)
+- Revenue consistency ✓: plBreakdown.grossRevenue (₹19,480) = filtered.revenue (₹19,480)
+- Net profit consistency ✓: plBreakdown.netProfit (₹10,689.78) = filtered.netProfit (₹10,689.78)
+- Cancelled count ✓: filtered.cancelledCount = exists and ≥ 0
+- AllTime vs filtered ✓: allTime.totalOrders (2,044) > filtered.totalOrders (35)
+- ❌ WATERFALL MATH FAILURE: Calculated ₹11,609.23 ≠ Actual ₹10,689.78 (Difference: ₹919.45)
+  
+**WATERFALL ANALYSIS**: Formula netRevenue (₹16,531.51) - totalCOGS (₹0) - totalShipping (₹0) - totalTxnFees (₹533.16) - adSpend (₹4,389.12) - overhead (₹0) = ₹11,609.23, but actual netProfit = ₹10,689.78. The ₹919.45 difference suggests missing cost components or incorrect formula specification.
+
+**OVERALL STATUS**: 6/7 tests passed (85.7% success rate). All reports and calculations working correctly except for dashboard waterfall math discrepancy requiring investigation."
