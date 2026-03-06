@@ -61,188 +61,66 @@ export default function ShippingLabelScanner({ open, onOpenChange, orderId, orde
     reader.readAsDataURL(file);
   }, []);
 
-  // Preprocess image for better OCR: enhance contrast, convert to grayscale
-  const preprocessImage = useCallback((imageBase64) => {
-    return new Promise((resolve) => {
-      const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        
-        // Draw original
-        ctx.drawImage(img, 0, 0);
-        
-        // Get image data and enhance contrast + threshold for OCR
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageData.data;
-        
-        for (let i = 0; i < data.length; i += 4) {
-          // Convert to grayscale
-          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-          // Increase contrast
-          const contrast = 1.5;
-          const factor = (259 * (contrast * 128 + 255)) / (255 * (259 - contrast * 128));
-          const newGray = Math.min(255, Math.max(0, factor * (gray - 128) + 128));
-          // Apply threshold for cleaner text
-          const final = newGray > 140 ? 255 : 0;
-          data[i] = final;
-          data[i + 1] = final;
-          data[i + 2] = final;
-        }
-        
-        ctx.putImageData(imageData, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.src = imageBase64;
-    });
-  }, []);
-
-  // Try barcode scanning using canvas + manual detection patterns
-  const scanBarcode = useCallback(async (imageBase64) => {
-    try {
-      const barcodeReader = (await import('javascript-barcode-reader')).default;
-      // Try multiple barcode types
-      const types = ['code-128', 'code-39', 'code-2of5'];
-      for (const type of types) {
-        try {
-          const result = await barcodeReader({ image: imageBase64, barcode: type, options: { useAdaptiveThreshold: true } });
-          if (result && result.length >= 8) {
-            console.log(`Barcode found (${type}):`, result);
-            return result;
-          }
-        } catch { /* try next type */ }
-      }
-    } catch (err) {
-      console.log('Barcode scan unavailable:', err.message);
-    }
-    return null;
-  }, []);
-
-  // Try LLM-based label reading (if configured in integrations)
-  const tryLLMScan = useCallback(async (imageBase64) => {
-    try {
-      const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
-      const mimeType = imageBase64.startsWith('data:') ? imageBase64.split(';')[0].split(':')[1] : 'image/jpeg';
-      
-      const res = await fetch('/api/ocr/shipping-label', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64Data, mimeType }),
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        if (data.trackingNumber) {
-          return data;
-        }
-      }
-    } catch (err) {
-      console.log('LLM shipping scan unavailable:', err.message);
-    }
-    return null;
-  }, []);
 
   const runOCR = useCallback(async (imageBase64) => {
     setStep('scanning');
     setScanning(true);
     setScanProgress(0);
 
-    let barcodeResult = null;
     let ocrText = '';
     let extracted = { trackingNumber: null, carrier: null, confidence: 0 };
 
     try {
-      // Run barcode scan and Tesseract in parallel
-      setScanProgress(10);
-
-      // Step 1: Try barcode scanning first (fast)
-      try {
-        barcodeResult = await scanBarcode(imageBase64);
-        if (barcodeResult) {
-          console.log('Barcode result:', barcodeResult);
-          setScanMethod('barcode');
-          setScanProgress(50);
-        }
-      } catch (err) {
-        console.log('Barcode scan failed:', err);
-      }
-
-      // Step 2: Run Tesseract OCR (also try enhanced image)
-      setScanProgress(20);
+      // Step 1: Run Tesseract OCR on original image
+      setScanProgress(5);
       const Tesseract = await import('tesseract.js');
-      
-      // First try with original image
       const result = await Tesseract.recognize(imageBase64, 'eng', {
         logger: (info) => {
           if (info.status === 'recognizing text') {
-            setScanProgress(20 + Math.round((info.progress || 0) * 50));
+            setScanProgress(5 + Math.round((info.progress || 0) * 70));
           }
         },
       });
       ocrText = result.data.text || '';
-
-      // If Tesseract didn't find much, try with preprocessed image
-      if (ocrText.trim().length < 30) {
-        try {
-          const enhanced = await preprocessImage(imageBase64);
-          const result2 = await Tesseract.recognize(enhanced, 'eng');
-          if ((result2.data.text || '').length > ocrText.length) {
-            ocrText = result2.data.text;
-          }
-        } catch {}
-      }
-
       setScanProgress(80);
 
-      // Step 3: Try to extract tracking from OCR text
+      // Step 2: Extract tracking info from OCR text
       extracted = extractTrackingInfo(ocrText);
 
-      // Step 4: If barcode found a valid tracking number, prefer it
-      if (barcodeResult) {
-        const barcodeExtracted = extractTrackingInfo(barcodeResult + ' ' + ocrText);
-        if (barcodeExtracted.trackingNumber) {
-          extracted = barcodeExtracted;
-          setScanMethod('barcode');
-        } else {
-          // Use barcode result directly if it matches known tracking patterns
-          const s10Match = barcodeResult.match(/^[A-Z]{2}\d{9}[A-Z]{2}$/i);
-          if (s10Match) {
-            extracted = { trackingNumber: barcodeResult.toUpperCase(), carrier: 'indiapost', confidence: 0.95 };
-            setScanMethod('barcode');
-          } else if (/^[A-Z0-9]{8,22}$/.test(barcodeResult)) {
-            extracted = { ...extracted, trackingNumber: barcodeResult, confidence: Math.max(extracted.confidence, 0.7) };
-            setScanMethod('barcode');
-          }
-        }
-      }
-
-      // Step 5: Also scan for tracking-like patterns in raw OCR with relaxed matching
+      // Step 3: OCR error correction (O→0, l→1, etc.)
       if (!extracted.trackingNumber && ocrText) {
-        // Try to find S10-like patterns even with OCR errors (e.g., "EG56O2O5521IN" → "EG560205521IN")
-        const relaxedS10 = ocrText.replace(/[oO]/g, '0').replace(/[lI]/g, '1').replace(/[sS]/g, '5');
-        const relaxedExtracted = extractTrackingInfo(relaxedS10);
-        if (relaxedExtracted.trackingNumber && relaxedExtracted.confidence > 0.5) {
-          extracted = relaxedExtracted;
+        const corrected = ocrText
+          .replace(/(?<=[A-Z]{2})[oO]/g, '0')
+          .replace(/(?<=[A-Z]{2}\d*)[lI]/g, '1')
+          .replace(/(?<=\d)[sS](?=\d)/g, '5');
+        const correctedResult = extractTrackingInfo(corrected);
+        if (correctedResult.trackingNumber) {
+          extracted = correctedResult;
           setScanMethod('ocr-corrected');
         }
       }
 
-      // Step 6: If still no tracking number, try LLM-based scan (if configured)
+      // Step 4: Direct regex scan for S10 patterns (handles spaces in OCR)
       if (!extracted.trackingNumber) {
-        try {
-          const llmResult = await tryLLMScan(imageBase64);
-          if (llmResult?.trackingNumber) {
-            extracted = {
-              trackingNumber: llmResult.trackingNumber,
-              carrier: llmResult.carrier || extracted.carrier || 'indiapost',
-              confidence: 0.95,
-              allCandidates: llmResult.allCandidates || [],
-            };
-            setScanMethod('ai-vision');
+        const s10Regex = /\b([A-Z]{2}\s*\d[\d\s]{7,10}\d\s*[A-Z]{2})\b/gi;
+        const fullText = ocrText.replace(/\n/g, ' ');
+        let match;
+        while ((match = s10Regex.exec(fullText)) !== null) {
+          const cleaned = match[1].replace(/\s/g, '');
+          if (/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(cleaned)) {
+            extracted = { trackingNumber: cleaned, carrier: 'indiapost', confidence: 0.9 };
+            break;
           }
-        } catch {}
+        }
+      }
+
+      // Step 5: Look for long numeric AWB (13+ digits, not phone numbers)
+      if (!extracted.trackingNumber) {
+        const nums = ocrText.match(/\b\d{13,18}\b/g) || [];
+        const awbCandidates = nums.filter(n => !(n.length === 10 && /^[6-9]/.test(n)) && n.length !== 6);
+        if (awbCandidates.length > 0) {
+          extracted = { trackingNumber: awbCandidates[0], carrier: extracted.carrier || 'other', confidence: 0.6 };
+        }
       }
 
       setScanProgress(100);
@@ -260,7 +138,7 @@ export default function ShippingLabelScanner({ open, onOpenChange, orderId, orde
       setStep('verify');
       
       if (extracted.trackingNumber) {
-        toast.success(`Tracking number found${scanMethod === 'barcode' ? ' via barcode' : ''}!`);
+        toast.success('Tracking number found!');
       } else {
         toast.info('Could not auto-detect tracking number. Please enter manually.');
         setEditMode(true);
@@ -274,7 +152,7 @@ export default function ShippingLabelScanner({ open, onOpenChange, orderId, orde
     } finally {
       setScanning(false);
     }
-  }, [scanBarcode, preprocessImage, scanMethod]);
+  }, [scanMethod]);
 
   const handleConfirm = useCallback(async () => {
     if (!extractedData.trackingNumber) {
