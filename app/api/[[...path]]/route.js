@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import { calculateOrderProfit, calculateDashboardMetrics, calculateProratedOverhead, getISTDateKey } from '@/lib/profitCalculator';
-import { getSyncSettings, updateSyncSettings, initScheduler, getSchedulerStatus, acquireSyncLock, releaseSyncLock, isSyncRunning, getSyncLockStatus } from '@/lib/syncScheduler';
+import { getSyncSettings, updateSyncSettings, initScheduler, getSchedulerStatus, acquireSyncLock, releaseSyncLock, isSyncRunning, getSyncLockStatus, runSyncAll } from '@/lib/syncScheduler';
 import { shopifySyncOrdersIncremental, razorpaySyncPaymentsIncremental, logSyncEventLib } from '@/lib/syncFunctions';
 import crypto from 'crypto';
 import { calculateProgress, SETUP_CHECKLIST, DEFAULT_MODULE_SETTINGS } from '@/lib/achievements';
@@ -3948,19 +3948,6 @@ export async function POST(request) {
         if (Object.keys(updates).length > 0) {
           await db.collection('tenantConfig').updateOne({}, { $set: updates });
         }
-        
-        // If autoSync master toggle was turned OFF, disable all individual auto-syncs
-        if (body.autoSync === false) {
-          const syncUpdates = {};
-          const syncKeys = ['shopify', 'razorpay', 'metaAds', 'indiaPost', 'whatsapp'];
-          syncKeys.forEach(k => { syncUpdates[`${k}.autoSyncEnabled`] = false; });
-          await db.collection('syncSettings').updateOne(
-            { _id: 'sync-config' },
-            { $set: syncUpdates },
-            { upsert: true }
-          );
-        }
-        
         return json({ message: 'Module settings updated' });
       }
 
@@ -5207,6 +5194,16 @@ export async function POST(request) {
         // POST /api/sync-settings — Update auto-sync configuration
         const updatedSettings = await updateSyncSettings(body);
         return json(updatedSettings);
+      }
+
+      case 'sync-all': {
+        // POST /api/sync-all — Trigger incremental sync for all active integrations
+        try {
+          const results = await runSyncAll();
+          return json({ message: 'Sync All completed', results });
+        } catch (err) {
+          return json({ error: 'Sync All failed: ' + err.message }, 500);
+        }
       }
 
       case 'webhooks': {

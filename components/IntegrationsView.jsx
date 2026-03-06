@@ -167,12 +167,11 @@ function SetupGuide({ children, title = 'Setup Guide' }) {
 }
 
 // ==================== MAIN COMPONENT ====================
-export default function IntegrationsView({ moduleSettings = {} }) {
+export default function IntegrationsView() {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSecrets, setShowSecrets] = useState({});
-  const masterAutoSyncEnabled = moduleSettings?.autoSync?.enabled !== false;
 
   const [shopify, setShopify] = useState({ storeUrl: '', accessToken: '', active: false });
   const [indiaPost, setIndiaPost] = useState({
@@ -188,6 +187,7 @@ export default function IntegrationsView({ moduleSettings = {} }) {
   const [whatsapp, setWhatsapp] = useState({ phoneNumberId: '', businessAccountId: '', accessToken: '', webhookVerifyToken: '', supportNumber: '', supportEmail: '', testPhone: '', active: false });
   const [ocrSettings, setOcrSettings] = useState({ method: 'tesseract', provider: 'gemini', apiKey: '', model: '', active: false });
   const [ocrTesting, setOcrTesting] = useState(false);
+  const [syncingAll, setSyncingAll] = useState(false);
 
   const [syncing, setSyncing] = useState({});
   const [syncResults, setSyncResults] = useState({});
@@ -197,6 +197,8 @@ export default function IntegrationsView({ moduleSettings = {} }) {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyFilter, setHistoryFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('ecommerce');
+  const masterAutoSyncEnabled = syncSettings?.masterAutoSyncEnabled !== false;
+
 
   useEffect(() => {
     async function load() {
@@ -380,6 +382,90 @@ export default function IntegrationsView({ moduleSettings = {} }) {
           );
         })}
       </div>
+
+      {/* ==================== SYNC CONTROLS BAR ==================== */}
+      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardContent className="py-3 px-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-primary/10">
+                  <RefreshCw className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Auto-Sync</p>
+                  <p className="text-[10px] text-muted-foreground">Master control for all scheduled syncs</p>
+                </div>
+              </div>
+              <Switch
+                checked={masterAutoSyncEnabled}
+                onCheckedChange={(v) => {
+                  handleUpdateSyncSettings({ masterAutoSyncEnabled: v });
+                }}
+              />
+              <Badge variant={masterAutoSyncEnabled ? 'default' : 'secondary'} className="text-[10px]">
+                {masterAutoSyncEnabled ? 'Active' : 'Paused'}
+              </Badge>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Last sync info */}
+              {(() => {
+                const lastSyncs = [
+                  syncSettings?.shopify?.lastAutoSync,
+                  syncSettings?.razorpay?.lastAutoSync,
+                  syncSettings?.metaAds?.lastAutoSync,
+                  syncSettings?.indiaPost?.lastAutoSync,
+                ].filter(Boolean).map(d => new Date(d));
+                const latest = lastSyncs.length > 0 ? new Date(Math.max(...lastSyncs)) : null;
+                if (latest) {
+                  const ago = Math.round((Date.now() - latest.getTime()) / 60000);
+                  const agoText = ago < 60 ? `${ago}m ago` : `${Math.round(ago / 60)}h ago`;
+                  return <span className="text-[10px] text-muted-foreground">Last sync: {agoText}</span>;
+                }
+                return <span className="text-[10px] text-muted-foreground">No syncs yet</span>;
+              })()}
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5"
+                disabled={syncingAll || !masterAutoSyncEnabled}
+                onClick={async () => {
+                  setSyncingAll(true);
+                  try {
+                    const res = await fetch('/api/sync-all', { method: 'POST' });
+                    const data = await res.json();
+                    if (data.error) {
+                      toast.error(data.error);
+                    } else {
+                      const successes = Object.values(data.results || {}).filter(r => r.status === 'success').length;
+                      const skipped = Object.values(data.results || {}).filter(r => r.status === 'skipped').length;
+                      toast.success(`Sync All done! ${successes} synced, ${skipped} skipped`);
+                      // Refresh sync settings to update timestamps
+                      const ssRes = await fetch('/api/sync-settings');
+                      if (ssRes.ok) setSyncSettings(await ssRes.json());
+                    }
+                  } catch (err) {
+                    toast.error('Sync All failed: ' + err.message);
+                  }
+                  setSyncingAll(false);
+                }}
+              >
+                {syncingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                {syncingAll ? 'Syncing...' : 'Sync All Now'}
+              </Button>
+            </div>
+          </div>
+
+          {!masterAutoSyncEnabled && (
+            <div className="mt-2 flex items-center gap-2 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 px-3 py-1.5 rounded-md border border-amber-200 dark:border-amber-900/30">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              All scheduled auto-syncs are paused. Individual sync buttons and manual syncs still work.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Category Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
