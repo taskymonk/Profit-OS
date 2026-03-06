@@ -994,7 +994,8 @@ function parseInvoiceText(text) {
   // Extract amount — look for total/amount patterns
   let amount = 0;
   const amountPatterns = [
-    /(?:total|grand\s*total|amount\s*(?:due|payable)?|net\s*(?:total|amount)|balance\s*due)[\s:₹$]*([₹$]?\s*[\d,]+\.?\d{0,2})/gi,
+    /(?:total|grand\s*total|amount\s*(?:due|payable)?|net\s*(?:total|amount)|balance\s*due)[\s:₹$Rs.]*([₹$]?\s*[\d,]+\.?\d{0,2})/gi,
+    /(?:Rs\.?|INR|₹|\$)\s*([\d,]+\.?\d{0,2})/gi,
     /([₹$]\s*[\d,]+\.?\d{0,2})/g,
   ];
   for (const pat of amountPatterns) {
@@ -1002,7 +1003,10 @@ function parseInvoiceText(text) {
     const matches = [...fullText.matchAll(pat)];
     if (matches.length > 0) {
       // Take the last/largest match for "total" patterns
-      const vals = matches.map(m => parseFloat((m[1] || m[0]).replace(/[₹$,\s]/g, ''))).filter(v => v > 0);
+      const vals = matches.map(m => {
+        let val = (m[1] || m[0]).replace(/[₹$\s]/g, '').replace(/Rs\.?/gi, '').replace(/,/g, '');
+        return parseFloat(val);
+      }).filter(v => v > 0);
       if (vals.length > 0) {
         amount = Math.max(...vals);
         break;
@@ -1022,8 +1026,24 @@ function parseInvoiceText(text) {
     const m = pat.exec(fullText);
     if (m) {
       try {
-        const d = new Date(m[1].replace(/\./g, '/'));
-        if (!isNaN(d.getTime())) { date = d.toISOString().split('T')[0]; break; }
+        let dStr = m[1].replace(/\./g, '/');
+        // Handle DD/MM/YYYY format
+        const parts = dStr.split(/[\/\-]/);
+        if (parts.length === 3) {
+          let d;
+          if (parts[0].length === 4) {
+            d = new Date(parts[0], parts[1] - 1, parts[2]);
+          } else if (parseInt(parts[2]) > 31) {
+            // DD/MM/YYYY
+            d = new Date(parts[2], parts[1] - 1, parts[0]);
+          } else {
+            d = new Date(dStr);
+          }
+          if (!isNaN(d.getTime())) {
+            date = d.toISOString().split('T')[0];
+            break;
+          }
+        }
       } catch {}
     }
   }
@@ -1031,7 +1051,8 @@ function parseInvoiceText(text) {
   // Extract invoice number
   let invoiceNumber = null;
   const invPatterns = [
-    /(?:invoice|inv|bill|receipt|ref)[\s.#:no]*[\s:]*([A-Z0-9\-\/]{3,20})/gi,
+    /(?:invoice|inv|bill|receipt|ref)\s*(?:no|number|#|num)?[\s.:]*\s*([A-Z0-9][\w\-\/]{2,25})/gi,
+    /(?:invoice|inv)[\s\-#:]*([A-Z0-9][\w\-\/]{3,20})/gi,
   ];
   for (const pat of invPatterns) {
     pat.lastIndex = 0;
@@ -1045,7 +1066,11 @@ function parseInvoiceText(text) {
   for (const pat of vendorPatterns) {
     pat.lastIndex = 0;
     const m = pat.exec(fullText);
-    if (m) { vendor = m[1].trim(); break; }
+    if (m) {
+      // Clean vendor name - remove trailing words like "Total" that may be part of next line
+      vendor = m[1].trim().replace(/\s+(Total|Amount|Date|Invoice|Bill|Net|Grand|Balance).*$/i, '').trim();
+      break;
+    }
   }
   if (!vendor && lines.length > 0) {
     // Use first line that looks like a company name
@@ -1074,10 +1099,13 @@ function parseInvoiceText(text) {
   
   // Tax amount
   let taxAmount = 0;
-  const taxPat = /(?:gst|tax|sgst|cgst|igst|vat)[\s:₹$]*([₹$]?\s*[\d,]+\.?\d{0,2})/gi;
+  const taxPat = /(?:gst|tax|sgst|cgst|igst|vat)[\s:₹$Rs.]*([₹$]?\s*[\d,]+\.?\d{0,2})/gi;
   const taxMatches = [...fullText.matchAll(taxPat)];
   if (taxMatches.length > 0) {
-    taxAmount = taxMatches.reduce((s, m) => s + parseFloat((m[1] || '0').replace(/[₹$,\s]/g, '')), 0);
+    taxAmount = taxMatches.reduce((s, m) => {
+      let val = (m[1] || '0').replace(/[₹$\s]/g, '').replace(/Rs\.?/gi, '').replace(/,/g, '');
+      return s + parseFloat(val || 0);
+    }, 0);
   }
   
   return {
