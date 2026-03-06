@@ -7,10 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import {
   ClipboardList, Users, Package, CheckCircle2, Truck, Play,
   Clock, AlertOctagon, PlusCircle, RefreshCw, Loader2, Timer,
-  TrendingUp, BarChart3, Check, X, ChevronRight
+  TrendingUp, BarChart3, Check, X, ChevronRight, Edit, RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,6 +24,18 @@ const STATUS_COLORS = {
   in_progress: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
   packed: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+};
+
+const calcDuration = (from, to) => {
+  if (!from || !to) return null;
+  const diffMs = new Date(to) - new Date(from);
+  if (diffMs <= 0) return null;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return `${hrs}h ${remMins}m`;
 };
 
 export default function EmployeesView() {
@@ -35,6 +48,10 @@ export default function EmployeesView() {
   const [filterEmployee, setFilterEmployee] = useState('all');
   const [users, setUsers] = useState([]);
   const [respondingTo, setRespondingTo] = useState({});
+  const [overrideDialog, setOverrideDialog] = useState(null);
+  const [overrideStatus, setOverrideStatus] = useState('');
+  const [overrideEmployee, setOverrideEmployee] = useState('');
+  const [overrideSaving, setOverrideSaving] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -107,6 +124,27 @@ export default function EmployeesView() {
     try { return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
     catch { return d; }
   };
+
+  const handleOverride = useCallback(async () => {
+    if (!overrideDialog) return;
+    setOverrideSaving(true);
+    try {
+      const updates = {};
+      if (overrideStatus && overrideStatus !== overrideDialog.status) updates.status = overrideStatus;
+      if (overrideEmployee && overrideEmployee !== overrideDialog.employeeId) updates.reassignTo = overrideEmployee;
+      if (Object.keys(updates).length === 0) { toast.info('No changes to save'); setOverrideSaving(false); return; }
+      const res = await fetch(`/api/kds/override/${overrideDialog._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (data.error) toast.error(data.error);
+      else { toast.success('Assignment updated'); fetchAll(); }
+    } catch { toast.error('Failed to update'); }
+    setOverrideSaving(false);
+    setOverrideDialog(null);
+  }, [overrideDialog, overrideStatus, overrideEmployee, fetchAll]);
 
   const uniqueEmployees = [...new Map(assignments.map(a => [a.employeeId, { id: a.employeeId, name: a.employeeName }])).values()];
 
@@ -221,32 +259,55 @@ export default function EmployeesView() {
                         <tr className="border-b bg-muted/30">
                           <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Order</th>
                           <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Product</th>
-                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Variant</th>
                           <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Status</th>
                           <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Assigned</th>
                           <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Started</th>
                           <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Completed</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Packed</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Production</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left">Total</th>
+                          <th className="py-2 px-3 text-xs font-medium text-muted-foreground text-left w-10"></th>
                         </tr>
                       </thead>
                       <tbody>
                         {group.items.sort((a, b) => {
                           const order = { assigned: 0, in_progress: 1, completed: 2, packed: 3 };
                           return (order[a.status] || 9) - (order[b.status] || 9);
-                        }).map(a => (
+                        }).map(a => {
+                          const prodTime = calcDuration(a.startedAt, a.completedAt);
+                          const packTime = calcDuration(a.completedAt, a.packedAt);
+                          const totalTime = calcDuration(a.assignedAt, a.packedAt || a.completedAt);
+                          return (
                           <tr key={a._id} className="border-b last:border-0 hover:bg-muted/20">
                             <td className="py-2 px-3 font-mono text-xs">{a.order?.orderId || '-'}</td>
-                            <td className="py-2 px-3 text-xs max-w-[200px] truncate">{a.order?.productName || '-'}</td>
-                            <td className="py-2 px-3 text-xs text-primary/80">{a.order?.variantName || '-'}</td>
+                            <td className="py-2 px-3 text-xs max-w-[160px] truncate">{a.order?.productName || '-'}</td>
                             <td className="py-2 px-3">
                               <Badge className={`text-[10px] px-1.5 py-0 ${STATUS_COLORS[a.status] || ''}`}>
                                 {STATUS_LABELS[a.status] || a.status}
                               </Badge>
                             </td>
-                            <td className="py-2 px-3 text-xs text-muted-foreground">{formatDate(a.assignedAt)}</td>
-                            <td className="py-2 px-3 text-xs text-muted-foreground">{formatDate(a.startedAt)}</td>
-                            <td className="py-2 px-3 text-xs text-muted-foreground">{formatDate(a.completedAt)}</td>
+                            <td className="py-2 px-3 text-[11px] text-muted-foreground whitespace-nowrap">{formatDate(a.assignedAt)}</td>
+                            <td className="py-2 px-3 text-[11px] text-muted-foreground whitespace-nowrap">{formatDate(a.startedAt)}</td>
+                            <td className="py-2 px-3 text-[11px] text-muted-foreground whitespace-nowrap">{formatDate(a.completedAt)}</td>
+                            <td className="py-2 px-3 text-[11px] text-muted-foreground whitespace-nowrap">{formatDate(a.packedAt)}</td>
+                            <td className="py-2 px-3 text-[11px] font-medium">
+                              {prodTime ? <span className="text-emerald-600">{prodTime}</span> : <span className="text-muted-foreground">-</span>}
+                            </td>
+                            <td className="py-2 px-3 text-[11px] font-medium">
+                              {totalTime ? <span className="text-blue-600">{totalTime}</span> : <span className="text-muted-foreground">-</span>}
+                            </td>
+                            <td className="py-2 px-3">
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" title="Override" onClick={() => {
+                                setOverrideDialog(a);
+                                setOverrideStatus(a.status);
+                                setOverrideEmployee(a.employeeId);
+                              }}>
+                                <Edit className="w-3 h-3 text-muted-foreground" />
+                              </Button>
+                            </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -419,6 +480,52 @@ export default function EmployeesView() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Override Dialog */}
+      <Dialog open={!!overrideDialog} onOpenChange={v => { if (!v) setOverrideDialog(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><RotateCcw className="w-5 h-5" />Override Assignment</DialogTitle>
+            <DialogDescription>Change status or reassign order {overrideDialog?.order?.orderId || ''}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="p-3 rounded-lg bg-muted/50 text-xs space-y-1">
+              <p><strong>Order:</strong> {overrideDialog?.order?.orderId} — {overrideDialog?.order?.productName}</p>
+              <p><strong>Current Employee:</strong> {overrideDialog?.employeeName}</p>
+              <p><strong>Current Status:</strong> {STATUS_LABELS[overrideDialog?.status] || overrideDialog?.status}</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Change Status</label>
+              <Select value={overrideStatus} onValueChange={setOverrideStatus}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium">Reassign To</label>
+              <Select value={overrideEmployee} onValueChange={setOverrideEmployee}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {users.filter(u => u.role === 'employee').map(u => (
+                    <SelectItem key={u._id} value={u._id}>{u.name || u.email}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOverrideDialog(null)}>Cancel</Button>
+            <Button onClick={handleOverride} disabled={overrideSaving} className="gap-1.5">
+              {overrideSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Apply Override
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

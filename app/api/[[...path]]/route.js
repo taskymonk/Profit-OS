@@ -6,6 +6,11 @@ import { getSyncSettings, updateSyncSettings, initScheduler, getSchedulerStatus,
 import { shopifySyncOrdersIncremental, razorpaySyncPaymentsIncremental, logSyncEventLib } from '@/lib/syncFunctions';
 import crypto from 'crypto';
 import { calculateProgress, SETUP_CHECKLIST, DEFAULT_MODULE_SETTINGS } from '@/lib/achievements';
+import { ensureIndexes } from '@/lib/dbIndexes';
+
+// Initialize indexes on first request
+let _indexInit = false;
+async function initOnce() { if (!_indexInit) { _indexInit = true; ensureIndexes().catch(() => {}); } }
 
 function corsHeaders() {
   return {
@@ -2257,6 +2262,9 @@ export async function OPTIONS() {
 export async function GET(request) {
   // Lazy init the scheduler on first request
   try { await initScheduler(); } catch (e) { /* silent */ }
+  // Ensure DB indexes
+  try { await initOnce(); } catch (e) { /* silent */ }
+
 
   try {
     const segments = getSegments(request);
@@ -2358,8 +2366,29 @@ export async function GET(request) {
         return json(merged);
       }
 
+      case 'shipping-carriers': {
+        // GET /api/shipping-carriers — List custom carrier configs
+        const db = await getDb();
+        const carriers = await db.collection('shippingCarriers').find({}).sort({ name: 1 }).toArray();
+        return json(carriers);
+      }
+
       case 'users': {
         const db = await getDb();
+        if (subResource && action === 'activity') {
+          // GET /api/users/{id}/activity — User activity log
+          const activities = await db.collection('userActivity').find({ userId: subResource }).sort({ timestamp: -1 }).limit(100).toArray();
+          // Also add auto-generated activity from KDS assignments
+          const kdsActivities = await db.collection('kdsAssignments').find({ employeeId: subResource }).sort({ assignedAt: -1 }).limit(50).toArray();
+          const combined = [
+            ...activities,
+            ...kdsActivities.map(a => ({
+              action: `KDS: Order ${a.order?.orderId || a.orderId} — ${a.status}`,
+              timestamp: a.updatedAt || a.assignedAt,
+            })),
+          ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 100);
+          return json(combined);
+        }
         if (subResource && subResource !== 'me') {
           const user = await db.collection('users').findOne({ _id: subResource });
           if (!user) return json({ error: 'User not found' }, 404);
@@ -3642,6 +3671,29 @@ export async function POST(request) {
           await db.collection('tenantConfig').updateOne({}, { $set: updates });
         }
         return json({ message: 'Module settings updated' });
+      }
+
+      case 'shipping-carriers': {
+        // POST /api/shipping-carriers — Add new carrier or update existing
+        const db = await getDb();
+        const carrierId = body.id || `custom_${uuidv4().slice(0, 8)}`;
+        const carrierDoc = {
+          id: carrierId,
+          name: body.name?.trim() || 'Unknown Carrier',
+          shortName: body.shortName?.trim() || body.name?.trim() || '',
+          color: body.color || '#3b82f6',
+          trackUrlTemplate: body.trackUrlTemplate || '',
+          builtIn: false,
+          updatedAt: new Date().toISOString(),
+        };
+        if (body.id) {
+          // Update existing
+          await db.collection('shippingCarriers').updateOne({ id: body.id }, { $set: carrierDoc }, { upsert: true });
+        } else {
+          carrierDoc.createdAt = new Date().toISOString();
+          await db.collection('shippingCarriers').insertOne({ _id: carrierId, ...carrierDoc });
+        }
+        return json(carrierDoc);
       }
 
       case 'seed':
@@ -5945,6 +5997,54 @@ export async function PUT(request) {
       }
 
       case 'kds': {
+        const kdsSegs = getSegments(request);
+        const kdsSubResource = kdsSegs[1];
+        const kdsId = kdsSegs[2];
+        const kdsAction = kdsSegs[3];
+
+        if (kdsSubResource === 'override' && kdsId) {
+          // PUT /api/kds/override/{assignmentId} — Master admin override
+          const assignment = await db.collection('kdsAssignments').findOne({ _id: kdsId });
+          if (!assignment) return json({ error: 'Assignment not found' }, 404);
+          const now = new Date().toISOString();
+          const updates = { updatedAt: now };
+          const logEntries = [];
+
+          // Status override
+          if (body.status && body.status !== assignment.status) {
+            const validStatuses = ['assigned', 'in_progress', 'completed', 'packed', 'cancelled'];
+            if (!validStatuses.includes(body.status)) return json({ error: 'Invalid status' }, 400);
+            updates.status = body.status;
+            if (body.status === 'in_progress' && !assignment.startedAt) updates.startedAt = now;
+            if (body.status === 'completed') updates.completedAt = now;
+            if (body.status === 'packed') { updates.packedAt = now; if (!assignment.completedAt) updates.completedAt = now; }
+            if (body.status === 'assigned') { updates.startedAt = null; updates.completedAt = null; updates.packedAt = null; }
+            logEntries.push({ action: `Status overridden: ${assignment.status} \u2192 ${body.status}`, timestamp: now, by: 'admin_override' });
+            await db.collection('orders').updateOne({ _id: assignment.orderId }, { $set: { kdsStatus: body.status, updatedAt: now } });
+          }
+
+          // Reassignment
+          if (body.reassignTo && body.reassignTo !== assignment.employeeId) {
+            const newEmp = await db.collection('users').findOne({ _id: body.reassignTo });
+            if (!newEmp) return json({ error: 'Employee not found' }, 404);
+            updates.employeeId = body.reassignTo;
+            updates.employeeName = newEmp.name || newEmp.email;
+            logEntries.push({ action: `Reassigned: ${assignment.employeeName} \u2192 ${newEmp.name || newEmp.email}`, timestamp: now, by: 'admin_override' });
+          }
+
+          if (logEntries.length > 0) {
+            await db.collection('kdsAssignments').updateOne({ _id: kdsId }, {
+              $set: updates,
+              $push: { overrideLog: { $each: logEntries } },
+            });
+            // Log to user activity
+            for (const entry of logEntries) {
+              await db.collection('userActivity').insertOne({ userId: 'admin', action: `KDS Override on ${assignment.order?.orderId || kdsId}: ${entry.action}`, timestamp: now });
+            }
+          }
+
+          return json(await db.collection('kdsAssignments').findOne({ _id: kdsId }));
+        }
 
         if (kdsSubResource === 'assignments' && kdsId) {
           const assignment = await db.collection('kdsAssignments').findOne({ _id: kdsId });
@@ -6005,8 +6105,22 @@ export async function PUT(request) {
             { _id: id },
             { $set: { role: body.role, updatedAt: new Date().toISOString() } }
           );
+          // Log activity
+          await db.collection('userActivity').insertOne({ userId: id, action: `Role changed to ${body.role}`, timestamp: new Date().toISOString(), by: 'admin' });
           const updated = await db.collection('users').findOne({ _id: id });
           const { passwordHash, ...safeUser } = updated;
+          return json(safeUser);
+        }
+
+        if (action === 'module-access') {
+          // PUT /api/users/{id}/module-access — update per-user module access
+          await db.collection('users').updateOne(
+            { _id: id },
+            { $set: { moduleAccess: body.moduleAccess || {}, updatedAt: new Date().toISOString() } }
+          );
+          await db.collection('userActivity').insertOne({ userId: id, action: 'Module access updated', timestamp: new Date().toISOString(), by: 'admin' });
+          const updated = await db.collection('users').findOne({ _id: id });
+          const { passwordHash: _, ...safeUser } = updated;
           return json(safeUser);
         }
 
@@ -6159,6 +6273,13 @@ export async function DELETE(request) {
       );
       if (result.matchedCount === 0) return json({ error: 'API key not found' }, 404);
       return json({ message: 'API key revoked' });
+    }
+
+    // Handle shipping carrier deletion
+    if (resource === 'shipping-carriers') {
+      const db = await getDb();
+      await db.collection('shippingCarriers').deleteOne({ $or: [{ _id: id }, { id: id }] });
+      return json({ message: 'Carrier removed' });
     }
 
     const collectionMap = {

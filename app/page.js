@@ -10,7 +10,7 @@ import {
   TrendingUp, TrendingDown, AlertTriangle, DollarSign,
   Boxes, Moon, Sun, BarChart3, LogOut, UserCircle, Shield,
   ChevronDown, ClipboardList, MessageSquare, Banknote, PackageX, HardDrive, Code2,
-  Trophy, Sparkles
+  Trophy, Sparkles, UsersRound, Truck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +36,8 @@ import RTOView from '@/components/RTOView';
 import DataManagementView from '@/components/DataManagementView';
 import ApiSettingsView from '@/components/ApiSettingsView';
 import GamificationView from '@/components/GamificationView';
+import UserManagementView from '@/components/UserManagementView';
+import ShippingCarriersView from '@/components/ShippingCarriersView';
 
 // Organized nav with section groups
 const NAV_SECTIONS = [
@@ -50,6 +52,7 @@ const NAV_SECTIONS = [
     items: [
       { id: 'orders', label: 'Orders', icon: ShoppingCart, minRole: 'admin', alwaysShow: true },
       { id: 'rto', label: 'Returns & RTO', icon: PackageX, minRole: 'admin', toggleKey: 'rto' },
+      { id: 'shipping', label: 'Shipping', icon: Truck, minRole: 'admin', alwaysShow: true },
     ],
   },
   {
@@ -84,6 +87,7 @@ const NAV_SECTIONS = [
     label: 'System',
     items: [
       { id: 'gamification', label: 'Achievements', icon: Trophy, minRole: 'admin', alwaysShow: true },
+      { id: 'user-management', label: 'Users', icon: UsersRound, minRole: 'master_admin', alwaysShow: true },
       { id: 'integrations', label: 'Integrations', icon: Plug, minRole: 'master_admin', alwaysShow: true },
       { id: 'data-management', label: 'Data Management', icon: HardDrive, minRole: 'master_admin', alwaysShow: true },
       { id: 'api-settings', label: 'API', icon: Code2, minRole: 'master_admin', alwaysShow: true },
@@ -312,6 +316,8 @@ export default function App() {
       case 'data-management': return <DataManagementView />;
       case 'api-settings': return <ApiSettingsView />;
       case 'gamification': return <GamificationView onNavigate={(view) => setActiveView(view)} />;
+      case 'user-management': return <UserManagementView moduleSettings={moduleSettings} />;
+      case 'shipping': return <ShippingCarriersView />;
       case 'settings': return <SettingsView moduleSettings={moduleSettings} onModuleSettingsChange={async (updates) => {
         try {
           await fetch('/api/module-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });

@@ -56,7 +56,19 @@
 ##   test_all: false
 ##   test_priority: "high_first"  # or "sequential" or "stuck_first"
 ##
-## agent_communication:
+##   - task: "Phase 7 - Pre-Phase fixes and housekeeping"
+    implemented: true
+    working: false
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: false
+          agent: "testing"
+          comment: "BACKEND TESTED - Phase 7 Pre-Phase fixes mostly functional but with critical issues. SUCCESS (14/17 tests = 82.4%): ✅ Shipping Carriers CRUD fully working (GET returns array, POST creates carriers, DELETE removes), ✅ User Management partially working (GET /api/users returns 3 users, module access updates work), ✅ KDS Assignments GET working (found 12 assignments), ✅ Security Headers all present (X-Frame-Options: SAMEORIGIN, X-Content-Type-Options: nosniff, X-App-Version: 3.1.0), ✅ Regression checks pass (Gamification XP=1575/Champion, Module settings=7, API v1 orders working). CRITICAL ISSUES (3 failed tests): ❌ User Activity GET (/api/users/{userId}/activity) returns 500 error, ❌ KDS Override PUT (/api/kds/override/{assignmentId}) returns 500 error with 'db is not defined', ❌ KDS Override operations failing due to database connection bug in second 'case kds:' block around line 5999-6007 where db variable not initialized before use."
+
+agent_communication:
 ##     -agent: "main"  # or "testing" or "user"
 ##     -message: "Communication message between agents"
 
@@ -579,6 +591,18 @@ test_plan:
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+  - task: "Phase 7 - Pre-Phase fixes and housekeeping"
+    implemented: true
+    working: false
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: false
+          agent: "testing"
+          comment: "BACKEND TESTED - Phase 7 Pre-Phase fixes mostly functional but with critical issues. SUCCESS (14/17 tests = 82.4%): ✅ Shipping Carriers CRUD fully working (GET returns array, POST creates carriers, DELETE removes), ✅ User Management partially working (GET /api/users returns 3 users, module access updates work), ✅ KDS Assignments GET working (found 12 assignments), ✅ Security Headers all present (X-Frame-Options: SAMEORIGIN, X-Content-Type-Options: nosniff, X-App-Version: 3.1.0), ✅ Regression checks pass (Gamification XP=1575/Champion, Module settings=7, API v1 orders working). CRITICAL ISSUES (3 failed tests): ❌ User Activity GET (/api/users/{userId}/activity) returns 500 error, ❌ KDS Override PUT (/api/kds/override/{assignmentId}) returns 500 error with 'db is not defined', ❌ KDS Override operations failing due to database connection bug in second 'case kds:' block around line 5999-6007 where db variable not initialized before use."
 
 agent_communication:
     - agent: "main"
@@ -1501,6 +1525,18 @@ test_plan:
   test_all: false
   test_priority: "high_first"
 
+  - task: "Phase 7 - Pre-Phase fixes and housekeeping"
+    implemented: true
+    working: false
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: false
+          agent: "testing"
+          comment: "BACKEND TESTED - Phase 7 Pre-Phase fixes mostly functional but with critical issues. SUCCESS (14/17 tests = 82.4%): ✅ Shipping Carriers CRUD fully working (GET returns array, POST creates carriers, DELETE removes), ✅ User Management partially working (GET /api/users returns 3 users, module access updates work), ✅ KDS Assignments GET working (found 12 assignments), ✅ Security Headers all present (X-Frame-Options: SAMEORIGIN, X-Content-Type-Options: nosniff, X-App-Version: 3.1.0), ✅ Regression checks pass (Gamification XP=1575/Champion, Module settings=7, API v1 orders working). CRITICAL ISSUES (3 failed tests): ❌ User Activity GET (/api/users/{userId}/activity) returns 500 error, ❌ KDS Override PUT (/api/kds/override/{assignmentId}) returns 500 error with 'db is not defined', ❌ KDS Override operations failing due to database connection bug in second 'case kds:' block around line 5999-6007 where db variable not initialized before use."
+
 agent_communication:
     - agent: "testing"
       message: "🎉 PHASE 9 - RAZORPAY INTEGRATION BACKEND TESTING COMPLETE - ALL 6 FEATURES TESTED SUCCESSFULLY!
@@ -1621,6 +1657,18 @@ test_plan:
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+  - task: "Phase 7 - Pre-Phase fixes and housekeeping"
+    implemented: true
+    working: false
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: false
+          agent: "testing"
+          comment: "BACKEND TESTED - Phase 7 Pre-Phase fixes mostly functional but with critical issues. SUCCESS (14/17 tests = 82.4%): ✅ Shipping Carriers CRUD fully working (GET returns array, POST creates carriers, DELETE removes), ✅ User Management partially working (GET /api/users returns 3 users, module access updates work), ✅ KDS Assignments GET working (found 12 assignments), ✅ Security Headers all present (X-Frame-Options: SAMEORIGIN, X-Content-Type-Options: nosniff, X-App-Version: 3.1.0), ✅ Regression checks pass (Gamification XP=1575/Champion, Module settings=7, API v1 orders working). CRITICAL ISSUES (3 failed tests): ❌ User Activity GET (/api/users/{userId}/activity) returns 500 error, ❌ KDS Override PUT (/api/kds/override/{assignmentId}) returns 500 error with 'db is not defined', ❌ KDS Override operations failing due to database connection bug in second 'case kds:' block around line 5999-6007 where db variable not initialized before use."
 
 agent_communication:
     - agent: "main"
@@ -4269,6 +4317,18 @@ Focus on Orders page drawer/sheet functionality as primary blocker for profit br
           agent: "testing"
           comment: "✅ TESTED - Import API fully functional. ALL 4 IMPORT TESTS PASSED: (1) Import Preview: valid=true, SKU recipes preview shows 819 import/819 existing/819 duplicates/0 new ✓, (2) Import Skip Strategy: success=true with 0 inserted, 819 skipped (proper duplicate handling) ✓, (3) Import New Data: successfully inserted 2 new test records with modified IDs ✓, (4) Verify Counts: recipes count increased from 819 to 821 after import ✓. Import system handles conflicts correctly and provides comprehensive feedback on import results."
 
+  - task: "Phase 7 - Pre-Phase fixes and housekeeping"
+    implemented: true
+    working: false
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: false
+          agent: "testing"
+          comment: "BACKEND TESTED - Phase 7 Pre-Phase fixes mostly functional but with critical issues. SUCCESS (14/17 tests = 82.4%): ✅ Shipping Carriers CRUD fully working (GET returns array, POST creates carriers, DELETE removes), ✅ User Management partially working (GET /api/users returns 3 users, module access updates work), ✅ KDS Assignments GET working (found 12 assignments), ✅ Security Headers all present (X-Frame-Options: SAMEORIGIN, X-Content-Type-Options: nosniff, X-App-Version: 3.1.0), ✅ Regression checks pass (Gamification XP=1575/Champion, Module settings=7, API v1 orders working). CRITICAL ISSUES (3 failed tests): ❌ User Activity GET (/api/users/{userId}/activity) returns 500 error, ❌ KDS Override PUT (/api/kds/override/{assignmentId}) returns 500 error with 'db is not defined', ❌ KDS Override operations failing due to database connection bug in second 'case kds:' block around line 5999-6007 where db variable not initialized before use."
+
 agent_communication:
     - agent: "main"
       message: "Phase 6.2 Import/Export fully implemented. Please test:
@@ -4409,6 +4469,18 @@ agent_communication:
         - working: true
           agent: "main"
           comment: "Full RTO module with 3 tabs: Return Intake (OCR scan + AWB match), Pipeline (status filtering + action buttons), Dashboard (financial impact + trends)."
+
+  - task: "Phase 7 - Pre-Phase fixes and housekeeping"
+    implemented: true
+    working: false
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: false
+          agent: "testing"
+          comment: "BACKEND TESTED - Phase 7 Pre-Phase fixes mostly functional but with critical issues. SUCCESS (14/17 tests = 82.4%): ✅ Shipping Carriers CRUD fully working (GET returns array, POST creates carriers, DELETE removes), ✅ User Management partially working (GET /api/users returns 3 users, module access updates work), ✅ KDS Assignments GET working (found 12 assignments), ✅ Security Headers all present (X-Frame-Options: SAMEORIGIN, X-Content-Type-Options: nosniff, X-App-Version: 3.1.0), ✅ Regression checks pass (Gamification XP=1575/Champion, Module settings=7, API v1 orders working). CRITICAL ISSUES (3 failed tests): ❌ User Activity GET (/api/users/{userId}/activity) returns 500 error, ❌ KDS Override PUT (/api/kds/override/{assignmentId}) returns 500 error with 'db is not defined', ❌ KDS Override operations failing due to database connection bug in second 'case kds:' block around line 5999-6007 where db variable not initialized before use."
 
 agent_communication:
     - agent: "main"
@@ -4638,19 +4710,61 @@ agent_communication:
     file: "components/ApiSettingsView.jsx"
     stuck_count: 0
     priority: "medium"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         - working: true
           agent: "main"
           comment: "New API page in sidebar with 3 tabs: API Keys (create/revoke/view), Documentation (embedded Swagger UI), Code Examples (cURL, JS, Python, Node.js snippets). Quick stats cards showing active keys, total requests, endpoint count."
 
 test_plan:
-  current_focus: ["Phase 6.5 - Gamification", "Phase 6.5 - Module Toggles"]
-  stuck_tasks: []
+  current_focus: []
+  stuck_tasks: ["User Activity API", "KDS Override API"]
   test_all: false
   test_priority: "high_first"
 
+  - task: "Phase 7 - Pre-Phase fixes and housekeeping"
+    implemented: true
+    working: false
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: false
+          agent: "testing"
+          comment: "BACKEND TESTED - Phase 7 Pre-Phase fixes mostly functional but with critical issues. SUCCESS (14/17 tests = 82.4%): ✅ Shipping Carriers CRUD fully working (GET returns array, POST creates carriers, DELETE removes), ✅ User Management partially working (GET /api/users returns 3 users, module access updates work), ✅ KDS Assignments GET working (found 12 assignments), ✅ Security Headers all present (X-Frame-Options: SAMEORIGIN, X-Content-Type-Options: nosniff, X-App-Version: 3.1.0), ✅ Regression checks pass (Gamification XP=1575/Champion, Module settings=7, API v1 orders working). CRITICAL ISSUES (3 failed tests): ❌ User Activity GET (/api/users/{userId}/activity) returns 500 error, ❌ KDS Override PUT (/api/kds/override/{assignmentId}) returns 500 error with 'db is not defined', ❌ KDS Override operations failing due to database connection bug in second 'case kds:' block around line 5999-6007 where db variable not initialized before use."
+
 agent_communication:
+    - agent: "main"
+      message: "Phase 7 (Pre-Phase fixes + Housekeeping) has been implemented. Please test:
+      
+      **Shipping Carriers API:**
+      1. GET /api/shipping-carriers - Should return array (may be empty if no custom carriers yet)
+      2. POST /api/shipping-carriers with body {\"name\": \"Test Carrier\", \"shortName\": \"TestC\", \"color\": \"#ff0000\", \"trackUrlTemplate\": \"https://test.com/track?id={tracking}\"} - Should create carrier
+      3. GET /api/shipping-carriers - Should show the new carrier
+      4. DELETE /api/shipping-carriers/{id} - Should delete it
+      
+      **User Management:**
+      5. GET /api/users - Should return users list (3 users expected)
+      6. GET /api/users/{userId}/activity - Should return activity log array
+      7. PUT /api/users/{userId}/module-access with body {\"moduleAccess\": {\"kds\": false}} - Should update module access
+      8. PUT /api/users/{userId}/role with body {\"role\": \"employee\"} - Should change role
+      
+      **KDS Override:**
+      9. First GET /api/kds/assignments to find an assignment ID
+      10. PUT /api/kds/override/{assignmentId} with body {\"status\": \"in_progress\"} - Should override status
+      
+      **Security Headers:**
+      11. Any GET request - Check for X-Frame-Options, X-Content-Type-Options, X-App-Version headers
+      
+      **MongoDB Indexes:**
+      12. GET /api/module-settings (triggers index creation) - Verify no errors
+      
+      **Regression:**
+      13. GET /api/gamification/progress - Should still work (XP >= 1000)
+      14. GET /api/v1/orders?limit=1 with X-API-Key: pos_test_api_key_for_testing_12345 - Should work
+      
+      Base URL: http://localhost:3000"
     - agent: "main"
       message: "Phase 6.5 Gamification & Module Toggle has been implemented. Please test:
       
