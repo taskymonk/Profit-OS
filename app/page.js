@@ -190,12 +190,15 @@ export default function App() {
     });
   }, []);
 
-  // Set default view based on role when session loads
+  // Set default view based on role when session loads, restore from localStorage if available
   const [initialViewSet, setInitialViewSet] = useState(false);
   useEffect(() => {
     if (status === 'authenticated' && !initialViewSet) {
       const role = session?.user?.role || 'employee';
-      if (role === 'employee') {
+      const savedView = typeof window !== 'undefined' ? localStorage.getItem('profitos_activeView') : null;
+      if (savedView) {
+        setActiveView(savedView);
+      } else if (role === 'employee') {
         setActiveView('kds');
       } else {
         setActiveView('dashboard');
@@ -203,6 +206,13 @@ export default function App() {
       setInitialViewSet(true);
     }
   }, [status, session, initialViewSet]);
+
+  // Persist activeView to localStorage on change
+  useEffect(() => {
+    if (initialViewSet && typeof window !== 'undefined') {
+      localStorage.setItem('profitos_activeView', activeView);
+    }
+  }, [activeView, initialViewSet]);
 
   // Ensure active view is accessible by current role
   useEffect(() => {
