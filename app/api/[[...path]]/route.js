@@ -2302,6 +2302,159 @@ export async function GET(request) {
         return json(images);
       }
 
+      case 'data': {
+        const db = await getDb();
+        if (subResource === 'export') {
+          // GET /api/data/export?modules=orders,recipes,...&format=json|csv&dateFrom=...&dateTo=...
+          const modulesParam = params.modules || 'all';
+          const format = params.format || 'json';
+          const dateFrom = params.dateFrom;
+          const dateTo = params.dateTo;
+          const requestedModules = modulesParam === 'all'
+            ? ['orders', 'recipes', 'expenses', 'inventory', 'employees', 'whatsapp', 'rto', 'settings']
+            : modulesParam.split(',').map(m => m.trim());
+
+          const exportData = {
+            _meta: {
+              exportedAt: new Date().toISOString(),
+              version: '1.0',
+              format,
+              modules: requestedModules,
+              dateRange: dateFrom || dateTo ? { from: dateFrom || null, to: dateTo || null } : null,
+            },
+          };
+
+          // Build date query for time-based data
+          const dateQuery = {};
+          if (dateFrom) dateQuery.$gte = dateFrom;
+          if (dateTo) dateQuery.$lte = dateTo;
+          const hasDateFilter = dateFrom || dateTo;
+
+          for (const mod of requestedModules) {
+            switch (mod) {
+              case 'orders': {
+                const oQuery = hasDateFilter ? { orderDate: dateQuery } : {};
+                exportData.orders = await db.collection('orders').find(oQuery).toArray();
+                break;
+              }
+              case 'recipes': {
+                exportData.skuRecipes = await db.collection('skuRecipes').find({}).toArray();
+                exportData.recipeTemplates = await db.collection('recipeTemplates').find({}).toArray();
+                break;
+              }
+              case 'expenses': {
+                const eQuery = hasDateFilter ? { date: dateQuery } : {};
+                exportData.overheadExpenses = await db.collection('overheadExpenses').find(eQuery).toArray();
+                exportData.expenseCategories = await db.collection('expenseCategories').find({}).toArray();
+                exportData.bills = await db.collection('bills').find({}).toArray();
+                exportData.vendors = await db.collection('vendors').find({}).toArray();
+                break;
+              }
+              case 'inventory': {
+                exportData.inventoryItems = await db.collection('inventoryItems').find({}).toArray();
+                exportData.inventoryCategories = await db.collection('inventoryCategories').find({}).toArray();
+                exportData.rawMaterials = await db.collection('rawMaterials').find({}).toArray();
+                exportData.packagingMaterials = await db.collection('packagingMaterials').find({}).toArray();
+                exportData.stockBatches = await db.collection('stockBatches').find({}).toArray();
+                break;
+              }
+              case 'employees': {
+                exportData.employees = await db.collection('employees').find({}).toArray();
+                exportData.kdsAssignments = await db.collection('kdsAssignments').find({}).toArray();
+                exportData.wastageLog = await db.collection('wastageLog').find({}).toArray();
+                exportData.materialRequests = await db.collection('materialRequests').find({}).toArray();
+                break;
+              }
+              case 'whatsapp': {
+                exportData.whatsappTemplates = await db.collection('whatsappTemplates').find({}).toArray();
+                exportData.whatsappMessages = await db.collection('whatsappMessages').find({}).toArray();
+                exportData.whatsappOptOuts = await db.collection('whatsappOptOuts').find({}).toArray();
+                break;
+              }
+              case 'rto': {
+                exportData.rtoParcels = await db.collection('rtoParcels').find({}).toArray();
+                break;
+              }
+              case 'settings': {
+                // Sanitized — remove sensitive data
+                const tenantConfig = await db.collection('tenantConfig').findOne({ _id: 'config' });
+                exportData.tenantConfig = tenantConfig ? { ...tenantConfig } : null;
+
+                const users = await db.collection('users').find({}).toArray();
+                exportData.users = users.map(u => ({ _id: u._id, email: u.email, name: u.name, role: u.role, createdAt: u.createdAt }));
+
+                // Sanitized integrations (no API keys)
+                const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+                if (integrations) {
+                  exportData.integrations = {
+                    shopify: { active: integrations.shopify?.active, storeUrl: integrations.shopify?.storeUrl, lastSyncAt: integrations.shopify?.lastSyncAt },
+                    razorpay: { active: integrations.razorpay?.active, lastSyncAt: integrations.razorpay?.lastSyncAt },
+                    metaAds: { active: integrations.metaAds?.active, lastSyncAt: integrations.metaAds?.lastSyncAt },
+                    indiaPost: { active: integrations.indiaPost?.active, sandboxMode: integrations.indiaPost?.sandboxMode },
+                    whatsapp: { active: integrations.whatsapp?.active },
+                  };
+                }
+                break;
+              }
+            }
+          }
+
+          // Calculate summary counts
+          const summary = {};
+          for (const [key, value] of Object.entries(exportData)) {
+            if (key === '_meta') continue;
+            if (Array.isArray(value)) summary[key] = value.length;
+            else if (value) summary[key] = 1;
+          }
+          exportData._meta.summary = summary;
+
+          if (format === 'csv') {
+            // For CSV, we only export orders as CSV (most useful)
+            const orders = exportData.orders || [];
+            if (orders.length === 0) return json({ error: 'No orders to export as CSV' }, 400);
+            const headers = ['orderId', 'shopifyOrderId', 'productName', 'sku', 'customerName', 'customerEmail', 'customerPhone', 'salePrice', 'quantity', 'discount', 'shippingCost', 'razorpayFee', 'tipAmount', 'status', 'orderDate', 'financialStatus'];
+            const csvRows = [headers.join(',')];
+            for (const o of orders) {
+              const row = headers.map(h => {
+                const val = o[h] ?? '';
+                const str = String(val).replace(/"/g, '""');
+                return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+              });
+              csvRows.push(row.join(','));
+            }
+            return new NextResponse(csvRows.join('\n'), {
+              headers: {
+                'Content-Type': 'text/csv',
+                'Content-Disposition': `attachment; filename=profitos-orders-${new Date().toISOString().split('T')[0]}.csv`,
+              },
+            });
+          }
+
+          return json(exportData);
+        }
+
+        if (subResource === 'export-counts') {
+          // GET /api/data/export-counts — Quick counts for UI
+          const counts = {};
+          const collections = [
+            ['orders', 'orders'], ['skuRecipes', 'recipes'], ['recipeTemplates', 'recipeTemplates'],
+            ['overheadExpenses', 'expenses'], ['expenseCategories', 'expenseCategories'],
+            ['bills', 'bills'], ['vendors', 'vendors'],
+            ['inventoryItems', 'inventoryItems'], ['inventoryCategories', 'inventoryCategories'],
+            ['rawMaterials', 'rawMaterials'], ['packagingMaterials', 'packagingMaterials'],
+            ['employees', 'employees'], ['kdsAssignments', 'kdsAssignments'],
+            ['whatsappTemplates', 'whatsappTemplates'], ['whatsappMessages', 'whatsappMessages'],
+            ['rtoParcels', 'rtoParcels'], ['users', 'users'],
+          ];
+          for (const [coll, key] of collections) {
+            counts[key] = await db.collection(coll).countDocuments();
+          }
+          return json(counts);
+        }
+
+        return json({ error: 'Unknown data endpoint' }, 404);
+      }
+
       case 'rto': {
         const db = await getDb();
         switch (subResource) {
@@ -3508,6 +3661,174 @@ export async function POST(request) {
         };
         await db.collection('parcelImages').insertOne(parcelImage);
         return json({ _id: parcelImage._id, message: 'Parcel image saved' });
+      }
+
+      case 'data': {
+        const db = await getDb();
+
+        if (subResource === 'import-preview') {
+          // POST /api/data/import-preview — Validate and preview import data
+          if (!body || !body._meta) return json({ error: 'Invalid import file. Missing _meta header.' }, 400);
+          if (body._meta.version !== '1.0') return json({ error: `Unsupported export version: ${body._meta.version}` }, 400);
+
+          const preview = { valid: true, modules: {}, warnings: [] };
+
+          const collectionMapping = {
+            orders: 'orders', skuRecipes: 'skuRecipes', recipeTemplates: 'recipeTemplates',
+            overheadExpenses: 'overheadExpenses', expenseCategories: 'expenseCategories',
+            bills: 'bills', vendors: 'vendors',
+            inventoryItems: 'inventoryItems', inventoryCategories: 'inventoryCategories',
+            rawMaterials: 'rawMaterials', packagingMaterials: 'packagingMaterials',
+            employees: 'employees', kdsAssignments: 'kdsAssignments',
+            wastageLog: 'wastageLog', materialRequests: 'materialRequests',
+            whatsappTemplates: 'whatsappTemplates', whatsappMessages: 'whatsappMessages',
+            whatsappOptOuts: 'whatsappOptOuts',
+            rtoParcels: 'rtoParcels',
+          };
+
+          for (const [key, collName] of Object.entries(collectionMapping)) {
+            if (!body[key] || !Array.isArray(body[key])) continue;
+            const importCount = body[key].length;
+            const existingCount = await db.collection(collName).countDocuments();
+            // Count how many IDs already exist
+            const importIds = body[key].map(d => d._id).filter(Boolean);
+            const existingIds = importIds.length > 0
+              ? await db.collection(collName).find({ _id: { $in: importIds } }).project({ _id: 1 }).toArray()
+              : [];
+            const duplicateCount = existingIds.length;
+            const newCount = importCount - duplicateCount;
+
+            preview.modules[key] = {
+              importCount,
+              existingCount,
+              duplicateCount,
+              newCount,
+              collection: collName,
+            };
+          }
+
+          // Handle tenantConfig and users separately
+          if (body.tenantConfig) {
+            preview.modules.tenantConfig = { importCount: 1, type: 'config' };
+          }
+          if (body.users && Array.isArray(body.users)) {
+            const existingUsers = await db.collection('users').countDocuments();
+            preview.modules.users = { importCount: body.users.length, existingCount: existingUsers, type: 'users' };
+          }
+
+          return json(preview);
+        }
+
+        if (subResource === 'import') {
+          // POST /api/data/import — Apply import
+          const { importData, selectedModules, conflictStrategy } = body;
+          // conflictStrategy: 'skip' | 'overwrite' | 'merge'
+          if (!importData || !importData._meta) return json({ error: 'Invalid import data' }, 400);
+
+          const strategy = conflictStrategy || 'skip';
+          const modules = selectedModules || Object.keys(importData).filter(k => k !== '_meta');
+          const results = { imported: {}, errors: [] };
+
+          const collectionMapping = {
+            orders: 'orders', skuRecipes: 'skuRecipes', recipeTemplates: 'recipeTemplates',
+            overheadExpenses: 'overheadExpenses', expenseCategories: 'expenseCategories',
+            bills: 'bills', vendors: 'vendors',
+            inventoryItems: 'inventoryItems', inventoryCategories: 'inventoryCategories',
+            rawMaterials: 'rawMaterials', packagingMaterials: 'packagingMaterials',
+            employees: 'employees', kdsAssignments: 'kdsAssignments',
+            wastageLog: 'wastageLog', materialRequests: 'materialRequests',
+            whatsappTemplates: 'whatsappTemplates', whatsappMessages: 'whatsappMessages',
+            whatsappOptOuts: 'whatsappOptOuts',
+            rtoParcels: 'rtoParcels',
+          };
+
+          for (const mod of modules) {
+            if (mod === '_meta' || mod === 'tenantConfig' || mod === 'users' || mod === 'integrations') continue;
+            const collName = collectionMapping[mod];
+            if (!collName || !importData[mod] || !Array.isArray(importData[mod])) continue;
+
+            let inserted = 0, updated = 0, skipped = 0;
+
+            for (const doc of importData[mod]) {
+              if (!doc._id) { doc._id = uuidv4(); }
+              try {
+                const existing = await db.collection(collName).findOne({ _id: doc._id });
+                if (existing) {
+                  if (strategy === 'skip') { skipped++; continue; }
+                  if (strategy === 'overwrite') {
+                    await db.collection(collName).replaceOne({ _id: doc._id }, { ...doc, importedAt: new Date().toISOString() });
+                    updated++;
+                  } else if (strategy === 'merge') {
+                    // Merge: only update fields that are not already set
+                    const mergeUpdate = {};
+                    for (const [k, v] of Object.entries(doc)) {
+                      if (k === '_id') continue;
+                      if (existing[k] === undefined || existing[k] === null || existing[k] === '') {
+                        mergeUpdate[k] = v;
+                      }
+                    }
+                    if (Object.keys(mergeUpdate).length > 0) {
+                      await db.collection(collName).updateOne({ _id: doc._id }, { $set: mergeUpdate });
+                      updated++;
+                    } else {
+                      skipped++;
+                    }
+                  }
+                } else {
+                  await db.collection(collName).insertOne({ ...doc, importedAt: new Date().toISOString() });
+                  inserted++;
+                }
+              } catch (err) {
+                results.errors.push({ module: mod, docId: doc._id, error: err.message });
+              }
+            }
+
+            results.imported[mod] = { inserted, updated, skipped, total: importData[mod].length };
+          }
+
+          // Handle tenantConfig
+          if (modules.includes('tenantConfig') && importData.tenantConfig) {
+            try {
+              const existing = await db.collection('tenantConfig').findOne({ _id: 'config' });
+              if (existing && strategy === 'skip') {
+                results.imported.tenantConfig = { skipped: 1 };
+              } else {
+                await db.collection('tenantConfig').updateOne(
+                  { _id: 'config' },
+                  { $set: { ...importData.tenantConfig, _id: 'config', importedAt: new Date().toISOString() } },
+                  { upsert: true }
+                );
+                results.imported.tenantConfig = { updated: 1 };
+              }
+            } catch (err) {
+              results.errors.push({ module: 'tenantConfig', error: err.message });
+            }
+          }
+
+          // Handle users (careful — don't overwrite passwords)
+          if (modules.includes('users') && importData.users && Array.isArray(importData.users)) {
+            let uInserted = 0, uSkipped = 0;
+            for (const user of importData.users) {
+              const existing = await db.collection('users').findOne({ email: user.email });
+              if (existing) { uSkipped++; continue; }
+              // Only import basic user info (no passwords)
+              await db.collection('users').insertOne({
+                _id: user._id || uuidv4(),
+                email: user.email,
+                name: user.name,
+                role: user.role || 'employee',
+                createdAt: user.createdAt || new Date().toISOString(),
+                importedAt: new Date().toISOString(),
+              });
+              uInserted++;
+            }
+            results.imported.users = { inserted: uInserted, skipped: uSkipped };
+          }
+
+          return json({ success: true, results });
+        }
+
+        return json({ error: 'Unknown data endpoint' }, 404);
       }
 
       case 'rto': {

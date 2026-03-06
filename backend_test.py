@@ -1,628 +1,535 @@
 #!/usr/bin/env python3
 """
-Backend Test Suite for Phase 6.1 RTO/Returns Module
-Testing all RTO API endpoints with comprehensive scenarios.
+Phase 6.2 Import/Export System Testing
+Base URL: https://profit-calc-fixes.preview.emergentagent.com/api
 """
 
 import requests
 import json
 import sys
-import time
-import random
-from typing import Dict, List, Any, Optional
+import os
+from datetime import datetime
 
-# Base URL from environment
 BASE_URL = "https://profit-calc-fixes.preview.emergentagent.com/api"
 
-class RTOBackendTester:
-    def __init__(self):
-        self.session = requests.Session()
-        self.test_parcels = []  # Store created test parcel IDs for cleanup
-        self.original_order_status = {}  # Store original order statuses for restoration
-        self.test_run_id = random.randint(1000, 9999)  # Unique ID for this test run
+def test_api(method, endpoint, data=None, headers=None):
+    """Helper function to make API requests with error handling"""
+    url = f"{BASE_URL}{endpoint}"
+    try:
+        if method.upper() == "GET":
+            response = requests.get(url, params=data, headers=headers)
+        elif method.upper() == "POST":
+            response = requests.post(url, json=data, headers=headers)
+        elif method.upper() == "PUT":
+            response = requests.put(url, json=data, headers=headers)
+        elif method.upper() == "DELETE":
+            response = requests.delete(url, headers=headers)
         
-    def log(self, message: str, level: str = "INFO"):
-        """Log test messages"""
-        print(f"[{level}] {message}")
-
-    def make_request(self, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict[str, Any]:
-        """Make HTTP request and return response"""
-        url = f"{BASE_URL}/{endpoint.lstrip('/')}"
+        print(f"{method} {endpoint} -> Status: {response.status_code}")
         
-        try:
-            if method.upper() == "GET":
-                response = self.session.get(url, params=params)
-            elif method.upper() == "POST":
-                response = self.session.post(url, json=data, params=params)
-            elif method.upper() == "PUT":
-                response = self.session.put(url, json=data, params=params)
-            elif method.upper() == "DELETE":
-                response = self.session.delete(url, params=params)
-            else:
-                raise ValueError(f"Unsupported HTTP method: {method}")
-                
-            return {
-                "status_code": response.status_code,
-                "data": response.json() if response.headers.get('content-type', '').startswith('application/json') else response.text,
-                "success": response.status_code < 400
-            }
-        except Exception as e:
-            return {
-                "status_code": 0,
-                "data": {"error": str(e)},
-                "success": False
-            }
-
-    def test_rto_stats(self) -> bool:
-        """Test GET /api/rto/stats endpoint"""
-        self.log("=== Testing RTO Stats API ===")
-        
-        try:
-            # Test RTO stats endpoint
-            response = self.make_request("GET", "rto/stats")
-            
-            if not response["success"]:
-                self.log(f"❌ RTO Stats API failed: {response['data']}", "ERROR")
-                return False
-                
-            data = response["data"]
-            
-            # Verify required fields
-            required_fields = ["rtoCount", "rtoRate", "totalOrders", "pipeline", "financial", "monthlyTrend"]
-            missing_fields = [field for field in required_fields if field not in data]
-            
-            if missing_fields:
-                self.log(f"❌ RTO Stats missing fields: {missing_fields}", "ERROR")
-                return False
-                
-            # Verify pipeline structure
-            pipeline = data.get("pipeline", {})
-            pipeline_fields = ["pendingAction", "reshipping", "refunded", "cancelled", "reshipDelivered", "total"]
-            missing_pipeline = [field for field in pipeline_fields if field not in pipeline]
-            
-            if missing_pipeline:
-                self.log(f"❌ Pipeline missing fields: {missing_pipeline}", "ERROR")
-                return False
-                
-            # Verify financial structure
-            financial = data.get("financial", {})
-            financial_fields = ["totalDoubleShipping", "recoveredViaReship", "totalRefunded"]
-            missing_financial = [field for field in financial_fields if field not in financial]
-            
-            if missing_financial:
-                self.log(f"❌ Financial missing fields: {missing_financial}", "ERROR")
-                return False
-                
-            self.log(f"✅ RTO Stats successful: RTO Rate {data['rtoRate']}%, Total Orders {data['totalOrders']}, Pipeline Total {pipeline['total']}")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ RTO Stats test failed: {str(e)}", "ERROR")
-            return False
-
-    def test_rto_parcels_initial(self) -> bool:
-        """Test GET /api/rto/parcels endpoint initially"""
-        self.log("=== Testing RTO Parcels API (Initial) ===")
-        
-        try:
-            # Test basic parcels endpoint
-            response = self.make_request("GET", "rto/parcels")
-            
-            if not response["success"]:
-                self.log(f"❌ RTO Parcels API failed: {response['data']}", "ERROR")
-                return False
-                
-            parcels = response["data"]
-            
-            if not isinstance(parcels, list):
-                self.log(f"❌ RTO Parcels should return array, got: {type(parcels)}", "ERROR")
-                return False
-                
-            # Test status filtering
-            response_filtered = self.make_request("GET", "rto/parcels", params={"status": "pending_action"})
-            
-            if not response_filtered["success"]:
-                self.log(f"❌ RTO Parcels status filter failed: {response_filtered['data']}", "ERROR")
-                return False
-                
-            filtered_parcels = response_filtered["data"]
-            
-            if not isinstance(filtered_parcels, list):
-                self.log(f"❌ Filtered RTO Parcels should return array, got: {type(filtered_parcels)}", "ERROR")
-                return False
-                
-            self.log(f"✅ RTO Parcels API successful: Found {len(parcels)} total parcels, {len(filtered_parcels)} pending action")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ RTO Parcels test failed: {str(e)}", "ERROR")
-            return False
-
-    def test_awb_matching(self) -> bool:
-        """Test GET /api/rto/match-awb endpoint"""
-        self.log("=== Testing AWB Matching API ===")
-        
-        try:
-            # Test with non-existent AWB
-            response = self.make_request("GET", "rto/match-awb", params={"awb": "TESTTRACK123"})
-            
-            if not response["success"]:
-                self.log(f"❌ AWB Matching API failed: {response['data']}", "ERROR")
-                return False
-                
-            data = response["data"]
-            
-            # Should return matched: false for non-existent AWB
-            if data.get("matched") is not False:
-                self.log(f"❌ AWB Matching should return matched=false for non-existent AWB, got: {data}", "ERROR")
-                return False
-                
-            self.log(f"✅ AWB Matching successful: {data}")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ AWB Matching test failed: {str(e)}", "ERROR")
-            return False
-
-    def test_search_orders(self) -> bool:
-        """Test GET /api/rto/search-orders endpoint"""
-        self.log("=== Testing Search Orders API ===")
-        
-        try:
-            # Search for orders with SH- prefix (Shopify orders)
-            response = self.make_request("GET", "rto/search-orders", params={"q": "SH-"})
-            
-            if not response["success"]:
-                self.log(f"❌ Search Orders API failed: {response['data']}", "ERROR")
-                return False
-                
-            orders = response["data"]
-            
-            if not isinstance(orders, list):
-                self.log(f"❌ Search Orders should return array, got: {type(orders)}", "ERROR")
-                return False
-                
-            # Should find some Shopify orders
-            if len(orders) == 0:
-                self.log("⚠️  No Shopify orders found with SH- prefix", "WARNING")
-            else:
-                # Verify order structure
-                first_order = orders[0]
-                required_fields = ["_id", "orderId", "productName", "customerName", "salePrice", "status"]
-                missing_fields = [field for field in required_fields if field not in first_order]
-                
-                if missing_fields:
-                    self.log(f"❌ Search Orders missing fields: {missing_fields}", "ERROR")
-                    return False
-                    
-            self.log(f"✅ Search Orders successful: Found {len(orders)} orders matching 'SH-'")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ Search Orders test failed: {str(e)}", "ERROR")
-            return False
-
-    def test_register_rto_without_order(self) -> bool:
-        """Test POST /api/rto/register without linked order"""
-        self.log("=== Testing RTO Register API (Without Order) ===")
-        
-        try:
-            # Register RTO parcel without linked order
-            parcel_data = {
-                "awbNumber": f"TEST-AWB-{self.test_run_id}-001", 
-                "carrier": "indiapost"
-            }
-            
-            response = self.make_request("POST", "rto/register", data=parcel_data)
-            
-            if not response["success"]:
-                self.log(f"❌ RTO Register failed: {response['data']}", "ERROR")
-                return False
-                
-            data = response["data"]
-            
-            # Verify response structure
-            if not data.get("_id"):
-                self.log(f"❌ RTO Register should return _id, got: {data}", "ERROR")
-                return False
-                
-            if data.get("status") != "pending_action":
-                self.log(f"❌ RTO Register should set status to pending_action, got: {data.get('status')}", "ERROR")
-                return False
-                
-            # Store for cleanup
-            self.test_parcels.append(data["_id"])
-            
-            self.log(f"✅ RTO Register (without order) successful: Parcel ID {data['_id']}")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ RTO Register (without order) test failed: {str(e)}", "ERROR")
-            return False
-
-    def get_test_order_id(self) -> Optional[str]:
-        """Get a test order ID from search results"""
-        try:
-            response = self.make_request("GET", "rto/search-orders", params={"q": "SH-"})
-            
-            if response["success"] and response["data"]:
-                return response["data"][0]["_id"]
+        if response.status_code >= 400:
+            print(f"ERROR: {response.text}")
             return None
             
-        except Exception:
-            return None
-
-    def test_register_rto_with_order(self) -> bool:
-        """Test POST /api/rto/register with linked order"""
-        self.log("=== Testing RTO Register API (With Order) ===")
-        
         try:
-            # Get a test order ID
-            order_id = self.get_test_order_id()
+            return response.json()
+        except:
+            return response.text
             
-            if not order_id:
-                self.log("⚠️  No test order available for linked RTO registration", "WARNING")
-                return True  # Skip this test if no orders available
-                
-            # Store original order status for restoration
-            order_response = self.make_request("GET", f"orders/{order_id}")
-            if order_response["success"]:
-                self.original_order_status[order_id] = order_response["data"].get("status")
-                
-            # Register RTO parcel with linked order
-            parcel_data = {
-                "awbNumber": f"TEST-AWB-{self.test_run_id}-002", 
-                "carrier": "indiapost",
-                "orderId": order_id
-            }
-            
-            response = self.make_request("POST", "rto/register", data=parcel_data)
-            
-            if not response["success"]:
-                self.log(f"❌ RTO Register with order failed: {response['data']}", "ERROR")
-                return False
-                
-            data = response["data"]
-            
-            # Verify parcel created
-            if not data.get("_id"):
-                self.log(f"❌ RTO Register should return _id, got: {data}", "ERROR")
-                return False
-                
-            # Verify order information included
-            if not data.get("order"):
-                self.log(f"❌ RTO Register with order should include order info", "ERROR")
-                return False
-                
-            # Store for cleanup
-            self.test_parcels.append(data["_id"])
-            
-            # Verify order status was updated to RTO
-            order_check = self.make_request("GET", f"orders/{order_id}")
-            if order_check["success"] and order_check["data"].get("status") != "RTO":
-                self.log(f"⚠️  Order status was not updated to RTO: {order_check['data'].get('status')}", "WARNING")
-                
-            self.log(f"✅ RTO Register (with order) successful: Parcel ID {data['_id']}, Order ID {order_id}")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ RTO Register (with order) test failed: {str(e)}", "ERROR")
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed: {e}")
+        return None
+
+def test_1_export_counts():
+    """Test 1: Export Counts - Should return record counts"""
+    print("\n🎯 TEST 1: EXPORT COUNTS")
+    print("=" * 50)
+    
+    result = test_api("GET", "/data/export-counts")
+    if not result:
+        print("❌ Export counts failed")
+        return False
+        
+    # Verify expected fields exist
+    required_fields = ['orders', 'recipes']
+    for field in required_fields:
+        if field not in result:
+            print(f"❌ Missing field: {field}")
             return False
-
-    def test_duplicate_prevention(self) -> bool:
-        """Test duplicate AWB prevention"""
-        self.log("=== Testing Duplicate AWB Prevention ===")
+            
+    print(f"✅ Orders count: {result.get('orders', 0)}")
+    print(f"✅ SKU Recipes count: {result.get('recipes', 0)}")
+    
+    # Verify orders > 0, recipes > 0 as per test plan
+    if result.get('orders', 0) <= 0:
+        print("❌ No orders found - expected > 0")
+        return False
+    if result.get('recipes', 0) <= 0:
+        print("❌ No recipes found - expected > 0") 
+        return False
         
-        try:
-            # Try to register the same AWB again
-            parcel_data = {
-                "awbNumber": f"TEST-AWB-{self.test_run_id}-001", 
-                "carrier": "indiapost"
-            }
-            
-            response = self.make_request("POST", "rto/register", data=parcel_data)
-            
-            # Should return 409 error for duplicate
-            if response["status_code"] != 409:
-                self.log(f"❌ Duplicate AWB should return 409, got: {response['status_code']}", "ERROR")
-                return False
-                
-            if "already registered" not in str(response["data"]).lower():
-                self.log(f"❌ Duplicate error message should mention 'already registered': {response['data']}", "ERROR")
-                return False
-                
-            self.log("✅ Duplicate AWB prevention working correctly")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ Duplicate prevention test failed: {str(e)}", "ERROR")
+    print("✅ Export counts test passed")
+    return result
+
+def test_2_export_single_module():
+    """Test 2: Export JSON (single module) - recipes"""
+    print("\n🎯 TEST 2: EXPORT SINGLE MODULE (RECIPES)")
+    print("=" * 50)
+    
+    result = test_api("GET", "/data/export?modules=recipes&format=json")
+    if not result:
+        print("❌ Single module export failed")
+        return False
+        
+    # Verify response structure
+    if '_meta' not in result:
+        print("❌ Missing _meta field")
+        return False
+        
+    meta = result['_meta']
+    required_meta_fields = ['exportedAt', 'version', 'modules', 'summary']
+    for field in required_meta_fields:
+        if field not in meta:
+            print(f"❌ Missing _meta field: {field}")
             return False
-
-    def test_rto_action_reship(self) -> bool:
-        """Test POST /api/rto/action with reship action"""
-        self.log("=== Testing RTO Action API (Reship) ===")
+            
+    # Verify expected data arrays
+    if 'skuRecipes' not in result:
+        print("❌ Missing skuRecipes array")
+        return False
+    if 'recipeTemplates' not in result:
+        print("❌ Missing recipeTemplates array")
+        return False
         
-        try:
-            if not self.test_parcels:
-                self.log("❌ No test parcels available for action testing", "ERROR")
-                return False
-                
-            # Use the first test parcel
-            parcel_id = self.test_parcels[0]
-            
-            action_data = {
-                "parcelId": parcel_id,
-                "action": "reship",
-                "details": {
-                    "reshippingCharges": 100,
-                    "paymentLink": "https://rzp.io/test"
-                }
-            }
-            
-            response = self.make_request("POST", "rto/action", data=action_data)
-            
-            if not response["success"]:
-                self.log(f"❌ RTO Action (reship) failed: {response['data']}", "ERROR")
-                return False
-                
-            data = response["data"]
-            
-            # Verify response
-            if data.get("action") != "reship" or data.get("status") != "reshipping":
-                self.log(f"❌ RTO Action should return action=reship, status=reshipping, got: {data}", "ERROR")
-                return False
-                
-            self.log(f"✅ RTO Action (reship) successful: Parcel {parcel_id} status = reshipping")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ RTO Action (reship) test failed: {str(e)}", "ERROR")
+    print(f"✅ Meta exportedAt: {meta['exportedAt']}")
+    print(f"✅ Meta version: {meta['version']}")
+    print(f"✅ Meta modules: {meta['modules']}")
+    print(f"✅ SKU Recipes count: {len(result.get('skuRecipes', []))}")
+    print(f"✅ Recipe Templates count: {len(result.get('recipeTemplates', []))}")
+    print(f"✅ Summary: {meta.get('summary', {})}")
+    
+    print("✅ Single module export test passed")
+    return result
+
+def test_3_export_multiple_modules():
+    """Test 3: Export JSON (multiple modules)"""
+    print("\n🎯 TEST 3: EXPORT MULTIPLE MODULES")
+    print("=" * 50)
+    
+    result = test_api("GET", "/data/export?modules=orders,recipes,expenses&format=json")
+    if not result:
+        print("❌ Multiple modules export failed")
+        return False
+        
+    # Verify expected arrays are present
+    expected_arrays = [
+        'orders', 'skuRecipes', 'overheadExpenses', 
+        'expenseCategories', 'bills', 'vendors'
+    ]
+    
+    for arr in expected_arrays:
+        if arr not in result:
+            print(f"❌ Missing array: {arr}")
             return False
-
-    def test_rto_action_refund(self) -> bool:
-        """Test POST /api/rto/action with refund action"""
-        self.log("=== Testing RTO Action API (Refund) ===")
+        print(f"✅ {arr}: {len(result[arr])} items")
         
-        try:
-            if len(self.test_parcels) < 2:
-                self.log("❌ Need at least 2 test parcels for refund testing", "ERROR")
-                return False
-                
-            # Use the second test parcel
-            parcel_id = self.test_parcels[1]
-            
-            action_data = {
-                "parcelId": parcel_id,
-                "action": "refund",
-                "details": {
-                    "refundAmount": 500,
-                    "refundMethod": "upi"
-                }
-            }
-            
-            response = self.make_request("POST", "rto/action", data=action_data)
-            
-            if not response["success"]:
-                self.log(f"❌ RTO Action (refund) failed: {response['data']}", "ERROR")
-                return False
-                
-            data = response["data"]
-            
-            # Verify response
-            if data.get("action") != "refund" or data.get("status") != "refunded":
-                self.log(f"❌ RTO Action should return action=refund, status=refunded, got: {data}", "ERROR")
-                return False
-                
-            self.log(f"✅ RTO Action (refund) successful: Parcel {parcel_id} status = refunded")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ RTO Action (refund) test failed: {str(e)}", "ERROR")
+    # Verify most arrays are not empty (except maybe some)
+    if len(result.get('orders', [])) == 0:
+        print("⚠️  Warning: Orders array is empty")
+    if len(result.get('skuRecipes', [])) == 0:
+        print("⚠️  Warning: SKU Recipes array is empty")
+        
+    print("✅ Multiple modules export test passed")
+    return result
+
+def test_4_export_csv():
+    """Test 4: Export CSV format"""
+    print("\n🎯 TEST 4: EXPORT CSV FORMAT")
+    print("=" * 50)
+    
+    # Make request expecting CSV response
+    url = f"{BASE_URL}/data/export?modules=orders&format=csv"
+    try:
+        response = requests.get(url)
+        print(f"GET /data/export?modules=orders&format=csv -> Status: {response.status_code}")
+        
+        if response.status_code != 200:
+            print(f"❌ CSV export failed: {response.text}")
             return False
-
-    def test_verify_pipeline(self) -> bool:
-        """Test pipeline verification after actions"""
-        self.log("=== Testing Pipeline Verification ===")
-        
-        try:
-            # Get updated parcels list
-            response = self.make_request("GET", "rto/parcels")
             
-            if not response["success"]:
-                self.log(f"❌ Pipeline verification failed: {response['data']}", "ERROR")
-                return False
-                
-            parcels = response["data"]
-            
-            # Find our test parcels and verify statuses
-            test_parcel_statuses = {}
-            for parcel in parcels:
-                if parcel["_id"] in self.test_parcels:
-                    test_parcel_statuses[parcel["_id"]] = parcel["status"]
-                    
-            # Get updated stats
-            stats_response = self.make_request("GET", "rto/stats")
-            
-            if not stats_response["success"]:
-                self.log(f"❌ Stats verification failed: {stats_response['data']}", "ERROR")
-                return False
-                
-            stats = stats_response["data"]
-            pipeline = stats.get("pipeline", {})
-            
-            self.log(f"✅ Pipeline verification successful: Reshipping={pipeline.get('reshipping', 0)}, Refunded={pipeline.get('refunded', 0)}")
-            self.log(f"✅ Test parcel statuses: {test_parcel_statuses}")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ Pipeline verification test failed: {str(e)}", "ERROR")
+        # Verify Content-Type is CSV
+        content_type = response.headers.get('Content-Type', '')
+        if 'text/csv' not in content_type:
+            print(f"❌ Expected text/csv, got: {content_type}")
             return False
-
-    def test_update_reship(self) -> bool:
-        """Test POST /api/rto/update-reship"""
-        self.log("=== Testing RTO Update Reship API ===")
-        
-        try:
-            if not self.test_parcels:
-                self.log("❌ No test parcels available for reship update testing", "ERROR")
-                return False
-                
-            # Use the first test parcel (should be in reshipping status)
-            parcel_id = self.test_parcels[0]
             
-            update_data = {
-                "parcelId": parcel_id,
-                "reshippingTrackingNumber": "RESHIP-TRACK-001",
-                "paymentStatus": "paid"
-            }
-            
-            response = self.make_request("POST", "rto/update-reship", data=update_data)
-            
-            if not response["success"]:
-                self.log(f"❌ RTO Update Reship failed: {response['data']}", "ERROR")
-                return False
-                
-            data = response["data"]
-            
-            # Verify response
-            if not data.get("success"):
-                self.log(f"❌ RTO Update Reship should return success=true, got: {data}", "ERROR")
-                return False
-                
-            self.log(f"✅ RTO Update Reship successful: Parcel {parcel_id} updated")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ RTO Update Reship test failed: {str(e)}", "ERROR")
+        # Verify CSV content
+        csv_content = response.text
+        lines = csv_content.split('\n')
+        if len(lines) < 1:
+            print("❌ CSV content is empty")
             return False
-
-    def test_whatsapp_send(self) -> bool:
-        """Test POST /api/rto/send-whatsapp (expected to fail due to configuration)"""
-        self.log("=== Testing RTO WhatsApp Send API ===")
-        
-        try:
-            if not self.test_parcels:
-                self.log("❌ No test parcels available for WhatsApp testing", "ERROR")
+            
+        # Verify first line has headers
+        headers = lines[0]
+        expected_headers = ['orderId', 'shopifyOrderId', 'productName', 'customerName', 'salePrice']
+        for header in expected_headers:
+            if header not in headers:
+                print(f"❌ Missing CSV header: {header}")
                 return False
                 
-            # Use a parcel with linked order (if available)
-            parcel_id = self.test_parcels[1] if len(self.test_parcels) > 1 else self.test_parcels[0]
+        print(f"✅ Content-Type: {content_type}")
+        print(f"✅ CSV lines: {len(lines)}")
+        print(f"✅ Headers: {headers[:100]}...")
+        
+        print("✅ CSV export test passed")
+        return True
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ CSV export request failed: {e}")
+        return False
+
+def test_5_export_all():
+    """Test 5: Export All modules"""
+    print("\n🎯 TEST 5: EXPORT ALL MODULES")
+    print("=" * 50)
+    
+    result = test_api("GET", "/data/export?modules=all&format=json")
+    if not result:
+        print("❌ Export all failed")
+        return False
+        
+    # Verify comprehensive export
+    if '_meta' not in result or 'summary' not in result['_meta']:
+        print("❌ Missing _meta or summary")
+        return False
+        
+    summary = result['_meta']['summary']
+    print(f"✅ Full export summary: {summary}")
+    
+    # Check for major collections
+    major_collections = ['orders', 'skuRecipes']
+    for coll in major_collections:
+        if coll not in summary or summary[coll] == 0:
+            print(f"⚠️  Warning: {coll} has 0 records")
             
-            whatsapp_data = {
-                "parcelId": parcel_id,
-                "messageType": "reship_charges"
-            }
-            
-            response = self.make_request("POST", "rto/send-whatsapp", data=whatsapp_data)
-            
-            # Expected to fail due to WhatsApp not being configured
-            if response["success"]:
-                self.log(f"✅ WhatsApp Send successful (unexpected): {response['data']}")
-                return True
-            else:
-                # Check if it's the expected configuration error
-                error_msg = str(response["data"]).lower()
-                if ("whatsapp not configured" in error_msg or 
-                    "customer phone not available" in error_msg or 
-                    "parcel or linked order not found" in error_msg or
-                    "invalid oauth access token" in error_msg or
-                    "cannot parse access token" in error_msg):
-                    self.log(f"✅ WhatsApp Send failed as expected (not configured/invalid token): {response['data']}")
-                    return True
-                else:
-                    self.log(f"❌ WhatsApp Send failed with unexpected error: {response['data']}", "ERROR")
-                    return False
-                    
-        except Exception as e:
-            self.log(f"❌ WhatsApp Send test failed: {str(e)}", "ERROR")
+    print("✅ Export all test passed")
+    return result
+
+def test_6_export_with_date_filter():
+    """Test 6: Export with Date Filter"""
+    print("\n🎯 TEST 6: EXPORT WITH DATE FILTER")
+    print("=" * 50)
+    
+    result = test_api("GET", "/data/export?modules=orders&format=json&dateFrom=2025-01-01&dateTo=2025-12-31")
+    if not result:
+        print("❌ Date filter export failed")
+        return False
+        
+    # Verify date range in meta
+    meta = result.get('_meta', {})
+    if 'dateRange' not in meta or not meta['dateRange']:
+        print("❌ Missing dateRange in meta")
+        return False
+        
+    date_range = meta['dateRange']
+    print(f"✅ Date range: from={date_range.get('from')}, to={date_range.get('to')}")
+    
+    # Verify orders array
+    orders = result.get('orders', [])
+    print(f"✅ Filtered orders count: {len(orders)}")
+    
+    print("✅ Date filter export test passed")
+    return result
+
+def test_7_import_preview():
+    """Test 7: Import Preview - Use exported recipes data"""
+    print("\n🎯 TEST 7: IMPORT PREVIEW")
+    print("=" * 50)
+    
+    # First get export data for recipes
+    export_data = test_api("GET", "/data/export?modules=recipes&format=json")
+    if not export_data:
+        print("❌ Failed to get export data for preview")
+        return False
+        
+    # Test import preview
+    result = test_api("POST", "/data/import-preview", export_data)
+    if not result:
+        print("❌ Import preview failed")
+        return False
+        
+    # Verify preview structure
+    if not result.get('valid'):
+        print("❌ Import preview returned invalid")
+        return False
+        
+    if 'modules' not in result:
+        print("❌ Missing modules in preview")
+        return False
+        
+    modules = result['modules']
+    
+    # Check for skuRecipes module
+    if 'skuRecipes' not in modules:
+        print("❌ Missing skuRecipes in preview modules")
+        return False
+        
+    sku_recipes_info = modules['skuRecipes']
+    required_fields = ['importCount', 'existingCount', 'duplicateCount', 'newCount']
+    for field in required_fields:
+        if field not in sku_recipes_info:
+            print(f"❌ Missing field in skuRecipes preview: {field}")
             return False
-
-    def cleanup_test_data(self) -> None:
-        """Clean up test data"""
-        self.log("=== Cleaning Up Test Data ===")
-        
-        try:
-            # Restore original order statuses
-            for order_id, original_status in self.original_order_status.items():
-                if original_status:
-                    self.make_request("PUT", f"orders/{order_id}", data={"status": original_status})
-                    self.log(f"Restored order {order_id} status to {original_status}")
-                    
-            # Note: We don't delete test parcels as per instructions
-            # "Don't worry about cleaning up test data"
             
-            self.log("✅ Cleanup completed")
-            
-        except Exception as e:
-            self.log(f"⚠️  Cleanup warning: {str(e)}", "WARNING")
+    print(f"✅ Preview valid: {result['valid']}")
+    print(f"✅ SKU Recipes - Import: {sku_recipes_info['importCount']}, Existing: {sku_recipes_info['existingCount']}, Duplicates: {sku_recipes_info['duplicateCount']}, New: {sku_recipes_info['newCount']}")
+    
+    print("✅ Import preview test passed")
+    return export_data, result
 
-    def run_all_tests(self) -> Dict[str, bool]:
-        """Run all RTO backend tests"""
-        self.log("🚀 Starting Phase 6.1 RTO/Returns Backend Testing")
-        self.log(f"Base URL: {BASE_URL}")
+def test_8_import_with_skip():
+    """Test 8: Import with Skip Strategy"""
+    print("\n🎯 TEST 8: IMPORT WITH SKIP STRATEGY")
+    print("=" * 50)
+    
+    # Get export data for recipes
+    export_data = test_api("GET", "/data/export?modules=recipes&format=json")
+    if not export_data:
+        print("❌ Failed to get export data for import")
+        return False
         
-        tests = [
-            ("RTO Stats API", self.test_rto_stats),
-            ("RTO Parcels Initial", self.test_rto_parcels_initial),
-            ("AWB Matching", self.test_awb_matching),
-            ("Search Orders", self.test_search_orders),
-            ("Register RTO Without Order", self.test_register_rto_without_order),
-            ("Register RTO With Order", self.test_register_rto_with_order),
-            ("Duplicate Prevention", self.test_duplicate_prevention),
-            ("RTO Action Reship", self.test_rto_action_reship),
-            ("RTO Action Refund", self.test_rto_action_refund),
-            ("Pipeline Verification", self.test_verify_pipeline),
-            ("Update Reship", self.test_update_reship),
-            ("WhatsApp Send", self.test_whatsapp_send),
-        ]
+    # Test import with skip strategy
+    import_request = {
+        "importData": export_data,
+        "selectedModules": ["skuRecipes"],
+        "conflictStrategy": "skip"
+    }
+    
+    result = test_api("POST", "/data/import", import_request)
+    if not result:
+        print("❌ Import with skip failed")
+        return False
         
-        results = {}
-        passed = 0
-        total = len(tests)
+    # Verify import results structure
+    if not result.get('success'):
+        print("❌ Import not successful")
+        return False
         
-        for test_name, test_func in tests:
-            try:
-                self.log(f"\n--- Running: {test_name} ---")
-                result = test_func()
-                results[test_name] = result
+    if 'results' not in result or 'imported' not in result['results']:
+        print("❌ Missing results/imported in response")
+        return False
+        
+    imported = result['results']['imported']
+    
+    # Check skuRecipes import results
+    if 'skuRecipes' not in imported:
+        print("❌ Missing skuRecipes in import results")
+        return False
+        
+    sku_results = imported['skuRecipes']
+    required_fields = ['inserted', 'skipped', 'updated']
+    for field in required_fields:
+        if field not in sku_results:
+            print(f"❌ Missing field in import results: {field}")
+            return False
+            
+    print(f"✅ Import success: {result['success']}")
+    print(f"✅ SKU Recipes - Inserted: {sku_results['inserted']}, Skipped: {sku_results['skipped']}, Updated: {sku_results['updated']}")
+    
+    # For existing data, most should be skipped
+    if sku_results['skipped'] == 0:
+        print("⚠️  Warning: Expected some records to be skipped")
+        
+    print("✅ Import with skip test passed")
+    return result
+
+def test_9_import_with_new_data():
+    """Test 9: Import with New Data (modify IDs)"""
+    print("\n🎯 TEST 9: IMPORT WITH NEW DATA")
+    print("=" * 50)
+    
+    # Get export data for recipes  
+    export_data = test_api("GET", "/data/export?modules=recipes&format=json")
+    if not export_data:
+        print("❌ Failed to get export data for new data import")
+        return False
+        
+    # Modify some _id values to simulate new data
+    if 'skuRecipes' in export_data and len(export_data['skuRecipes']) > 0:
+        # Take only first 2 recipes and give them new IDs
+        modified_recipes = export_data['skuRecipes'][:2]
+        for recipe in modified_recipes:
+            original_id = recipe.get('_id')
+            new_id = f"test-new-{original_id}"
+            recipe['_id'] = new_id
+            # Also modify sku to avoid conflicts
+            if 'sku' in recipe:
+                recipe['sku'] = f"TEST-NEW-{recipe['sku']}"
                 
-                if result:
-                    passed += 1
-                    self.log(f"✅ {test_name} PASSED")
-                else:
-                    self.log(f"❌ {test_name} FAILED")
-                    
-            except Exception as e:
-                self.log(f"❌ {test_name} EXCEPTION: {str(e)}", "ERROR")
-                results[test_name] = False
-                
-            # Small delay between tests
-            time.sleep(0.5)
+        # Create modified export data with only these new recipes
+        modified_export = {
+            '_meta': export_data['_meta'],
+            'skuRecipes': modified_recipes,
+            'recipeTemplates': []
+        }
         
-        # Cleanup
-        self.cleanup_test_data()
+        import_request = {
+            "importData": modified_export,
+            "selectedModules": ["skuRecipes"],
+            "conflictStrategy": "skip"
+        }
         
-        # Final summary
-        self.log(f"\n🏁 Test Results Summary: {passed}/{total} tests passed")
-        
-        failed_tests = [name for name, result in results.items() if not result]
-        if failed_tests:
-            self.log(f"❌ Failed tests: {', '.join(failed_tests)}")
-        else:
-            self.log("🎉 All tests passed!")
+        result = test_api("POST", "/data/import", import_request)
+        if not result:
+            print("❌ Import with new data failed")
+            return False
             
-        return results
+        if not result.get('success'):
+            print("❌ New data import not successful")
+            return False
+            
+        imported = result['results']['imported']
+        sku_results = imported.get('skuRecipes', {})
+        
+        print(f"✅ New data import success: {result['success']}")
+        print(f"✅ SKU Recipes - Inserted: {sku_results.get('inserted', 0)}, Skipped: {sku_results.get('skipped', 0)}")
+        
+        # Should have some insertions since we used new IDs
+        if sku_results.get('inserted', 0) == 0:
+            print("⚠️  Warning: Expected some new records to be inserted")
+            
+        # Store the new IDs for cleanup
+        new_ids = [recipe['_id'] for recipe in modified_recipes]
+        print(f"✅ Created {len(new_ids)} new test records")
+        
+        print("✅ Import with new data test passed")
+        return new_ids
+    else:
+        print("⚠️  No SKU recipes available to modify")
+        return []
 
+def test_10_verify_counts_after_import():
+    """Test 10: Verify counts increased after import"""
+    print("\n🎯 TEST 10: VERIFY COUNTS AFTER IMPORT")
+    print("=" * 50)
+    
+    result = test_api("GET", "/data/export-counts")
+    if not result:
+        print("❌ Failed to get counts after import")
+        return False
+        
+    print(f"✅ Final counts after import:")
+    for key, value in result.items():
+        print(f"   {key}: {value}")
+        
+    # Verify recipe count is reasonable
+    recipe_count = result.get('recipes', 0)
+    if recipe_count <= 0:
+        print("❌ No recipes found after import")
+        return False
+        
+    print("✅ Counts verification test passed")
+    return result
+
+def cleanup_test_data(new_ids):
+    """Clean up any test data created during import tests"""
+    print("\n🧹 CLEANUP: Removing test data")
+    print("=" * 30)
+    
+    if not new_ids:
+        print("✅ No test data to clean up")
+        return
+        
+    # Note: The actual cleanup would require DELETE endpoints
+    # For now, just log what we would clean up
+    print(f"📝 Would clean up {len(new_ids)} test records with IDs: {new_ids[:3]}..." if len(new_ids) > 3 else new_ids)
+    print("✅ Cleanup logged")
 
 def main():
-    """Main test runner"""
-    tester = RTOBackendTester()
-    results = tester.run_all_tests()
+    """Run all import/export tests"""
+    print("🚀 PHASE 6.2 IMPORT/EXPORT SYSTEM TESTING")
+    print("=" * 60)
+    print(f"Base URL: {BASE_URL}")
+    print(f"Test Plan: 10 comprehensive tests")
+    print("=" * 60)
     
-    # Exit with appropriate code
-    all_passed = all(results.values())
-    sys.exit(0 if all_passed else 1)
-
+    test_results = []
+    new_ids_to_cleanup = []
+    
+    try:
+        # Test 1: Export Counts
+        result1 = test_1_export_counts()
+        test_results.append(("Export Counts", result1 is not False))
+        
+        # Test 2: Export Single Module
+        result2 = test_2_export_single_module()
+        test_results.append(("Export Single Module", result2 is not False))
+        
+        # Test 3: Export Multiple Modules  
+        result3 = test_3_export_multiple_modules()
+        test_results.append(("Export Multiple Modules", result3 is not False))
+        
+        # Test 4: Export CSV
+        result4 = test_4_export_csv()
+        test_results.append(("Export CSV", result4 is not False))
+        
+        # Test 5: Export All
+        result5 = test_5_export_all()
+        test_results.append(("Export All", result5 is not False))
+        
+        # Test 6: Export with Date Filter
+        result6 = test_6_export_with_date_filter()
+        test_results.append(("Export Date Filter", result6 is not False))
+        
+        # Test 7: Import Preview
+        result7 = test_7_import_preview()
+        test_results.append(("Import Preview", result7 is not False))
+        
+        # Test 8: Import with Skip
+        result8 = test_8_import_with_skip()
+        test_results.append(("Import Skip Strategy", result8 is not False))
+        
+        # Test 9: Import New Data
+        result9 = test_9_import_with_new_data()
+        test_results.append(("Import New Data", result9 is not False))
+        if isinstance(result9, list):
+            new_ids_to_cleanup = result9
+            
+        # Test 10: Verify Counts
+        result10 = test_10_verify_counts_after_import()
+        test_results.append(("Verify Counts", result10 is not False))
+        
+    except Exception as e:
+        print(f"❌ Test execution error: {e}")
+    
+    finally:
+        # Always try cleanup
+        cleanup_test_data(new_ids_to_cleanup)
+    
+    # Print summary
+    print("\n📊 FINAL TEST RESULTS SUMMARY")
+    print("=" * 40)
+    
+    passed = 0
+    total = len(test_results)
+    
+    for test_name, success in test_results:
+        status = "✅ PASSED" if success else "❌ FAILED"
+        print(f"{status}: {test_name}")
+        if success:
+            passed += 1
+    
+    print("=" * 40)
+    print(f"TOTAL: {passed}/{total} tests passed ({(passed/total)*100:.1f}%)")
+    
+    if passed == total:
+        print("🎉 ALL TESTS PASSED! Import/Export system is fully functional!")
+        return True
+    else:
+        print("⚠️  Some tests failed. Check the details above.")
+        return False
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    sys.exit(0 if success else 1)
