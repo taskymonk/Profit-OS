@@ -697,7 +697,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -745,7 +745,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -784,7 +784,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -1739,7 +1739,7 @@ Test these:
 
 PHASE 4 LIVE MODE TESTING: All backend APIs functioning correctly. MetaAds inactive behavior properly implemented across dashboard, profit calculation, and purge/seed flows. Server-side pagination working flawlessly."
     - agent: "main"
-      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. All 5 critical test areas covered:
+      message: "META ADS INTEGRATION COMPREHENSIVE TESTING COMPLETE. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. All 5 critical test areas covered:
 
 1) META ADS SYNC ERROR HANDLING ✅
 2) DASHBOARD WITHOUT META ADS ✅  
@@ -1787,7 +1787,7 @@ CRITICAL INTEGRATION POINTS VERIFIED:
 
 META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with proper credentials."
     - agent: "main"
-      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
+      message: "INDIA POST RTO ENGINE TESTING NEEDED. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Real Shopify data exists (513 orders, 799 SKUs). Test 5 areas: 1) Tracking number save (PUT /api/orders/{id}/tracking) 2) India Post sync error handling without credentials 3) RTO double-shipping penalty in profit calculation 4) Demo data cleanup verification (empty arrays for employees, overhead-expenses, raw-materials, packaging-materials, vendors; real data for orders/SKUs) 5) India Post sync with no trackable orders."
     - agent: "testing"
       message: "🎉 INDIA POST RTO ENGINE TESTING COMPLETE - ALL 5 TEST AREAS PASSED! 
 
@@ -1826,7 +1826,7 @@ META ADS INTEGRATION FULLY FUNCTIONAL AND TESTED. Ready for production with prop
 
 INDIA POST RTO ENGINE FULLY FUNCTIONAL! All core features working: tracking number management, error handling, RTO penalty calculation, and data integrity verification. Real Shopify data confirmed present (513 orders, 799 SKUs) while demo data properly cleaned."
     - agent: "main"
-      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
+      message: "CORE ENGINE V3 PATCHES TESTING REQUIRED. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Real Shopify data exists (521 orders), Meta Ads data already synced. Test these 5 areas:
 
 1. **INCLUSIVE GST MATH** (GET /api/calculate-profit/{orderId}):
    - Get an order: GET /api/orders?page=1&limit=1
@@ -2487,7 +2487,7 @@ Test these endpoints:
 
 **PHASE 9F FIFO INVENTORY + RECIPE TEMPLATES UI TESTING COMPLETE - ALL SYSTEMS FULLY FUNCTIONAL!** Frontend perfectly integrated with backend FIFO system, ready for production use."
     - agent: "main"
-      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
+      message: "ICON UPLOAD & BRANDING SETTINGS TESTING NEEDED. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Test two new backend features: 1) Icon Upload API (POST /api/upload-icon with JSON body containing imageData and fileName, should return 200 with {message, icon}, GET /api/tenant-config should show icon field, empty body should return 400 error, cleanup with PUT /api/tenant-config), 2) Branding Settings Persistence (GET/PUT /api/tenant-config for primaryColor and themePreference)."
     - agent: "testing"
       message: "🎉 ICON UPLOAD & BRANDING SETTINGS TESTING COMPLETE - BOTH FEATURES FULLY FUNCTIONAL!
 
@@ -2526,7 +2526,7 @@ Test these endpoints:
 - ✅ Status validation confirmed - using valid status values (created, initiated, processed, failed)
 - ✅ Sample settlement verified: ID setl_SMD5fQBVgtJkzE, Amount ₹465.60, Status: processed
 
-**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
+**ALL 3 RAZORPAY API ENDPOINTS PRODUCTION-READY!** Comprehensive reconciliation system working perfectly with 99.71% match rate. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api"
     - agent: "main"
       message: "PHASE 9F: FIFO INVENTORY COSTING TESTING NEEDED. Base URL: http://localhost:3000/api. Test these 8 areas:
 
@@ -2769,7 +2769,7 @@ Clean up: Reset the 3 test recipes back to needsCostInput=true, ingredients=[] u
 **MINOR ISSUE IDENTIFIED:**
 The GET /api/recipe-templates/{id} endpoint returns 200 with null for missing templates instead of 404. This is a minor API implementation issue - the deletion functionality works correctly (template is removed from database), but the HTTP status code should be 404 for missing resources.
 
-**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
+**RECIPE TEMPLATES SYSTEM FULLY FUNCTIONAL AND TESTED!** All 6 critical areas working correctly with comprehensive template management, ingredient synchronization, and data integrity features. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 9G COMPREHENSIVE UX OPTIMIZATION TESTING COMPLETE - ALL 7 BACKEND FEATURES FULLY TESTED!
 
@@ -3278,7 +3278,7 @@ backend:
 
 
 test_instructions: |
-  Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api
+  Base URL: https://profit-calc-fixes.preview.emergentagent.com/api
   
   NEW Auth Tests (Phase 1):
   1. GET /api/auth-config - should return { googleConfigured: boolean }
@@ -3785,7 +3785,7 @@ test_instructions: |
 - Role-based permission system functional ✓
 - First user auto-promotion to master_admin ✓
 
-**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
+**AUTHENTICATION & RBAC SYSTEM FULLY PRODUCTION-READY!** Base URL: https://profit-calc-fixes.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 PHASE 4: WHATSAPP AUTOMATION BACKEND TESTING COMPLETE - ALL 15 ENDPOINTS FULLY FUNCTIONAL!
 
@@ -3826,7 +3826,7 @@ test_instructions: |
 
 **PHASE 4 WHATSAPP AUTOMATION SYSTEM STATUS:** 🎉 ALL 15 CRITICAL ENDPOINTS PRODUCTION-READY
 **Test Results:** 15/15 endpoints passed (100% success rate)
-**Base URL:** https://smart-finance-hub-41.preview.emergentagent.com/api
+**Base URL:** https://profit-calc-fixes.preview.emergentagent.com/api
 
 **PHASE 4: WHATSAPP AUTOMATION BACKEND FULLY TESTED AND OPERATIONAL!**"
 
@@ -3870,11 +3870,11 @@ test_instructions: |
 **KDS SYSTEM STATUS**: 🎉 ALL 10 CRITICAL ENDPOINTS PRODUCTION-READY
 **Test Results**: 8/8 test suites passed (100% success rate)  
 **Existing Data**: 6 KDS assignments, 2057+ orders, verified users system
-**Base URL**: https://smart-finance-hub-41.preview.emergentagent.com/api
+**Base URL**: https://profit-calc-fixes.preview.emergentagent.com/api
 
 **PHASE 2: EMPLOYEE KDS + ERP SYSTEM FULLY TESTED AND OPERATIONAL!**"
     - agent: "main"
-      message: "PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test these 4 APIs: 1) POST /api/parcel-images - Save parcel image, 2) GET /api/parcel-images?orderId=xxx - Retrieve parcel images, 3) PUT /api/orders/{orderId} - Update order with tracking number and carrier, 4) GET /api/orders/{orderId} - Verify updated order has tracking info"
+      message: "PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING NEEDED. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Test these 4 APIs: 1) POST /api/parcel-images - Save parcel image, 2) GET /api/parcel-images?orderId=xxx - Retrieve parcel images, 3) PUT /api/orders/{orderId} - Update order with tracking number and carrier, 4) GET /api/orders/{orderId} - Verify updated order has tracking info"
     - agent: "testing"
       message: "🎉 PHASE 3: SHIPPING & TRACKING ENHANCEMENT TESTING COMPLETE - ALL 4 APIS PASSED!
 
@@ -3898,7 +3898,7 @@ test_instructions: |
 
 **PHASE 3 SHIPPING & TRACKING ENHANCEMENT APIS FULLY FUNCTIONAL!** All 4 critical endpoints working correctly with proper data persistence and retrieval. Real order data tested with successful tracking number updates."
     - agent: "main"
-      message: "PHASE 5: BILLS & FINANCE MODULE TESTING NEEDED. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test all 16 Bills & Finance APIs: Bills CRUD (GET/POST/PUT/DELETE), Payment recording, Vendors CRUD, Purchase Orders CRUD with receive workflow, Cash Flow Summary, Payment Priority. Existing data: 3 bills, 1 vendor (Sunrise Packaging), 1 PO (PO-0001). Verify cash flow stats update correctly after creating/paying bills."
+      message: "PHASE 5: BILLS & FINANCE MODULE TESTING NEEDED. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Test all 16 Bills & Finance APIs: Bills CRUD (GET/POST/PUT/DELETE), Payment recording, Vendors CRUD, Purchase Orders CRUD with receive workflow, Cash Flow Summary, Payment Priority. Existing data: 3 bills, 1 vendor (Sunrise Packaging), 1 PO (PO-0001). Verify cash flow stats update correctly after creating/paying bills."
     - agent: "testing"
       message: "🎉 PHASE 5: BILLS & FINANCE MODULE TESTING COMPLETE - ALL 16 APIS PASSED!
 
@@ -3947,9 +3947,9 @@ test_instructions: |
 ✓ Existing data preserved (3 bills, 1 vendor, 1 PO)
 ✓ Test data cleanup successful (no residual test records)
 
-**PHASE 5: BILLS & FINANCE MODULE FULLY TESTED AND OPERATIONAL!** Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
+**PHASE 5: BILLS & FINANCE MODULE FULLY TESTED AND OPERATIONAL!** Base URL: https://profit-calc-fixes.preview.emergentagent.com/api"
     - agent: "main"
-      message: "PHASE 5 REFACTOR COMPLETE — 'Smart Approach' applied. PURCHASE ORDERS REMOVED entirely from backend. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test the following 12 Finance APIs (POs are gone, should return 404):
+      message: "PHASE 5 REFACTOR COMPLETE — 'Smart Approach' applied. PURCHASE ORDERS REMOVED entirely from backend. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Test the following 12 Finance APIs (POs are gone, should return 404):
 
 1. **Bills CRUD** (should still work):
    - GET /api/bills — list all bills
@@ -3989,7 +3989,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
     status_history:
         - working: true
           agent: "testing"
-          comment: "🎉 BUG FIXES BATCH TESTING COMPLETE - ALL 5 SCENARIOS PASSED! Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. 
+          comment: "🎉 BUG FIXES BATCH TESTING COMPLETE - ALL 5 SCENARIOS PASSED! Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. 
 
 🎯 **TIP CLEANUP VERIFICATION**: ✅ PASSED (3/3 tests)
 - ✅ No orders found with productName='Tip' (checked 50 orders)
@@ -4006,7 +4006,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 - ✅ Created test template 'Test Unlink Template' with ingredients
 - ✅ Successfully linked template to SKU recipe
     - agent: "main"
-      message: "COMPREHENSIVE FIXES ROUND 2. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test these:
+      message: "COMPREHENSIVE FIXES ROUND 2. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Test these:
 
 1. **Profit Calculator - Tip included:**
    - GET /api/dashboard?range=alltime — verify plBreakdown has totalTips field (number >= 0)
@@ -4033,7 +4033,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 - ✅ Recipe template deletion functionality working correctly
 
     - agent: "main"
-      message: "ROUND 3 — Recipe Coverage + Apply UX + Template Lifecycle fixes. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test:
+      message: "ROUND 3 — Recipe Coverage + Apply UX + Template Lifecycle fixes. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Test:
 
 1. **Recipe Template Full Lifecycle (Create → Apply → Delete → Coverage Reset):**
    - POST /api/recipe-templates — create: {name:'Lifecycle Test',ingredients:[{name:'Test Paper',category:'Raw Materials',quantityUsed:0.5,baseCostPerUnit:20,unit:'sheets',inventoryItemId:'test-1'}]}
@@ -4073,7 +4073,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 **ALL 5 BUG FIX SCENARIOS FULLY VERIFIED AND FUNCTIONAL!** No critical issues found. All bug fixes working as designed with comprehensive validation completed."
 
     - agent: "main"
-      message: "BUG FIXES BATCH — 5 fixes applied. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api. Test these scenarios:
+      message: "BUG FIXES BATCH — 5 fixes applied. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api. Test these scenarios:
 
 1. **Tip cleanup verification:**
    - GET /api/orders?page=1&limit=10 — verify NO orders with productName='Tip' exist
@@ -4144,7 +4144,7 @@ Existing data: 5 bills, 2 vendors. Verify clean data after test."
 ✓ Complete recipe template lifecycle with proper unlinking
 ✓ Finance module regression testing (bills/vendors working, PO removed)
 
-Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
+Base URL: https://profit-calc-fixes.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 ROUND 3 — RECIPE COVERAGE + APPLY UX + TEMPLATE LIFECYCLE TESTING COMPLETE - ALL 4/4 TESTS PASSED!
 
@@ -4188,7 +4188,7 @@ Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
 ✓ Profit Calculator Enhancement: tipAmount field included in individual order calculations
 ✓ Data Integrity: All test data properly cleaned up, no residual test templates remaining
 
-**ROUND 3 TESTING COMPLETE - ALL CRITICAL FEATURES FULLY FUNCTIONAL!** Template lifecycle system working as designed with proper reset behavior. Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
+**ROUND 3 TESTING COMPLETE - ALL CRITICAL FEATURES FULLY FUNCTIONAL!** Template lifecycle system working as designed with proper reset behavior. Base URL: https://profit-calc-fixes.preview.emergentagent.com/api"
     - agent: "testing"
       message: "🎉 COMPREHENSIVE FRONTEND TESTING COMPLETE - CRITICAL DISPLAY ISSUES IDENTIFIED!
 
@@ -4238,3 +4238,195 @@ Base URL: https://smart-finance-hub-41.preview.emergentagent.com/api"
 
 **RECOMMENDATION:** 
 Focus on Orders page drawer/sheet functionality as primary blocker for profit breakdown access. Tips functionality appears implemented but not accessible due to UI interaction issues."
+
+
+  - task: "Phase 6 - Sync Settings API (GET/POST)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/sync-settings returns auto-sync config per integration with scheduler status. POST /api/sync-settings updates settings and reschedules cron jobs. Stores in syncSettings collection."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Sync Settings API fully functional. GET /api/sync-settings returns proper structure with all 5 required sections (shopify, razorpay, metaAds, indiaPost, webhooks) plus scheduler info. POST /api/sync-settings successfully enables/disables auto-sync settings. Verified update/restore cycle: enabled Shopify auto-sync (1h interval) → verified → disabled → verified. Settings persistence working correctly."
+
+  - task: "Phase 6 - Sync Status API"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "GET /api/sync-status returns current sync lock status and scheduler info."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Sync Status API working correctly. Returns proper structure with 'locks' and 'scheduler' objects. All 4 integration lock statuses (shopify, razorpay, metaAds, indiaPost) properly reported as false (unlocked). Scheduler info includes initialization status, active jobs, and lock status."
+
+  - task: "Phase 6 - Incremental Shopify Sync"
+    implemented: true
+    working: true
+    file: "lib/syncFunctions.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/shopify/sync-orders supports mode=incremental (uses updated_at_min) and mode=full. Lock mechanism prevents concurrent syncs. Updates lastIncrementalSyncAt timestamp."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Shopify Sync API functional with real Shopify data. Both incremental and full sync modes working. POST /api/shopify/sync-orders (default) and ?mode=full successfully process orders. Real sync results: 1 new order, 2057 updated orders from 2017 total Shopify orders. Returns proper response structure with message, synced counts, and syncType field. Lock mechanism prevents concurrent syncs."
+
+  - task: "Phase 6 - Incremental Razorpay Sync"
+    implemented: true
+    working: true
+    file: "lib/syncFunctions.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/razorpay/sync-payments supports mode=incremental (uses from timestamp) and mode=full. Lock mechanism prevents concurrent syncs."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Razorpay Sync API functional with real payment data. Both incremental and full sync modes working. POST /api/razorpay/sync-payments processes payments successfully. Real sync results: 2008 reconciled payments, 24 unmatched payments. Returns proper response structure with message, synced counts, and syncType field. Lock mechanism operational."
+
+  - task: "Phase 6 - Auto-Sync Scheduler (node-cron)"
+    implemented: true
+    working: true
+    file: "lib/syncScheduler.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "node-cron scheduler with per-integration enable/disable toggle and interval config. Harmony rules: Shopify syncs first then 30s wait then Razorpay. Lock mechanism prevents concurrent syncs. Re-initializes from DB on server restart."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Auto-Sync Scheduler fully operational. Scheduler initialization confirmed (initialized: true). Lock mechanism working correctly with all integrations showing false (unlocked). Active jobs array properly managed. Sync settings integration functional for enabling/disabling auto-sync per integration. Scheduler status available via /api/sync-status endpoint."
+
+  - task: "Phase 6 - Shopify Webhook Listener"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/webhooks/shopify handles orders/create, orders/updated, orders/cancelled. HMAC verification when secret is configured. Creates/updates orders and SKU recipe stubs."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Shopify Webhook Listener fully functional. Successfully tested order creation webhook with mock data (order 9999999999) - processed with status 'ok' and synced 1 order. Order cancellation webhook working correctly with proper action='cancelled' response. HMAC verification properly skipped when webhook secret is empty (as configured). Webhook processing creates/updates orders correctly."
+
+  - task: "Phase 6 - Razorpay Webhook Listener"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "POST /api/webhooks/razorpay handles payment.captured, payment.failed. Signature verification when secret is configured. Matches payments to orders and stores unmatched."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED - Razorpay Webhook Listener fully functional. Successfully tested payment.captured webhook with mock payment data (pay_test_webhook_001, ₹1500) - processed with status 'ok' and matched=true. Payment.failed webhook working correctly. Signature verification properly skipped when webhook secret is empty (as configured). Payment matching logic operational."
+
+  - task: "Phase 6 - Integration Panel UX Overhaul"
+    implemented: true
+    working: true
+    file: "components/IntegrationsView.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        - working: true
+          agent: "main"
+          comment: "Categorized integrations into tabs: E-Commerce, Payments, Marketing, Shipping, Messaging, Authentication, Webhooks. Collapsible setup guides. Auto-sync controls per integration. Webhook URL display with copy buttons. Sync lock status indicators."
+
+test_plan:
+  current_focus: []
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Phase 6 Sync Optimization has been fully implemented. Please test the following:
+      1. GET /api/sync-settings — Should return default settings with all integrations auto-sync disabled
+      2. POST /api/sync-settings — Update settings (e.g., {\"shopify.autoSyncEnabled\": true, \"shopify.autoSyncInterval\": \"1h\"})
+      3. GET /api/sync-status — Should return lock status and scheduler info
+      4. POST /api/shopify/sync-orders (no body) — Should do incremental sync
+      5. POST /api/shopify/sync-orders?mode=full — Should do full sync
+      6. POST /api/razorpay/sync-payments (no body) — Should do incremental sync
+      7. POST /api/razorpay/sync-payments?mode=full — Should do full sync
+      8. POST /api/webhooks/shopify — Simulated webhook with mock order data
+      9. POST /api/webhooks/razorpay — Simulated webhook with mock payment data
+      
+      Important: Shopify and Razorpay credentials ARE configured (see existing integrations). India Post is BLOCKED.
+      Webhook secrets are NOT configured yet (empty strings) so HMAC/signature verification should be skipped.
+      
+      Test credentials: admin@giftsugar.com / admin123
+      Base URL: http://localhost:3000"
+    - agent: "testing"
+      message: "🎉 PHASE 6 SYNC OPTIMIZATION BACKEND TESTING COMPLETE - ALL 7 CRITICAL AREAS PASSED!
+
+🎯 **SYNC SETTINGS API**: ✅ PASSED (4/4 tests)
+- ✅ GET /api/sync-settings returns proper structure with all 5 required sections plus scheduler info
+- ✅ POST /api/sync-settings successfully enables Shopify auto-sync (1h interval)  
+- ✅ Settings persistence verified through update/restore cycle
+- ✅ Auto-sync disable functionality working correctly
+
+🎯 **SYNC STATUS API**: ✅ PASSED (1/1 tests)
+- ✅ Returns proper structure with 'locks' and 'scheduler' objects
+- ✅ All 4 integration lock statuses properly reported (shopify, razorpay, metaAds, indiaPost)
+- ✅ Scheduler info includes initialization status and active jobs
+
+🎯 **SHOPIFY SYNC API**: ✅ PASSED (2/2 tests)  
+- ✅ Incremental and full sync modes functional with real Shopify data
+- ✅ Real sync results: 1 new order, 2057 updated orders from 2017 total Shopify orders
+- ✅ Returns proper response structure with message, synced counts, syncType field
+- ✅ Lock mechanism prevents concurrent syncs
+
+🎯 **RAZORPAY SYNC API**: ✅ PASSED (2/2 tests)
+- ✅ Incremental and full sync modes working with real payment data
+- ✅ Real sync results: 2008 reconciled payments, 24 unmatched payments  
+- ✅ Proper response structure with sync counts and status
+
+🎯 **SHOPIFY WEBHOOK LISTENER**: ✅ PASSED (2/2 tests)
+- ✅ Order creation webhook processed successfully (order 9999999999, synced 1 order)
+- ✅ Order cancellation webhook working with proper action='cancelled' response
+- ✅ HMAC verification properly skipped when webhook secret empty
+
+🎯 **RAZORPAY WEBHOOK LISTENER**: ✅ PASSED (2/2 tests)  
+- ✅ Payment captured webhook processed successfully (pay_test_webhook_001, ₹1500, matched=true)
+- ✅ Payment failed webhook working correctly
+- ✅ Signature verification properly skipped when webhook secret empty
+
+🎯 **SYNC HISTORY LOGGING**: ✅ PASSED (1/1 tests)
+- ✅ Comprehensive sync history with 39 total entries
+- ✅ Proper activity breakdown: shopify (17), razorpay (13), metaAds (3), indiaPost (6)
+- ✅ All webhook events properly logged with success status
+- ✅ Action type tracking: sync-orders (14), sync-payments (10), webhooks (6)
+
+**ADDITIONAL VERIFICATIONS:**
+✓ Scheduler initialization confirmed (initialized: true)
+✓ Lock mechanism operational with proper lock/unlock cycles  
+✓ Webhook secret handling working (skips verification when empty)
+✓ Real credential configuration verified (Shopify + Razorpay)
+✓ Sync history comprehensive logging (39 entries across all integrations)
+
+**PHASE 6 SYNC OPTIMIZATION FULLY FUNCTIONAL AND TESTED!** All 7 critical backend components working perfectly with real Shopify data (2017+ orders) and Razorpay integration. Webhook processing, scheduler, and lock mechanisms all operational."

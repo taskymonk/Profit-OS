@@ -1,421 +1,489 @@
 #!/usr/bin/env python3
 
-import requests
+"""
+Phase 6 Sync Optimization Backend Testing
+Tests all sync-related endpoints and functionality
+"""
+
 import json
-import sys
-from typing import Dict, List, Any, Optional
+import requests
+import time
+import pymongo
+from pymongo import MongoClient
 
-class BackendTester:
-    def __init__(self, base_url: str):
-        self.base_url = base_url.rstrip('/')
-        self.test_data_ids = []
-        self.session = requests.Session()
-        self.session.headers.update({
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        })
+# Configuration
+BASE_URL = "https://profit-calc-fixes.preview.emergentagent.com/api"
+MONGO_URL = "mongodb://localhost:27017"
+DB_NAME = "profitos"
 
-    def log(self, message: str, level: str = "INFO"):
-        """Structured logging for test results"""
-        print(f"[{level}] {message}")
-
-    def api_call(self, method: str, endpoint: str, data: dict = None, params: dict = None) -> tuple:
-        """Make API call and return (response, success)"""
-        url = f"{self.base_url}{endpoint}"
-        try:
-            if method.upper() == 'GET':
-                response = self.session.get(url, params=params)
-            elif method.upper() == 'POST':
-                response = self.session.post(url, json=data, params=params)
-            elif method.upper() == 'PUT':
-                response = self.session.put(url, json=data, params=params)
-            elif method.upper() == 'DELETE':
-                response = self.session.delete(url)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-            
-            return response, True
-        except Exception as e:
-            self.log(f"API call failed: {method} {endpoint} - {str(e)}", "ERROR")
-            return None, False
-
-    def test_recipe_template_full_lifecycle(self):
-        """Test the complete Recipe Template lifecycle: Create → Apply → Delete → Verify Reset"""
-        self.log("🎯 Starting Recipe Template FULL Lifecycle Test...")
+def test_sync_settings_api():
+    """Test Sync Settings API (GET/POST)"""
+    print("\n🎯 TESTING SYNC SETTINGS API")
+    
+    try:
+        # Test 1: GET /api/sync-settings - Should return default settings
+        print("✅ Test 1: GET /api/sync-settings")
+        response = requests.get(f"{BASE_URL}/sync-settings")
+        print(f"Status: {response.status_code}")
         
-        try:
-            # Step 1: Create recipe template
-            template_data = {
-                "name": "Lifecycle Test Template",
-                "ingredients": [{
-                    "name": "Test Paper",
-                    "category": "Raw Materials",
-                    "quantityUsed": 0.5,
-                    "baseCostPerUnit": 20,
-                    "unit": "sheets",
-                    "inventoryItemId": "test-inv-1"
-                }]
-            }
+        if response.status_code == 200:
+            settings = response.json()
+            print(f"Settings keys: {list(settings.keys())}")
             
-            response, success = self.api_call('POST', '/recipe-templates', template_data)
-            if not success or response.status_code != 201:
-                self.log(f"❌ Failed to create template: {response.status_code if response else 'No response'}", "ERROR")
-                return False
-                
-            template_id = response.json().get('_id')
-            self.log(f"✅ Created template with ID: {template_id}")
+            # Verify structure
+            required_keys = ['shopify', 'razorpay', 'metaAds', 'indiaPost', 'webhooks']
+            for key in required_keys:
+                if key in settings:
+                    print(f"✅ {key} section found")
+                else:
+                    print(f"❌ {key} section missing")
             
-            # Step 2: Get recipes with needsCostInput = true
-            response, success = self.api_call('GET', '/sku-recipes')
-            if not success:
-                self.log("❌ Failed to get SKU recipes", "ERROR")
-                return False
-                
-            recipes = response.json()
-            eligible_recipes = [r for r in recipes if r.get('needsCostInput') == True]
-            
-            if len(eligible_recipes) < 3:
-                self.log(f"❌ Need at least 3 recipes with needsCostInput=true, found {len(eligible_recipes)}", "ERROR")
-                return False
-                
-            recipe_ids = [r['_id'] for r in eligible_recipes[:3]]
-            self.log(f"✅ Found {len(eligible_recipes)} eligible recipes, using: {recipe_ids}")
-            
-            # Step 3: Apply template to recipes
-            apply_data = {
-                "templateId": template_id,
-                "recipeIds": recipe_ids
-            }
-            
-            response, success = self.api_call('POST', '/recipe-templates/apply', apply_data)
-            if not success or response.status_code != 200:
-                self.log(f"❌ Failed to apply template: {response.status_code if response else 'No response'}", "ERROR")
-                return False
-                
-            apply_result = response.json()
-            self.log(f"✅ Applied template to {apply_result.get('applied', 0)} recipes")
-            
-            # Step 4: Verify application worked
-            response, success = self.api_call('GET', f'/sku-recipes/{recipe_ids[0]}')
-            if not success:
-                self.log("❌ Failed to verify recipe after application", "ERROR")
-                return False
-                
-            recipe = response.json()
-            if not recipe.get('ingredients') or recipe.get('needsCostInput') != False or recipe.get('templateId') != template_id:
-                self.log("❌ Recipe not properly updated after template application", "ERROR")
-                return False
-                
-            self.log("✅ Recipe properly updated with template data")
-            
-            # Step 5: DELETE template (CRITICAL TEST)
-            response, success = self.api_call('DELETE', f'/recipe-templates/{template_id}')
-            if not success or response.status_code != 200:
-                self.log(f"❌ Failed to delete template: {response.status_code if response else 'No response'}", "ERROR")
-                return False
-                
-            self.log("✅ Template deleted successfully")
-            
-            # Step 6: VERIFY RESET - Check that recipes are fully reset
-            response, success = self.api_call('GET', f'/sku-recipes/{recipe_ids[0]}')
-            if not success:
-                self.log("❌ Failed to verify recipe after template deletion", "ERROR")
-                return False
-                
-            reset_recipe = response.json()
-            
-            # CRITICAL CHECKS: Template deletion must FULLY RESET linked recipes
-            checks_passed = 0
-            total_checks = 4
-            
-            if reset_recipe.get('templateId') is None:
-                self.log("✅ templateId correctly set to null")
-                checks_passed += 1
-            else:
-                self.log(f"❌ templateId should be null, got: {reset_recipe.get('templateId')}")
-                
-            if reset_recipe.get('templateName') is None:
-                self.log("✅ templateName correctly set to null")
-                checks_passed += 1
-            else:
-                self.log(f"❌ templateName should be null, got: {reset_recipe.get('templateName')}")
-                
-            if reset_recipe.get('ingredients') == []:
-                self.log("✅ ingredients correctly reset to empty array")
-                checks_passed += 1
-            else:
-                self.log(f"❌ ingredients should be empty array, got: {reset_recipe.get('ingredients')}")
-                
-            if reset_recipe.get('needsCostInput') == True:
-                self.log("✅ needsCostInput correctly reset to true")
-                checks_passed += 1
-            else:
-                self.log(f"❌ needsCostInput should be true, got: {reset_recipe.get('needsCostInput')}")
-            
-            if checks_passed == total_checks:
-                self.log("🎉 Recipe Template FULL Lifecycle Test PASSED - Template deletion fully resets linked recipes!")
-                return True
-            else:
-                self.log(f"❌ Recipe Template lifecycle test FAILED: {checks_passed}/{total_checks} checks passed")
-                return False
-                
-        except Exception as e:
-            self.log(f"❌ Recipe Template lifecycle test failed with exception: {str(e)}", "ERROR")
-            return False
-
-    def test_unlink_endpoint_reset(self):
-        """Test that unlink endpoint also resets recipes properly"""
-        self.log("🎯 Starting Unlink Endpoint Reset Test...")
-        
-        try:
-            # Step 1: Create another template
-            template_data = {
-                "name": "Unlink Test Template",
-                "ingredients": [{
-                    "name": "Test Material",
-                    "category": "Raw Materials", 
-                    "quantityUsed": 1.0,
-                    "baseCostPerUnit": 15,
-                    "unit": "pieces",
-                    "inventoryItemId": "test-inv-2"
-                }]
-            }
-            
-            response, success = self.api_call('POST', '/recipe-templates', template_data)
-            if not success or response.status_code != 201:
-                self.log("❌ Failed to create template for unlink test", "ERROR")
-                return False
-                
-            template_id = response.json().get('_id')
-            
-            # Step 2: Get a recipe to apply template to
-            response, success = self.api_call('GET', '/sku-recipes')
-            if not success:
-                self.log("❌ Failed to get SKU recipes", "ERROR")
-                return False
-                
-            recipes = response.json()
-            eligible_recipes = [r for r in recipes if r.get('needsCostInput') == True]
-            
-            if len(eligible_recipes) < 1:
-                self.log("❌ Need at least 1 recipe with needsCostInput=true for unlink test", "ERROR")
-                return False
-                
-            recipe_id = eligible_recipes[0]['_id']
-            
-            # Step 3: Apply template to 1 recipe
-            apply_data = {
-                "templateId": template_id,
-                "recipeIds": [recipe_id]
-            }
-            
-            response, success = self.api_call('POST', '/recipe-templates/apply', apply_data)
-            if not success:
-                self.log("❌ Failed to apply template for unlink test", "ERROR")
-                return False
-            
-            # Step 4: Unlink recipe
-            unlink_data = {"recipeId": recipe_id}
-            response, success = self.api_call('POST', '/recipe-templates/unlink', unlink_data)
-            if not success or response.status_code != 200:
-                self.log(f"❌ Failed to unlink recipe: {response.status_code if response else 'No response'}", "ERROR")
-                return False
-            
-            # Step 5: Verify unlink reset
-            response, success = self.api_call('GET', f'/sku-recipes/{recipe_id}')
-            if not success:
-                self.log("❌ Failed to verify recipe after unlink", "ERROR")
-                return False
-                
-            unlinked_recipe = response.json()
-            
-            # Verify unlink properly resets
-            checks_passed = 0
-            total_checks = 3
-            
-            if unlinked_recipe.get('ingredients') == []:
-                self.log("✅ ingredients correctly reset to empty array after unlink")
-                checks_passed += 1
-            else:
-                self.log(f"❌ ingredients should be empty after unlink, got: {unlinked_recipe.get('ingredients')}")
-                
-            if unlinked_recipe.get('needsCostInput') == True:
-                self.log("✅ needsCostInput correctly reset to true after unlink")
-                checks_passed += 1
-            else:
-                self.log(f"❌ needsCostInput should be true after unlink, got: {unlinked_recipe.get('needsCostInput')}")
-                
-            if unlinked_recipe.get('templateId') is None:
-                self.log("✅ templateId correctly set to null after unlink")
-                checks_passed += 1
-            else:
-                self.log(f"❌ templateId should be null after unlink, got: {unlinked_recipe.get('templateId')}")
-            
-            # Clean up: Delete the test template
-            self.api_call('DELETE', f'/recipe-templates/{template_id}')
-            
-            if checks_passed == total_checks:
-                self.log("🎉 Unlink Endpoint Reset Test PASSED - Unlinking properly resets recipes!")
-                return True
-            else:
-                self.log(f"❌ Unlink endpoint test FAILED: {checks_passed}/{total_checks} checks passed")
-                return False
-                
-        except Exception as e:
-            self.log(f"❌ Unlink endpoint test failed with exception: {str(e)}", "ERROR")
-            return False
-
-    def test_dashboard_tips(self):
-        """Test dashboard P&L breakdown includes totalTips field"""
-        self.log("🎯 Starting Dashboard Tips Test...")
-        
-        try:
-            response, success = self.api_call('GET', '/dashboard', params={'range': 'alltime'})
-            if not success or response.status_code != 200:
-                self.log(f"❌ Failed to get dashboard: {response.status_code if response else 'No response'}", "ERROR")
-                return False
-            
-            dashboard = response.json()
-            pl_breakdown = dashboard.get('plBreakdown', {})
-            
-            if 'totalTips' not in pl_breakdown:
-                self.log("❌ Dashboard plBreakdown missing totalTips field", "ERROR")
-                return False
-            
-            total_tips = pl_breakdown['totalTips']
-            if not isinstance(total_tips, (int, float)) or total_tips < 0:
-                self.log(f"❌ totalTips should be a number >= 0, got: {total_tips}", "ERROR")
-                return False
-                
-            self.log(f"✅ Dashboard plBreakdown.totalTips = {total_tips} (valid)")
-            self.log("🎉 Dashboard Tips Test PASSED!")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ Dashboard tips test failed with exception: {str(e)}", "ERROR")
-            return False
-
-    def test_profit_calculator_tip_amount(self):
-        """Test profit calculator includes tipAmount field"""
-        self.log("🎯 Starting Profit Calculator Tip Amount Test...")
-        
-        try:
-            # Get an order ID first
-            response, success = self.api_call('GET', '/orders', params={'page': 1, 'limit': 5})
-            if not success or response.status_code != 200:
-                self.log(f"❌ Failed to get orders: {response.status_code if response else 'No response'}", "ERROR")
-                return False
-            
-            orders_data = response.json()
-            orders = orders_data.get('orders', [])
-            
-            if not orders:
-                self.log("❌ No orders found for profit calculation test", "ERROR")
-                return False
-            
-            order_id = orders[0]['_id']
-            self.log(f"✅ Using order ID: {order_id}")
-            
-            # Get profit calculation
-            response, success = self.api_call('GET', f'/calculate-profit/{order_id}')
-            if not success or response.status_code != 200:
-                self.log(f"❌ Failed to calculate profit: {response.status_code if response else 'No response'}", "ERROR")
-                return False
-            
-            profit_data = response.json()
-            
-            if 'tipAmount' not in profit_data:
-                self.log("❌ Profit calculation missing tipAmount field", "ERROR")
-                return False
-                
-            tip_amount = profit_data['tipAmount']
-            if not isinstance(tip_amount, (int, float)) or tip_amount < 0:
-                self.log(f"❌ tipAmount should be a number >= 0, got: {tip_amount}", "ERROR")
-                return False
-            
-            self.log(f"✅ Profit calculation tipAmount = {tip_amount} (valid)")
-            self.log("🎉 Profit Calculator Tip Amount Test PASSED!")
-            return True
-            
-        except Exception as e:
-            self.log(f"❌ Profit calculator test failed with exception: {str(e)}", "ERROR")
-            return False
-
-    def cleanup_test_data(self):
-        """Clean up any remaining test data"""
-        self.log("🧹 Cleaning up test data...")
-        
-        # Clean up any test templates that might still exist
-        response, success = self.api_call('GET', '/recipe-templates')
-        if success:
-            templates = response.json()
-            for template in templates:
-                if 'test' in template.get('name', '').lower():
-                    self.api_call('DELETE', f"/recipe-templates/{template['_id']}")
-                    self.log(f"✅ Cleaned up test template: {template['name']}")
-
-    def run_all_tests(self):
-        """Run all backend tests for ROUND 3"""
-        self.log("🚀 Starting ROUND 3 - Recipe Coverage + Apply UX + Template Lifecycle Backend Tests")
-        self.log(f"📍 Base URL: {self.base_url}")
-        
-        tests = [
-            ("Recipe Template FULL Lifecycle", self.test_recipe_template_full_lifecycle),
-            ("Unlink Endpoint Reset", self.test_unlink_endpoint_reset), 
-            ("Dashboard Tips P&L Breakdown", self.test_dashboard_tips),
-            ("Profit Calculator Tip Amount", self.test_profit_calculator_tip_amount),
-        ]
-        
-        results = {}
-        
-        for test_name, test_func in tests:
-            self.log(f"\n{'='*60}")
-            self.log(f"🧪 Running: {test_name}")
-            self.log('='*60)
-            
-            try:
-                result = test_func()
-                results[test_name] = result
-                status = "✅ PASSED" if result else "❌ FAILED"
-                self.log(f"\n🏁 Test Result: {status}")
-            except Exception as e:
-                self.log(f"❌ Test failed with exception: {str(e)}", "ERROR")
-                results[test_name] = False
-        
-        # Cleanup
-        self.cleanup_test_data()
-        
-        # Summary
-        self.log(f"\n{'='*60}")
-        self.log("📊 ROUND 3 TEST SUMMARY")
-        self.log('='*60)
-        
-        passed = sum(1 for result in results.values() if result)
-        total = len(results)
-        
-        for test_name, result in results.items():
-            status = "✅ PASSED" if result else "❌ FAILED"
-            self.log(f"{status} {test_name}")
-        
-        self.log(f"\n🎯 OVERALL RESULT: {passed}/{total} tests passed")
-        
-        if passed == total:
-            self.log("🎉 ALL ROUND 3 TESTS PASSED! Recipe Templates system fully functional.")
-            return True
+            # Check scheduler info if included
+            if '_scheduler' in settings:
+                print(f"✅ Scheduler info included: {settings['_scheduler']}")
         else:
-            self.log("❌ Some tests failed. Check individual test results above.")
-            return False
+            print(f"❌ Failed to get sync settings: {response.text}")
+
+        # Test 2: POST /api/sync-settings - Update settings
+        print("\n✅ Test 2: POST /api/sync-settings - Enable Shopify auto-sync")
+        update_payload = {
+            "shopify.autoSyncEnabled": True,
+            "shopify.autoSyncInterval": "1h"
+        }
+        response = requests.post(f"{BASE_URL}/sync-settings", json=update_payload)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            updated_settings = response.json()
+            if updated_settings.get('shopify', {}).get('autoSyncEnabled') == True:
+                print("✅ Shopify auto-sync enabled successfully")
+            else:
+                print("❌ Shopify auto-sync not enabled")
+        else:
+            print(f"❌ Failed to update sync settings: {response.text}")
+
+        # Test 3: Verify updated settings
+        print("\n✅ Test 3: GET /api/sync-settings - Verify updates")
+        response = requests.get(f"{BASE_URL}/sync-settings")
+        if response.status_code == 200:
+            settings = response.json()
+            shopify_settings = settings.get('shopify', {})
+            if shopify_settings.get('autoSyncEnabled') == True and shopify_settings.get('autoSyncInterval') == '1h':
+                print("✅ Settings update verified")
+            else:
+                print(f"❌ Settings not updated correctly: {shopify_settings}")
+
+        # Test 4: Disable auto-sync
+        print("\n✅ Test 4: POST /api/sync-settings - Disable auto-sync")
+        disable_payload = {
+            "shopify.autoSyncEnabled": False
+        }
+        response = requests.post(f"{BASE_URL}/sync-settings", json=disable_payload)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            print("✅ Auto-sync disabled successfully")
+        else:
+            print(f"❌ Failed to disable auto-sync: {response.text}")
+
+    except Exception as e:
+        print(f"❌ Sync Settings API test failed: {str(e)}")
+
+def test_sync_status_api():
+    """Test Sync Status API"""
+    print("\n🎯 TESTING SYNC STATUS API")
+    
+    try:
+        response = requests.get(f"{BASE_URL}/sync-status")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            status = response.json()
+            print(f"Status response keys: {list(status.keys())}")
+            
+            # Check for expected structure
+            if 'locks' in status:
+                locks = status['locks']
+                print(f"✅ Lock status found: {locks}")
+                
+                # Verify all integrations have lock status
+                expected_integrations = ['shopify', 'razorpay', 'metaAds', 'indiaPost']
+                for integration in expected_integrations:
+                    if integration in locks:
+                        print(f"✅ {integration} lock status: {locks[integration]}")
+                    else:
+                        print(f"❌ {integration} lock status missing")
+            else:
+                print("❌ Locks not found in status response")
+            
+            if 'scheduler' in status:
+                scheduler = status['scheduler']
+                print(f"✅ Scheduler info found: {scheduler}")
+            else:
+                print("❌ Scheduler info not found")
+        else:
+            print(f"❌ Failed to get sync status: {response.text}")
+
+    except Exception as e:
+        print(f"❌ Sync Status API test failed: {str(e)}")
+
+def test_shopify_sync_api():
+    """Test Incremental Shopify Sync"""
+    print("\n🎯 TESTING SHOPIFY SYNC API")
+    
+    try:
+        # Test 1: Incremental sync (default)
+        print("✅ Test 1: POST /api/shopify/sync-orders - Incremental mode")
+        response = requests.post(f"{BASE_URL}/shopify/sync-orders")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"Sync result keys: {list(result.keys())}")
+            
+            # Check for expected fields
+            expected_fields = ['message', 'synced', 'syncType']
+            for field in expected_fields:
+                if field in result:
+                    print(f"✅ {field}: {result[field]}")
+                else:
+                    print(f"❌ Missing field: {field}")
+            
+            # Verify syncType is incremental for default mode
+            if result.get('syncType') == 'incremental':
+                print("✅ Incremental mode confirmed")
+            else:
+                print(f"❌ Expected incremental mode, got: {result.get('syncType')}")
+        else:
+            print(f"❌ Incremental sync failed: {response.text}")
+
+        time.sleep(2)  # Brief wait between requests
+
+        # Test 2: Full sync
+        print("\n✅ Test 2: POST /api/shopify/sync-orders?mode=full - Full mode")
+        response = requests.post(f"{BASE_URL}/shopify/sync-orders?mode=full")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('syncType') == 'full':
+                print("✅ Full mode confirmed")
+                print(f"Sync counts: {result.get('synced', 0)} synced, {result.get('updated', 0)} updated")
+            else:
+                print(f"❌ Expected full mode, got: {result.get('syncType')}")
+        else:
+            print(f"❌ Full sync failed: {response.text}")
+
+    except Exception as e:
+        print(f"❌ Shopify Sync API test failed: {str(e)}")
+
+def test_razorpay_sync_api():
+    """Test Incremental Razorpay Sync"""
+    print("\n🎯 TESTING RAZORPAY SYNC API")
+    
+    try:
+        # Test 1: Incremental sync (default)
+        print("✅ Test 1: POST /api/razorpay/sync-payments - Incremental mode")
+        response = requests.post(f"{BASE_URL}/razorpay/sync-payments")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"Sync result: {result.get('message', 'No message')}")
+            
+            # Check for expected fields
+            if 'synced' in result:
+                print(f"✅ Synced count: {result['synced']}")
+            if 'syncType' in result:
+                print(f"✅ Sync type: {result['syncType']}")
+                if result['syncType'] == 'incremental':
+                    print("✅ Incremental mode confirmed")
+        else:
+            print(f"❌ Incremental Razorpay sync failed: {response.text}")
+
+        time.sleep(2)
+
+        # Test 2: Full sync
+        print("\n✅ Test 2: POST /api/razorpay/sync-payments?mode=full - Full mode")
+        response = requests.post(f"{BASE_URL}/razorpay/sync-payments?mode=full")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('syncType') == 'full':
+                print("✅ Full mode confirmed")
+                print(f"Sync result: {result.get('message', 'No message')}")
+            else:
+                print(f"❌ Expected full mode, got: {result.get('syncType')}")
+        else:
+            print(f"❌ Full Razorpay sync failed: {response.text}")
+
+    except Exception as e:
+        print(f"❌ Razorpay Sync API test failed: {str(e)}")
+
+def test_shopify_webhook():
+    """Test Shopify Webhook Endpoint"""
+    print("\n🎯 TESTING SHOPIFY WEBHOOK ENDPOINT")
+    
+    try:
+        # Test 1: Order creation webhook
+        print("✅ Test 1: POST /api/webhooks/shopify - Order creation")
+        
+        webhook_payload = {
+            "id": 9999999999,
+            "order_number": "9999",
+            "created_at": "2026-03-06T10:00:00Z",
+            "total_price": "1500.00",
+            "total_tax": "229.03",
+            "total_discounts": "0.00",
+            "financial_status": "paid",
+            "fulfillment_status": None,
+            "total_shipping_price_set": {"shop_money": {"amount": "50.00"}},
+            "line_items": [
+                {
+                    "id": 1,
+                    "title": "Test Product",
+                    "sku": "TEST-WH-001",
+                    "price": "1500.00",
+                    "quantity": 1,
+                    "variant_id": 99999
+                }
+            ],
+            "customer": {
+                "first_name": "Test",
+                "last_name": "Webhook",
+                "email": "test@webhook.com",
+                "phone": "+919876543210"
+            },
+            "shipping_address": {
+                "address1": "123 Test St",
+                "city": "Mumbai",
+                "province": "Maharashtra",
+                "zip": "400001",
+                "country": "India"
+            }
+        }
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'x-shopify-topic': 'orders/create'
+        }
+        
+        response = requests.post(f"{BASE_URL}/webhooks/shopify", 
+                               json=webhook_payload, 
+                               headers=headers)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"Webhook result: {result}")
+            
+            if result.get('status') == 'ok':
+                print("✅ Webhook processed successfully")
+                if 'synced' in result and result['synced'] > 0:
+                    print(f"✅ Order synced: {result['synced']} orders")
+            else:
+                print(f"❌ Webhook processing failed: {result}")
+        else:
+            print(f"❌ Webhook request failed: {response.text}")
+
+        time.sleep(2)
+
+        # Test 2: Order cancellation webhook
+        print("\n✅ Test 2: POST /api/webhooks/shopify - Order cancellation")
+        
+        cancel_payload = {"id": 9999999999}
+        headers['x-shopify-topic'] = 'orders/cancelled'
+        
+        response = requests.post(f"{BASE_URL}/webhooks/shopify", 
+                               json=cancel_payload, 
+                               headers=headers)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('status') == 'ok' and result.get('action') == 'cancelled':
+                print("✅ Order cancellation webhook processed successfully")
+            else:
+                print(f"❌ Cancellation webhook failed: {result}")
+        else:
+            print(f"❌ Cancellation webhook request failed: {response.text}")
+
+    except Exception as e:
+        print(f"❌ Shopify Webhook test failed: {str(e)}")
+
+def test_razorpay_webhook():
+    """Test Razorpay Webhook Endpoint"""
+    print("\n🎯 TESTING RAZORPAY WEBHOOK ENDPOINT")
+    
+    try:
+        # Test 1: Payment captured webhook
+        print("✅ Test 1: POST /api/webhooks/razorpay - Payment captured")
+        
+        webhook_payload = {
+            "event": "payment.captured",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": "pay_test_webhook_001",
+                        "amount": 150000,
+                        "status": "captured",
+                        "contact": "+919876543210",
+                        "email": "test@webhook.com",
+                        "method": "upi",
+                        "fee": 3540,
+                        "tax": 540,
+                        "settlement_id": None
+                    }
+                }
+            }
+        }
+        
+        response = requests.post(f"{BASE_URL}/webhooks/razorpay", json=webhook_payload)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('status') == 'ok':
+                print("✅ Payment captured webhook processed successfully")
+                print(f"Result: {result}")
+            else:
+                print(f"❌ Payment webhook processing failed: {result}")
+        else:
+            print(f"❌ Payment webhook request failed: {response.text}")
+
+        time.sleep(2)
+
+        # Test 2: Payment failed webhook
+        print("\n✅ Test 2: POST /api/webhooks/razorpay - Payment failed")
+        
+        failed_payload = {
+            "event": "payment.failed",
+            "payload": {
+                "payment": {
+                    "entity": {
+                        "id": "pay_test_fail_001"
+                    }
+                }
+            }
+        }
+        
+        response = requests.post(f"{BASE_URL}/webhooks/razorpay", json=failed_payload)
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('status') == 'ok':
+                print("✅ Payment failed webhook processed successfully")
+            else:
+                print(f"❌ Failed payment webhook processing failed: {result}")
+        else:
+            print(f"❌ Failed payment webhook request failed: {response.text}")
+
+    except Exception as e:
+        print(f"❌ Razorpay Webhook test failed: {str(e)}")
+
+def test_sync_history_api():
+    """Test Sync History API"""
+    print("\n🎯 TESTING SYNC HISTORY API")
+    
+    try:
+        response = requests.get(f"{BASE_URL}/sync-history")
+        print(f"Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            history = response.json()
+            
+            if isinstance(history, list):
+                print(f"✅ Sync history returned {len(history)} entries")
+                
+                # Check if we have entries from our webhook tests
+                webhook_entries = [entry for entry in history if 'webhook' in entry.get('action', '')]
+                if webhook_entries:
+                    print(f"✅ Found {len(webhook_entries)} webhook entries in sync history")
+                    
+                    # Show a sample entry
+                    sample = webhook_entries[0]
+                    print(f"Sample entry: {sample.get('integration', 'unknown')} - {sample.get('action', 'unknown')} - {sample.get('status', 'unknown')}")
+                else:
+                    print("ℹ️ No webhook entries found (this is okay if webhooks weren't processed)")
+                
+                # Check for sync entries
+                sync_entries = [entry for entry in history if 'sync' in entry.get('action', '')]
+                if sync_entries:
+                    print(f"✅ Found {len(sync_entries)} sync entries in history")
+                else:
+                    print("ℹ️ No sync entries found")
+                    
+            else:
+                print(f"❌ Expected array, got: {type(history)}")
+        else:
+            print(f"❌ Failed to get sync history: {response.text}")
+
+    except Exception as e:
+        print(f"❌ Sync History API test failed: {str(e)}")
+
+def verify_credentials_configured():
+    """Verify that Shopify and Razorpay credentials are configured"""
+    print("\n🎯 VERIFYING INTEGRATION CREDENTIALS")
+    
+    try:
+        # Connect to MongoDB to check credentials
+        client = MongoClient(MONGO_URL)
+        db = client[DB_NAME]
+        
+        integrations = db.integrations.find_one({'_id': 'integrations-config'})
+        
+        if integrations:
+            # Check Shopify
+            shopify = integrations.get('shopify', {})
+            if shopify.get('storeUrl') and shopify.get('accessToken'):
+                print("✅ Shopify credentials are configured")
+            else:
+                print("❌ Shopify credentials are missing")
+            
+            # Check Razorpay  
+            razorpay = integrations.get('razorpay', {})
+            if razorpay.get('keyId') and razorpay.get('keySecret'):
+                print("✅ Razorpay credentials are configured")
+            else:
+                print("❌ Razorpay credentials are missing")
+                
+            # Check webhook secrets
+            print(f"ℹ️ Shopify webhook secret: {'configured' if shopify.get('webhookSecret') else 'empty (HMAC verification skipped)'}")
+            print(f"ℹ️ Razorpay webhook secret: {'configured' if razorpay.get('webhookSecret') else 'empty (signature verification skipped)'}")
+            
+        else:
+            print("❌ No integrations config found")
+            
+        client.close()
+        
+    except Exception as e:
+        print(f"❌ Could not verify credentials: {str(e)}")
 
 def main():
-    if len(sys.argv) > 1:
-        base_url = sys.argv[1]
-    else:
-        base_url = "https://smart-finance-hub-41.preview.emergentagent.com/api"
+    """Run all Phase 6 Sync Optimization tests"""
     
-    tester = BackendTester(base_url)
-    success = tester.run_all_tests()
+    print("🚀 STARTING PHASE 6 SYNC OPTIMIZATION BACKEND TESTING")
+    print("=" * 60)
     
-    sys.exit(0 if success else 1)
+    # Verify prerequisites
+    verify_credentials_configured()
+    
+    # Test all sync endpoints
+    test_sync_settings_api()
+    test_sync_status_api()
+    test_shopify_sync_api()
+    test_razorpay_sync_api()
+    test_shopify_webhook()
+    test_razorpay_webhook()
+    test_sync_history_api()
+    
+    print("\n" + "=" * 60)
+    print("✅ PHASE 6 SYNC OPTIMIZATION TESTING COMPLETE")
+    
+    # Note about India Post
+    print("\nℹ️ NOTE: India Post sync was not tested as it's blocked per the requirements")
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import { calculateOrderProfit, calculateDashboardMetrics, calculateProratedOverhead, getISTDateKey } from '@/lib/profitCalculator';
+import { getSyncSettings, updateSyncSettings, initScheduler, getSchedulerStatus, acquireSyncLock, releaseSyncLock, isSyncRunning, getSyncLockStatus } from '@/lib/syncScheduler';
+import { shopifySyncOrdersIncremental, razorpaySyncPaymentsIncremental, logSyncEventLib } from '@/lib/syncFunctions';
+import crypto from 'crypto';
 
 function corsHeaders() {
   return {
@@ -2251,6 +2254,9 @@ export async function OPTIONS() {
 }
 
 export async function GET(request) {
+  // Lazy init the scheduler on first request
+  try { await initScheduler(); } catch (e) { /* silent */ }
+
   try {
     const segments = getSegments(request);
     const resource = segments[0];
@@ -2970,6 +2976,21 @@ export async function GET(request) {
         return json(spends);
       }
 
+      case 'sync-settings': {
+        // GET /api/sync-settings — Get auto-sync configuration
+        const settings = await getSyncSettings();
+        const schedulerStatus = getSchedulerStatus();
+        return json({ ...settings, _scheduler: schedulerStatus });
+      }
+
+      case 'sync-status': {
+        // GET /api/sync-status — Get current sync lock status and scheduler info
+        return json({
+          locks: getSyncLockStatus(),
+          scheduler: getSchedulerStatus(),
+        });
+      }
+
       case 'sync-history': {
         const db = await getDb();
         const integration = params.integration;
@@ -3105,12 +3126,22 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  // Lazy init the scheduler on first request
+  try { await initScheduler(); } catch (e) { /* silent */ }
+
   try {
     const segments = getSegments(request);
     const resource = segments[0];
     const subResource = segments[1];
+    const thirdSegment = segments[2];
+    
+    // For webhooks, we need the raw body for HMAC verification
     let body = {};
-    try { body = await request.json(); } catch (e) {}
+    let rawBody = '';
+    try {
+      rawBody = await request.text();
+      body = JSON.parse(rawBody);
+    } catch (e) {}
 
     switch (resource) {
       case 'seed':
@@ -3118,7 +3149,46 @@ export async function POST(request) {
 
       case 'shopify':
         if (subResource === 'sync-products') return json(await shopifySyncProducts());
-        if (subResource === 'sync-orders') return json(await shopifySyncOrders());
+        if (subResource === 'sync-orders') {
+          // Support incremental sync: POST /api/shopify/sync-orders?mode=incremental|full
+          const url = new URL(request.url);
+          const mode = url.searchParams.get('mode') || body.mode || 'incremental';
+          const db = await getDb();
+          const settings = await getSyncSettings();
+          
+          if (!acquireSyncLock('shopify')) {
+            return json({ error: 'Shopify sync is already running. Please wait.', synced: 0 });
+          }
+          
+          try {
+            let result;
+            if (mode === 'full') {
+              // Force full sync — ignore lastIncrementalSyncAt
+              result = await shopifySyncOrders();
+              // Update incremental timestamp after full sync
+              await db.collection('syncSettings').updateOne(
+                { _id: 'sync-settings' },
+                { $set: { 'shopify.lastIncrementalSyncAt': new Date().toISOString() } },
+                { upsert: true }
+              );
+            } else {
+              // Incremental sync — only fetch orders updated since last sync
+              const lastSync = settings.shopify?.lastIncrementalSyncAt;
+              result = await shopifySyncOrdersIncremental(lastSync);
+              if (!result.error) {
+                await db.collection('syncSettings').updateOne(
+                  { _id: 'sync-settings' },
+                  { $set: { 'shopify.lastIncrementalSyncAt': new Date().toISOString() } },
+                  { upsert: true }
+                );
+              }
+            }
+            await logSyncEvent(db, 'shopify', 'sync-orders', result.error ? 'error' : 'success', { ...result, trigger: 'manual', mode });
+            return json(result);
+          } finally {
+            releaseSyncLock('shopify');
+          }
+        }
         return json({ error: 'Unknown Shopify action' }, 404);
 
       case 'indiapost':
@@ -3211,7 +3281,42 @@ export async function POST(request) {
         return json({ error: 'Unknown Meta Ads action' }, 404);
 
       case 'razorpay':
-        if (subResource === 'sync-payments') return json(await razorpaySyncPayments());
+        if (subResource === 'sync-payments') {
+          const url = new URL(request.url);
+          const mode = url.searchParams.get('mode') || body.mode || 'incremental';
+          const db = await getDb();
+          const settings = await getSyncSettings();
+          
+          if (!acquireSyncLock('razorpay')) {
+            return json({ error: 'Razorpay sync is already running. Please wait.', synced: 0 });
+          }
+          
+          try {
+            let result;
+            if (mode === 'full') {
+              result = await razorpaySyncPayments();
+              await db.collection('syncSettings').updateOne(
+                { _id: 'sync-settings' },
+                { $set: { 'razorpay.lastIncrementalSyncAt': new Date().toISOString() } },
+                { upsert: true }
+              );
+            } else {
+              const lastSync = settings.razorpay?.lastIncrementalSyncAt;
+              result = await razorpaySyncPaymentsIncremental(lastSync);
+              if (!result.error) {
+                await db.collection('syncSettings').updateOne(
+                  { _id: 'sync-settings' },
+                  { $set: { 'razorpay.lastIncrementalSyncAt': new Date().toISOString() } },
+                  { upsert: true }
+                );
+              }
+            }
+            await logSyncEvent(db, 'razorpay', 'sync-payments', result.error ? 'error' : 'success', { ...result, trigger: 'manual', mode });
+            return json(result);
+          } finally {
+            releaseSyncLock('razorpay');
+          }
+        }
         return json({ error: 'Unknown Razorpay action' }, 404);
 
       case 'employee-claim': {
@@ -3669,7 +3774,270 @@ export async function POST(request) {
         return json(newVendor);
       }
 
+      case 'sync-settings': {
+        // POST /api/sync-settings — Update auto-sync configuration
+        const updatedSettings = await updateSyncSettings(body);
+        return json(updatedSettings);
+      }
+
       case 'webhooks': {
+        // POST /api/webhooks/shopify — Handle Shopify order webhooks
+        if (subResource === 'shopify') {
+          const db = await getDb();
+          try {
+            // HMAC Verification
+            const syncSettings = await getSyncSettings();
+            const shopifySecret = syncSettings?.webhooks?.shopifySecret;
+            
+            if (shopifySecret) {
+              const hmacHeader = request.headers.get('x-shopify-hmac-sha256') || '';
+              const computedHmac = crypto
+                .createHmac('sha256', shopifySecret)
+                .update(rawBody, 'utf8')
+                .digest('base64');
+              
+              if (hmacHeader !== computedHmac) {
+                console.error('[Webhook] Shopify HMAC verification failed');
+                return json({ error: 'HMAC verification failed' }, 401);
+              }
+            }
+            
+            const topic = request.headers.get('x-shopify-topic') || '';
+            console.log(`[Webhook] Shopify event received: ${topic}`);
+            
+            if (topic === 'orders/create' || topic === 'orders/updated') {
+              // Process the order using the same sync logic
+              const shopifyOrder = body;
+              if (!shopifyOrder?.id) {
+                return json({ status: 'ok', message: 'No order ID in payload' });
+              }
+              
+              const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
+              if (!integrations?.shopify?.active) {
+                return json({ status: 'ok', message: 'Shopify integration not active' });
+              }
+              
+              // Process single order — reuse same logic as sync
+              const shopifyOrderIdStr = String(shopifyOrder.id);
+              let status = 'Unfulfilled';
+              if (shopifyOrder.fulfillment_status === 'fulfilled') status = 'Delivered';
+              else if (shopifyOrder.fulfillment_status === 'partial') status = 'In Transit';
+              else if (shopifyOrder.cancelled_at) status = 'Cancelled';
+              
+              const shopifyDateRaw = shopifyOrder.created_at || shopifyOrder.processed_at || shopifyOrder.updated_at;
+              const shopifyDate = shopifyDateRaw ? new Date(shopifyDateRaw).toISOString() : new Date().toISOString();
+              
+              const addr = shopifyOrder.shipping_address || {};
+              const shippingAddress = {
+                line1: addr.address1 || '', line2: addr.address2 || '',
+                city: addr.city || '', state: addr.province || '',
+                zip: addr.zip || '', country: addr.country || '',
+              };
+              
+              const customerPhone = shopifyOrder.customer?.phone || addr.phone || shopifyOrder.phone || '';
+              const totalTax = parseFloat(shopifyOrder.total_tax || 0);
+              const allLineItems = shopifyOrder.line_items || [];
+              const productItems = allLineItems.filter(i => (i.title || '').toLowerCase() !== 'tip');
+              const tipItems = allLineItems.filter(i => (i.title || '').toLowerCase() === 'tip');
+              const tipAmount = tipItems.reduce((sum, t) => sum + (parseFloat(t.price) * (t.quantity || 1)), 0);
+              const totalLineItems = productItems.length || 1;
+              const totalShipping = parseFloat(shopifyOrder.total_shipping_price_set?.shop_money?.amount || 0);
+              const totalDiscount = parseFloat(shopifyOrder.total_discounts || 0);
+              const finalOrderPrice = parseFloat(shopifyOrder.total_price || 0);
+              const rawSubtotal = productItems.reduce((sum, i) => sum + (parseFloat(i.price) * (i.quantity || 1)), 0);
+              const totalRefunds = (shopifyOrder.refunds || []).reduce((sum, refund) => {
+                return sum + (refund.refund_line_items || []).reduce((s, rli) => s + (parseFloat(rli.subtotal) || 0), 0);
+              }, 0);
+              const financialStatus = shopifyOrder.financial_status || 'unknown';
+              
+              let synced = 0, updated = 0;
+              for (const item of productItems) {
+                const sku = item.sku || `SHOP-${item.variant_id || item.product_id}`;
+                const itemQty = item.quantity || 1;
+                const lineItemRaw = parseFloat(item.price) * itemQty;
+                const priceRatio = rawSubtotal > 0 ? lineItemRaw / rawSubtotal : (1 / totalLineItems);
+                const itemTipShare = tipAmount > 0 ? Math.round(tipAmount * priceRatio * 100) / 100 : 0;
+                
+                const result = await db.collection('orders').updateOne(
+                  { shopifyOrderId: shopifyOrderIdStr, sku },
+                  {
+                    $set: {
+                      salePrice: finalOrderPrice * priceRatio,
+                      totalOrderPrice: finalOrderPrice,
+                      discount: totalDiscount * priceRatio,
+                      refundAmount: totalRefunds * priceRatio,
+                      totalTax: totalTax * priceRatio,
+                      financialStatus, status,
+                      shippingCost: totalShipping * priceRatio,
+                      shippingAddress, customerPhone,
+                      customerEmail: shopifyOrder.customer?.email || shopifyOrder.email || '',
+                      checkoutToken: shopifyOrder.checkout_token || '',
+                      orderDate: shopifyDate,
+                      productName: item.title || item.name,
+                      variantName: item.variant_title || '',
+                      quantity: itemQty,
+                      tipAmount: itemTipShare,
+                      destinationPincode: shippingAddress.zip,
+                      destinationCity: shippingAddress.city,
+                      paymentMethod: 'prepaid',
+                      updatedAt: new Date().toISOString(),
+                    },
+                    $setOnInsert: {
+                      _id: uuidv4(),
+                      orderId: `SH-${shopifyOrder.order_number || shopifyOrder.id}`,
+                      shopifyOrderId: shopifyOrderIdStr, sku,
+                      customerName: shopifyOrder.customer ? `${shopifyOrder.customer.first_name || ''} ${shopifyOrder.customer.last_name || ''}`.trim() : 'Unknown',
+                      shippingMethod: 'shopify', isUrgent: false,
+                      manualCourierName: null, manualShippingCost: null,
+                      preparedBy: null, preparedByName: null,
+                      trackingNumber: null, createdAt: new Date().toISOString(),
+                    },
+                  },
+                  { upsert: true }
+                );
+                if (result.upsertedCount > 0) synced++;
+                else if (result.modifiedCount > 0) updated++;
+              }
+              
+              // Auto-create SKU recipe stub if needed
+              for (const item of productItems) {
+                const sku = item.sku || `SHOP-${item.variant_id || item.product_id}`;
+                const existing = await db.collection('skuRecipes').findOne({ sku });
+                if (!existing) {
+                  await db.collection('skuRecipes').insertOne({
+                    _id: uuidv4(), sku,
+                    productName: item.title || item.name || sku,
+                    shopifySynced: true, needsCostInput: true,
+                    ingredients: [], rawMaterials: [], packaging: [],
+                    consumableCost: 0, totalWeightGrams: 0,
+                    defaultWastageBuffer: 5, monthlyWastageOverride: null,
+                    templateId: null, templateName: null,
+                    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+                  });
+                }
+              }
+              
+              await logSyncEvent(db, 'shopify', 'webhook', 'success', { topic, synced, updated, orderId: shopifyOrderIdStr });
+              return json({ status: 'ok', synced, updated });
+            }
+            
+            if (topic === 'orders/cancelled') {
+              const shopifyOrderIdStr = String(body.id);
+              await db.collection('orders').updateMany(
+                { shopifyOrderId: shopifyOrderIdStr },
+                { $set: { status: 'Cancelled', updatedAt: new Date().toISOString() } }
+              );
+              await logSyncEvent(db, 'shopify', 'webhook', 'success', { topic, orderId: shopifyOrderIdStr, action: 'cancelled' });
+              return json({ status: 'ok', action: 'cancelled' });
+            }
+            
+            return json({ status: 'ok', message: `Unhandled topic: ${topic}` });
+          } catch (err) {
+            console.error('[Webhook] Shopify error:', err);
+            try { await logSyncEvent(await getDb(), 'shopify', 'webhook', 'error', { error: err.message }); } catch (e) {}
+            return json({ status: 'error', error: err.message }, 500);
+          }
+        }
+        
+        // POST /api/webhooks/razorpay — Handle Razorpay payment webhooks
+        if (subResource === 'razorpay') {
+          const db = await getDb();
+          try {
+            // Signature Verification
+            const syncSettings = await getSyncSettings();
+            const razorpaySecret = syncSettings?.webhooks?.razorpaySecret;
+            
+            if (razorpaySecret) {
+              const signatureHeader = request.headers.get('x-razorpay-signature') || '';
+              const computedSignature = crypto
+                .createHmac('sha256', razorpaySecret)
+                .update(rawBody)
+                .digest('hex');
+              
+              if (signatureHeader !== computedSignature) {
+                console.error('[Webhook] Razorpay signature verification failed');
+                return json({ error: 'Signature verification failed' }, 401);
+              }
+            }
+            
+            const event = body.event || '';
+            const payload = body.payload || {};
+            console.log(`[Webhook] Razorpay event received: ${event}`);
+            
+            if (event === 'payment.captured') {
+              const payment = payload.payment?.entity;
+              if (!payment) return json({ status: 'ok', message: 'No payment entity' });
+              
+              // Match payment to order using same strategies as sync
+              const allOrders = await db.collection('orders').find({ shopifyOrderId: { $exists: true } }).toArray();
+              const normalizePhone = (phone) => phone ? phone.replace(/\D/g, '').slice(-10) : '';
+              
+              const payPhone = normalizePhone(payment.contact || '');
+              const payEmail = (payment.email || '').toLowerCase().trim();
+              const payAmount = payment.amount || 0;
+              
+              // Group orders by shopifyOrderId
+              const orderGroups = {};
+              allOrders.forEach(o => {
+                if (!o.shopifyOrderId) return;
+                if (!orderGroups[o.shopifyOrderId]) {
+                  orderGroups[o.shopifyOrderId] = { totalOrderPrice: o.totalOrderPrice || o.salePrice, customerPhone: o.customerPhone || '', customerEmail: o.customerEmail || '', lines: [o] };
+                } else {
+                  orderGroups[o.shopifyOrderId].lines.push(o);
+                }
+              });
+              
+              let matchedGroup = null;
+              for (const [sid, g] of Object.entries(orderGroups)) {
+                if (g.lines[0]?.razorpayReconciled) continue; // Already matched
+                const amountPaise = Math.round((g.totalOrderPrice || 0) * 100);
+                if (amountPaise !== payAmount) continue;
+                
+                const phone = normalizePhone(g.customerPhone);
+                if (payPhone && phone === payPhone) { matchedGroup = g; break; }
+                const email = (g.customerEmail || '').toLowerCase().trim();
+                if (payEmail && email === payEmail) { matchedGroup = g; break; }
+              }
+              
+              if (matchedGroup) {
+                const feeInRupees = (payment.fee || 0) / 100;
+                const taxInRupees = (payment.tax || 0) / 100;
+                const totalLines = matchedGroup.lines.length || 1;
+                
+                for (const line of matchedGroup.lines) {
+                  await db.collection('orders').updateOne(
+                    { _id: line._id },
+                    { $set: { razorpayPaymentId: payment.id, razorpayFee: feeInRupees / totalLines, razorpayTax: taxInRupees / totalLines, razorpayReconciled: true, razorpaySettlementId: payment.settlement_id || null, paymentMethod: 'prepaid', updatedAt: new Date().toISOString() } }
+                  );
+                }
+                
+                await logSyncEvent(db, 'razorpay', 'webhook', 'success', { event, paymentId: payment.id, matched: true });
+                return json({ status: 'ok', matched: true, paymentId: payment.id });
+              } else {
+                // Store as unmatched
+                await db.collection('razorpayUnmatchedPayments').updateOne(
+                  { _id: payment.id },
+                  { $set: { paymentId: payment.id, amount: (payment.amount || 0) / 100, contact: payment.contact || '', email: payment.email || '', method: payment.method || 'unknown', fee: (payment.fee || 0) / 100, tax: (payment.tax || 0) / 100, status: 'unresolved', syncedAt: new Date().toISOString() } },
+                  { upsert: true }
+                );
+                await logSyncEvent(db, 'razorpay', 'webhook', 'success', { event, paymentId: payment.id, matched: false });
+                return json({ status: 'ok', matched: false, paymentId: payment.id });
+              }
+            }
+            
+            if (event === 'payment.failed') {
+              await logSyncEvent(db, 'razorpay', 'webhook', 'success', { event, paymentId: payload.payment?.entity?.id, action: 'payment_failed_logged' });
+              return json({ status: 'ok', action: 'payment_failed_logged' });
+            }
+            
+            return json({ status: 'ok', message: `Unhandled event: ${event}` });
+          } catch (err) {
+            console.error('[Webhook] Razorpay error:', err);
+            try { await logSyncEvent(await getDb(), 'razorpay', 'webhook', 'error', { error: err.message }); } catch (e) {}
+            return json({ status: 'error', error: err.message }, 500);
+          }
+        }
+        
         // POST /api/webhooks/whatsapp — Handle incoming webhook events
         if (subResource === 'whatsapp') {
           const db = await getDb();

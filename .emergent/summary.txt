@@ -1,377 +1,181 @@
 <analysis>
+
 <original_problem_statement>
-The user initially requested a series of feature expansions (Phase 9 & 10), which were consolidated into a master plan. The core requirements were:
+The user provided a comprehensive multi-phase development blueprint. The initial task was to complete the refactoring of **Phase 5: Pending Bills &amp; Finance Module**.
 
-1.  **Automated Shopify Fee Calculation**: Remove the rejected Shopify Bill CSV import and replace it with a configurable Shopify Transaction Fee Rate in the settings to automatically calculate fees per order.
-2.  **Enhanced Expense Management**: Overhaul the expense system to support categories/sub-categories, advanced recurring options (Yearly, Total Cycles), and a GST toggle.
-3.  **Detailed P&L Waterfall**: Expand the dashboard's financial breakdown to show a collapsible, pro-rata view of all overhead expense categories.
-4.  **FIFO Inventory Costing (Phase 9F)**: Re-architect the inventory system to use First-In, First-Out costing. Raw material purchases (logged as expenses) should create stock batches with specific costs, and COGS for orders should be calculated based on the cost of the specific batch consumed.
-5.  **UX/Onboarding Optimization**: After implementing the core features, the user requested a comprehensive UX overhaul to make the system more intuitive for new users. This includes adding setup guides, progress indicators, status banners, and clarifying the relationship between inventory and expense categories. A specific request was to improve the SKU Recipes page with templates and an easier setup flow.
-
+After the agent completed the Phase 5 refactor, the user requested a series of bug fixes and improvements before proceeding to the next phase. These included:
+- **Bug Fixes:**
+  - Correctly handle and display order quantities greater than one.
+  - Fix tip handling, which was distorting profit calculations.
+  - Resolve an issue where deleting a recipe template did not properly unlink it from products.
+  - Fix a long-standing Material Summary calculation bug.
+- **Improvements:**
+  - Enhance the SKU Recipe ingredient editor to allow yield based input (e.g., 6 items from 1 sheet) instead of decimals.
+  - Improve the UX of the Apply Template dialog to make searching and selecting products more intuitive.
+  - Change the default view on login to be role-based (Dashboard for Admins, KDS for Employees).
+  - Implement page persistence, so the active view is remembered after a browser refresh.
+- **Conceptual Change:**
+  - Redefine how tips are handled in financial reports: they should be included *within* Net Revenue, not as a separate line item below it.
 </original_problem_statement>
-<User_s_preferred_language>English</User_s_preferred_language>
-<what_currently_exists>
-The application has undergone significant feature development. The core logic for Shopify fee automation, enhanced expenses, detailed P&L, and a complete FIFO-based inventory costing system have been implemented on the backend and frontend. The SKU recipe management has been completely rewritten with a guided setup flow and reusable templates.
 
-However, the final task of implementing a comprehensive UX improvement across all pages (adding setup guides, status banners, etc.) has left the application in a **broken state**. The main dashboard page is stuck in an infinite loading loop and is currently unusable.
-</what_currently_exists>
-<Last_working_item>
-- Last item agent was working: The agent was attempting to fix a critical bug where the Dashboard page () is stuck on a loading screen. This bug was introduced while adding a Setup Status Banner to the dashboard as part of a sitewide UX enhancement. The agent correctly identified and fixed an issue where a React  hook was called conditionally, but this did not resolve the loading problem.
-- Status: BLOCKED
-- Agent Testing Done: N
-- Which testing method agent to use? The issue is frontend-related. The next agent should start by using browser developer tools to inspect the console for React errors and the network tab for failing or pending API calls (especially ). If the frontend inspection is inconclusive, check the backend logs ( [2m220[0m |       console.error('Dashboard fetch error:', err);
- [2m221[0m |     }
- [2m222[0m |     setLoading(false);
- [2m223[0m |   };
- [2m224[0m | 
- [2m225[0m |   useEffect(() => {
- [2m226[0m |     // For custom range, only fetch when BOTH from and to dates are fully selected
- [2m227[0m |     if (dateRange === 'custom' && (!customStart || !customEnd)) return;
- [2m228[0m |     fetchData();
- [2m229[0m |   }, [dateRange, customStart, customEnd]);
- [2m230[0m | 
- [2m231[0m |   // Settlements state (fetched separately — hook must be before any early return)
- [2m232[0m |   const [settlements, setSettlements] = useState(null);
- [2m233[0m |   useEffect(() => {
- [2m234[0m |     async function fetchSettlements() {
- [2m235[0m |       try {
- [2m236[0m |         const res = await fetch('/api/razorpay/settlements');
- [2m237[0m |         const sData = await res.json();
- [2m238[0m |         if (sData && !sData.error) setSettlements(sData);
- [2m239[0m |       } catch (err) { /* silently ignore if Razorpay not configured */ }
- [2m240[0m |     }
- [2m241[0m |     fetchSettlements();
- [2m242[0m |   }, []);
- [2m243[0m | 
- [2m244[0m |   if (loading || !data) {
- [2m245[0m |     return (
- [2m246[0m |       <div className="space-y-6">
- [2m247[0m |         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
- [2m248[0m |           {[1,2,3,4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
- [2m249[0m |         </div>
- [2m250[0m |         <Skeleton className="h-80 rounded-xl" />
- [2m251[0m |         <Skeleton className="h-96 rounded-xl" />
- [2m252[0m |       </div>
- [2m253[0m |     );
- [2m254[0m |   }
- [2m255[0m | 
- [2m256[0m |   const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown, dateRange: activeDateRange, revenueSplit } = data;
- [2m257[0m | 
- [2m258[0m |   // Setup status checks
- [2m259[0m |   const hasShopify = data.tenant?.shopify?.lastSync || allTime?.totalOrders > 0;
- [2m260[0m |   const hasRazorpay = data.tenant?.razorpay?.keyId;
- [2m261[0m |   const recipeCoverage = plBreakdown ? Math.round(((allTime?.totalOrders || 0) > 0 ? (plBreakdown.totalCOGS > 0 ? 60 : 0) : 0)) : 0;
- [2m262[0m |   const hasInventory = (overhead?.proratedAmount || 0) > 0;
- [2m263[0m |   const hasExpenses = (overhead?.monthlyTotal || 0) > 0;
- [2m264[0m |   const [showSetupBanner, setShowSetupBanner] = useState(true);
-     : [33;1m                          ^^^^^^^^^|^^^^^^^^[0m
-     :                                    [33;1m`-- [33;1m`setShowSetupBanner` redefined here[0m[0m
- [2m265[0m | 
- [2m266[0m |   // Trend calc
- [2m267[0m |   const dd = dailyData || [];
-     `----
+**User's preferred language**: English
 
-Import trace for requested module:
-./components/DashboardView.jsx
-./app/page.js
- ✓ Compiled in 1815ms (2735 modules)
- GET / 200 in 253ms
- GET / 200 in 20ms
- ○ Compiling /api/[[...path]] ...
- ✓ Compiled /api/[[...path]] in 784ms (1407 modules)
- GET /api/tenant-config 200 in 27ms
- GET /api/tenant-config 200 in 6ms
- GET /api/razorpay/settlements 200 in 1345ms
- ⚠ Server is approaching the used memory threshold, restarting...
-  ▲ Next.js 14.2.3
-  - Local:        http://localhost:3000
-  - Network:      http://0.0.0.0:3000
-  - Environments: .env
+**what currently exists?**
+The application is a comprehensive ERP/profitability dashboard for an e-commerce brand. All features from Phases 1-4 are complete. Phase 5 (Finance Module) has been successfully refactored. A significant number of bugs and improvements across various modules (Orders, KDS, SKU Recipes, Dashboard) have been addressed and resolved in this session. The application's core logic and UI are now more robust and aligned with the user's detailed requirements.
 
- ✓ Starting...
- ✓ Ready in 1774ms
- ○ Compiling / ...
-Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
-  npx update-browserslist-db@latest
-  Why you should do it regularly: https://github.com/browserslist/update-db#readme
- ✓ Compiled / in 10.9s (2735 modules)
- GET / 200 in 1400ms
- ✓ Compiled in 980ms (1378 modules)
- ○ Compiling /api/[[...path]] ...
- ✓ Compiled /api/[[...path]] in 1121ms (1407 modules)
- GET /api/tenant-config 200 in 2017ms
- GET /api/tenant-config 200 in 31ms
- GET / 200 in 175ms
- GET /api/dashboard?range=7days 200 in 951ms
- GET /api/razorpay/settlements 200 in 960ms
- GET /api/tenant-config 200 in 25ms
- GET /api/tenant-config 200 in 199ms
- GET /api/razorpay/settlements 200 in 1231ms
- GET /api/razorpay/settlements 200 in 881ms
- GET /api/dashboard?range=7days 200 in 7808ms
- GET /api/dashboard?range=7days 200 in 40274ms
-yarn run v1.22.22
-$ NODE_OPTIONS='--max-old-space-size=512' next dev --hostname 0.0.0.0 --port 3000
-  ▲ Next.js 14.2.3
-  - Local:        http://localhost:3000
-  - Network:      http://0.0.0.0:3000
-  - Environments: .env
-
- ✓ Starting...
- ✓ Ready in 2.5s) for any errors related to the dashboard data endpoints. The  should be used if the issue is not immediately obvious.
+**Last working item**:
+- Last item agent was working: Implementing page persistence on refresh. The agent modified  to use  to save and retrieve the user's active view, ensuring that if the user refreshes the browser, they land on the same page they were previously viewing.
+- Status: USER VERIFICATION PENDING
+- Agent Testing Done: Y (Verified with screenshots that navigating to a page and refreshing keeps the user on that page).
+- Which testing method agent to use? NA
 - User Testing Done: N
-</Last_working_item>
-<All_Pending_In_progress_Issue_list>
-  Issue 1: (P0) Dashboard is unusable, stuck on an infinite loading screen.
 
-  Issues Detail:
-  - Issue 1:
-     - Attempted fixes: The agent identified a rule-of-hooks violation in  where  was called inside a conditional block. The agent moved the hook to the top level of the component. While this was a necessary fix, it did not solve the underlying loading problem, indicating another issue exists.
-     - Next debug checklist:
-        1. **File:** 
-        2. Inspect the  hook that fetches . Check for infinite re-render loops caused by dependency array issues.
-        3. Use browser developer tools to check the JavaScript console for any React errors.
-        4. Check the Network tab to see the status of the  and  API calls. Are they pending indefinitely, or are they returning an error?
-        5. Check backend logs ( [2m220[0m |       console.error('Dashboard fetch error:', err);
- [2m221[0m |     }
- [2m222[0m |     setLoading(false);
- [2m223[0m |   };
- [2m224[0m | 
- [2m225[0m |   useEffect(() => {
- [2m226[0m |     // For custom range, only fetch when BOTH from and to dates are fully selected
- [2m227[0m |     if (dateRange === 'custom' && (!customStart || !customEnd)) return;
- [2m228[0m |     fetchData();
- [2m229[0m |   }, [dateRange, customStart, customEnd]);
- [2m230[0m | 
- [2m231[0m |   // Settlements state (fetched separately — hook must be before any early return)
- [2m232[0m |   const [settlements, setSettlements] = useState(null);
- [2m233[0m |   useEffect(() => {
- [2m234[0m |     async function fetchSettlements() {
- [2m235[0m |       try {
- [2m236[0m |         const res = await fetch('/api/razorpay/settlements');
- [2m237[0m |         const sData = await res.json();
- [2m238[0m |         if (sData && !sData.error) setSettlements(sData);
- [2m239[0m |       } catch (err) { /* silently ignore if Razorpay not configured */ }
- [2m240[0m |     }
- [2m241[0m |     fetchSettlements();
- [2m242[0m |   }, []);
- [2m243[0m | 
- [2m244[0m |   if (loading || !data) {
- [2m245[0m |     return (
- [2m246[0m |       <div className="space-y-6">
- [2m247[0m |         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
- [2m248[0m |           {[1,2,3,4].map(i => <Skeleton key={i} className="h-32 rounded-xl" />)}
- [2m249[0m |         </div>
- [2m250[0m |         <Skeleton className="h-80 rounded-xl" />
- [2m251[0m |         <Skeleton className="h-96 rounded-xl" />
- [2m252[0m |       </div>
- [2m253[0m |     );
- [2m254[0m |   }
- [2m255[0m | 
- [2m256[0m |   const { filtered, allTime, dailyData, recentOrders, exchangeRate, overhead, plBreakdown, dateRange: activeDateRange, revenueSplit } = data;
- [2m257[0m | 
- [2m258[0m |   // Setup status checks
- [2m259[0m |   const hasShopify = data.tenant?.shopify?.lastSync || allTime?.totalOrders > 0;
- [2m260[0m |   const hasRazorpay = data.tenant?.razorpay?.keyId;
- [2m261[0m |   const recipeCoverage = plBreakdown ? Math.round(((allTime?.totalOrders || 0) > 0 ? (plBreakdown.totalCOGS > 0 ? 60 : 0) : 0)) : 0;
- [2m262[0m |   const hasInventory = (overhead?.proratedAmount || 0) > 0;
- [2m263[0m |   const hasExpenses = (overhead?.monthlyTotal || 0) > 0;
- [2m264[0m |   const [showSetupBanner, setShowSetupBanner] = useState(true);
-     : [33;1m                          ^^^^^^^^^|^^^^^^^^[0m
-     :                                    [33;1m`-- [33;1m`setShowSetupBanner` redefined here[0m[0m
- [2m265[0m | 
- [2m266[0m |   // Trend calc
- [2m267[0m |   const dd = dailyData || [];
-     `----
+**All Pending/In progress Issue list**:
+There are no pending or in-progress issues. All issues raised by the user in this session have been addressed.
 
-Import trace for requested module:
-./components/DashboardView.jsx
-./app/page.js
- ✓ Compiled in 1815ms (2735 modules)
- GET / 200 in 253ms
- GET / 200 in 20ms
- ○ Compiling /api/[[...path]] ...
- ✓ Compiled /api/[[...path]] in 784ms (1407 modules)
- GET /api/tenant-config 200 in 27ms
- GET /api/tenant-config 200 in 6ms
- GET /api/razorpay/settlements 200 in 1345ms
- ⚠ Server is approaching the used memory threshold, restarting...
-  ▲ Next.js 14.2.3
-  - Local:        http://localhost:3000
-  - Network:      http://0.0.0.0:3000
-  - Environments: .env
+**In progress Task List**:
+There are no tasks currently in progress.
 
- ✓ Starting...
- ✓ Ready in 1774ms
- ○ Compiling / ...
-Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
-  npx update-browserslist-db@latest
-  Why you should do it regularly: https://github.com/browserslist/update-db#readme
- ✓ Compiled / in 10.9s (2735 modules)
- GET / 200 in 1400ms
- ✓ Compiled in 980ms (1378 modules)
- ○ Compiling /api/[[...path]] ...
- ✓ Compiled /api/[[...path]] in 1121ms (1407 modules)
- GET /api/tenant-config 200 in 2017ms
- GET /api/tenant-config 200 in 31ms
- GET / 200 in 175ms
- GET /api/dashboard?range=7days 200 in 951ms
- GET /api/razorpay/settlements 200 in 960ms
- GET /api/tenant-config 200 in 25ms
- GET /api/tenant-config 200 in 199ms
- GET /api/razorpay/settlements 200 in 1231ms
- GET /api/razorpay/settlements 200 in 881ms
- GET /api/dashboard?range=7days 200 in 7808ms
- GET /api/dashboard?range=7days 200 in 40274ms
-yarn run v1.22.22
-$ NODE_OPTIONS='--max-old-space-size=512' next dev --hostname 0.0.0.0 --port 3000
-  ▲ Next.js 14.2.3
-  - Local:        http://localhost:3000
-  - Network:      http://0.0.0.0:3000
-  - Environments: .env
+**Upcoming and Future Tasks**
+The user has explicitly stated that the next step is to begin **Phase 6** from the master blueprint.
 
- ✓ Starting...
- ✓ Ready in 2.5s) to ensure the server is not crashing or hanging when these endpoints are called.
-        6. Temporarily comment out the new Setup Status Banner and its related logic in  to confirm it is the source of the problem.
-     - Why fix this issue and what will be achieved with the fix? This is a show-stopping bug. The dashboard is the main page of the application, and it is completely inaccessible. Fixing this will restore core functionality and unblock testing of the new UX features.
-     - Status:  IN PROGRESS
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? Both. A full regression test is needed once the UI is stable.
-     - Blocked on other issue: None. This is the primary blocker.
-</All_Pending_In_progress_Issue_list>
-<In_progress_Task_List>
-  Task 1: (P0) Finalize and Verify Comprehensive UX Optimization
+**Upcoming Tasks:**
+- (P0) **Phase 6: Sync Optimization**
+    - Implement incremental syncs for Shopify and Razorpay using timestamps (, ).
+    - Add auto-sync scheduling controls (e.g., using ) for each integration in the settings panel.
+    - Implement webhook listeners (, ) for real-time data updates to supplement scheduled syncs.
+- (P1) **Phase 7: Housekeeping &amp; Polish**
+    - Update all info cards and tooltips.
+    - Perform a data consistency audit and optimize performance with DB indexes.
 
- Task Detail:
-  - Task 1:
-     - Where to resume: Resume by debugging the loading issue on the Dashboard (see Pending Issues above). Once the dashboard is working, the agent must verify that all the new UX enhancements are functioning correctly across all pages without introducing new bugs.
-     - What will be achieved with this? This will complete the user's request to make the application significantly more user-friendly and intuitive, with guided setup flows on each major page (Dashboard, Inventory, Expenses, SKU Recipes, Settings, Integrations).
-     - Status:  IN PROGRESS
-     - Should Test frontend/backend/both after fix? Both
-     - Blocked on something: Issue 1: Dashboard is unusable.
-</In_progress_Task_List>
-<Upcoming_and_Future_Tasks>
-    Upcoming Tasks:
-    - (P1) **Phase 9G: Employee System — KDS + ERP**: Implement an order assignment UI for admins and a KDS-style dashboard for employees to manage order fulfillment, report wastage, and request materials.
+**Future Tasks:**
+- **Phase 8: Knowledge Base &amp; User Guides**
+- **Phase 9: Landing Page &amp; SEO**
+- **Phase 10: User Onboarding**
 
-    Future Tasks:
-    - (P2) **Complete Onboarding Process**: The user has expressed a desire for a holistic, step-by-step onboarding feature that guides a new user through setting up the entire application. This would be built after all other core features are complete and stable.
-</Upcoming_and_Future_Tasks>
-<Completed_work_in_this_session>
+**Completed work in this session**
 - List of all completed tasks with file and method name:
-  - **FIFO Inventory Costing (Phase 9F)**: A complete FIFO engine was implemented.
-    - : Added new endpoints (, ) and logic to link expenses to stock creation.
-    - : Updated  to use FIFO-based COGS from consumption data.
-    - : Rewritten to display stock levels, stock history, and potential order fulfillment counts.
-    - : Updated to allow linking an expense to an inventory item purchase.
-  - **SKU Recipe System Overhaul**: The system was redesigned for better usability.
-    - : Added endpoints for  (CRUD, Apply, Repush). Shopify order sync now auto-creates placeholder recipe stubs.
-    - : Completely rewritten with a guided setup wizard, progress bar, and UI for creating and applying reusable templates to products.
-  - **Inventory Sub-Categories**: The backend and frontend were updated to support a two-level category hierarchy for inventory items, mirroring the expense categories.
-    - : Added  endpoint and updated inventory item models/handlers.
-  - **Dead Code Removal**: Removed all code related to the deprecated Shopify Bills CSV import from .
-  - **Backend Testing**: Successfully created and passed test suites for the enhanced expense/P&L features, the FIFO engine, and the new recipe template system.
-  - **Frontend Testing**: Successfully passed tests for the enhanced expense/P&L features before the final UX overhaul began.
+  - **Phase 5 Finance Module Refactor:** Completed the Smart Approach refactor. Removed Purchase Orders entirely and integrated Bills with the Expenses module.
+    - Modified files: , .
+  - **Critical Profit Calculation Fix:** Corrected  to multiply Cost of Goods Sold (COGS) by .
+  - **Tip Handling Overhaul:**
+    - Shopify sync in  now ignores Tip line items.
+    -  was updated to include  directly within the  calculation.
+    - UI components (, ) were updated to reflect this change, showing tips as part of the revenue stream.
+  - **Order Quantity Display:** Updated  and  to correctly display and factor in order quantities.
+  - **SKU Recipe Yield Feature:** Implemented a new UI in  to allow users to define ingredient quantities based on yield (e.g., 10 products from 1 unit), which calculates the fractional quantity automatically.
+  - **Material Summary Fix:** The material summary calculation in  and display in  were fixed to show accurate, user-friendly quantities, including for yield-based ingredients.
+  - **Recipe Template Bug Fixes:**
+    - Fixed the Apply Template dialog in  to correctly handle searching and Select All functionality.
+    - Fixed the template deletion logic in  to also remove ingredients from associated products, ensuring the Recipe Coverage bar is accurate.
+  - **Role-Based Default View:** Modified  to show the Dashboard by default for Admins and KDS for Employees upon login.
+  - **Page Refresh Persistence:** Enhanced  to use  to remember and restore the user's active view on page refresh.
 
 - Recently completed:
-  - FIFO Inventory Costing & SKU Recipe Templates (DONE)
-  - UX Optimization (IN PROGRESS / BLOCKED)
-</Completed_work_in_this_session>
-<Earlier_issues_found/mentioned_but_not_fixed>
-   - None. The agent addressed all issues as they arose, but the final implementation introduced a new critical bug.
-</Earlier_issues_found/mentioned_but_not_fixed>
-<Known_issue_recurrence_from_previous_fork>
-  - Issue recurrence in previous fork: A date picker bug was mentioned in the initial summary.
-  - Recurrence count: 2
-  - Status: RESOLVED
-</Known_issue_recurrence_from_previous_fork>
-<Code_Architecture>
+  - Finance Module Smart Approach Refactor (DONE)
+  - Critical COGS x Quantity Calculation Fix (DONE)
+  - Tip Handling Logic and Display Overhaul (DONE)
+  - Recipe Template UX and Logic Fixes (DONE)
+  - Role-based Default View on Login (DONE)
+  - Page Persistence on Refresh (DONE)
 
-</Code_Architecture>
-<Key_Technical_Concepts>
+**Earlier issues found/mentioned but not fixed**
+All known issues have been addressed in this session. The Material Summary bug, which was carried over from a previous session, has been resolved.
+
+**Known issue recurrence from previous fork**
+- N/A
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
 - **Framework**: Next.js 14 (App Router)
-- **Backend**: Node.js in a monolithic Next.js API Route ().
+- **Backend**: Monolithic Next.js API Route ().
 - **Database**: MongoDB with Mongoose.
+- **Authentication**:  with RBAC.
 - **UI**: React, shadcn/ui, Tailwind CSS.
-- **Costing Logic**: Advanced to a multi-stage process including exact Razorpay fees, calculated Shopify fees, detailed overheads, and now **FIFO-based COGS**.
-- **Inventory Management**: Shifted from a simple list to a batch-based system () with consumption tracking ().
-- **UX Design**: Implementation of guided setup flows, status banners, and progress indicators to improve user onboarding.
-- **Code Reusability**: Introduced Recipe Templates to allow bulk-application of SKU recipes to multiple products.
-</Key_Technical_Concepts>
-<key_DB_schema>
-  - **inventoryitems**:  (new fields)
-  - **inventorycategories**:  (new collection)
-  - **stockbatches**:  (new collection)
-  - **stockconsumptions**:  (new collection)
-  - **recipetemplates**:  (new collection)
-  - **skurecipes**:  (new fields for enrichment)
-  - **tenants**:  (new field for UX guides)
-</key_DB_schema>
-<changes_in_tech_stack>
-  - None.
-</changes_in_tech_stack>
-<All_files_of_reference>
-- **CRITICAL/BROKEN**:  - The source of the infinite loading bug. Needs immediate debugging.
-- : Heavily modified with new endpoints and logic for FIFO, recipe templates, and inventory categories.
-- : Updated to calculate COGS using FIFO data.
-- : Completely rewritten.
-- : Completely rewritten.
-- : Rewritten and updated.
-- : Updated with UX indicators.
-- : Updated with UX guide.
-</All_files_of_reference>
-<Areas_that_need_refactoring>
-- The newly added UX components ( in  and similar components in other views) need to be debugged to ensure they are performant and do not cause rendering loops or other React-related issues.
-</Areas_that_need_refactoring>
-<key_api_endpoints>
--  (GET, POST, DELETE)
--  (POST, DELETE)
--  (GET, POST)
--  (GET, POST, PUT, DELETE)
--  (POST)
--  (POST)
--  (GET)
-</key_api_endpoints>
-<Critical_Info_for_New_Agent>
-- **Your first and only priority is to fix the broken dashboard.** It is stuck on a loading screen. The bug is located in  and was introduced while adding the Setup Status Banner.
-- **Debugging Strategy**: Start by examining  for infinite loops in  or state update issues. Use your browser's developer console (Errors, Network tab) as your primary tool. The issue is almost certainly frontend-related.
-- **Do not assume backend failure**, but keep it as a secondary check. The backend passed all tests *before* the final UI change that broke the dashboard.
-- Once the dashboard is fixed, you must **verify all the new UX enhancements** on every page (Dashboard, Inventory, Expenses, SKU Recipes, Settings, Integrations) to ensure they work as intended and haven't caused other regressions.
-</Critical_Info_for_New_Agent>
-<documents_created_in_this_job>
-  -  (Updated multiple times to facilitate backend and frontend testing)
-</documents_created_in_this_job>
-<Last_10_User_Messages_and_any_pending_HUMAN_messages>
- - **Msg 272**: Requested optimization of the FIFO flow for better UX, a fix for SKU recipes not auto-populating, and the introduction of reusable Product Recipe Templates. (Status: COMPLETED)
- - **Msg 299**: Approved the agent's detailed plan for overhauling the SKU Recipe system with templates and a guided setup. (Status: COMPLETED)
- - **Msg 350**: Approved moving forward with testing. Requested that the UX guide concept be applied to all other sections of the app. Acknowledged a full onboarding feature as a future task. (Status: IN PROGRESS)
- - **Msg 357**: Asked for clarification on the difference between inventory categories and expense categories. Pointed out that the Orders We Can Prepare UI on the inventory page was confusing and took up too much space. (Status: COMPLETED/ADDRESSED)
- - **Msg 362**: Confirmed the agent's proposed solution to add sub-categories to inventory items (Option A). Gave the final go-ahead to implement the comprehensive UX optimization across all pages, perform testing, and then provide a list of pending tasks. (Status: IN PROGRESS / BLOCKED)
- - **Msg 145**: . (Status: COMPLETED)
- - **Msg 140**: . (Status: COMPLETED)
- - **Msg 5**:  (Status: COMPLETED)
-</Last_10_User_Messages_and_any_pending_HUMAN_messages>
-<Project_Health_Check>
-- Broken:
-  - The Dashboard page, the primary entry point of the application, is non-functional and stuck on an infinite loading screen.
-</Project_Health_Check>
-<rd_Party_Integrations>
-- **Shopify**: For fetching orders and products.
-- **Meta Ads (Facebook Graph API)**: For fetching ad spend.
-- **Razorpay**: For reconciling payment fees and fetching bank settlements.
-- **India Post**: For tracking (in a test environment).
-- **Frankfurter.app**: For currency conversion.
-</rd_Party_Integrations>
-<Testing_status>
-  - Testing agent used after significant changes: YES (Backend tests were run successfully for FIFO and Recipe Templates. Frontend tests were also run before the final UX changes).
-  - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: Test cases were added to  for the backend testing agent.
-  - Known regressions: The entire dashboard page is non-functional, which is a critical regression.
-</Testing_status>
-<Credentials_to_test_flow>
-N/A
-</Credentials_to_test_flow>
-<What_agent_forgot_to_execute>
-The agent did not forget a task but failed in the final execution step. While implementing the comprehensive UX overhaul, the agent introduced a critical bug causing the dashboard to hang. After an initial failed attempt to fix it, the agent did not proceed to more in-depth debugging (e.g., using browser dev tools to check console/network logs) and instead got stuck trying to take screenshots of the broken page.
-</What_agent_forgot_to_execute>
+- **State Management**: React / with  for UI state persistence.
+
+**key DB schema**
+- **orders**: Now includes a  field populated from Shopify sync.
+- **skuRecipes**: Ingredients can now have a  field to store the yield-based input.
+- **bills**: 
+- **vendors**:  (now with )
+
+**changes in tech stack**
+- None.
+
+**All files of reference**
+- **Heavily Modified Files**:
+  - : Removed all purchase-order logic. Updated endpoints for , ,  (template deletion), and . Modified Shopify sync to handle tips and quantity.
+  - : Corrected a critical flaw in COGS calculation (to multiply by quantity) and updated the  calculation to correctly include tips.
+  - : Updated to implement role-based default views on login and page state persistence on refresh using .
+  - : Overhauled the Apply Template dialog for better UX and added the yield per unit input feature for ingredients.
+  - : Updated the P&L waterfall chart to reflect the new tip calculation logic.
+  - : Updated to display order quantity, tip information, and the improved material summary format.
+
+**Areas that need refactoring**:
+- The  file remains a significant point of technical debt due to its size and complexity. The upcoming work in Phase 6 (adding cron jobs and webhooks) will add to it, making a future refactor into separate route files highly advisable.
+
+**key api endpoints**
+- **Finance (Refactored)**:
+  - , 
+  - 
+  -  (Now also clears ingredients from linked products)
+- **Shopify Sync**:
+  -  (Now skips Tip line items and saves )
+- **Misc**:
+  -  (Response now includes  for better UI display)
+
+**Critical Info for New Agent**
+- **All user-reported bugs and improvement requests from this session have been completed.** The user has confirmed they are ready to move on.
+- Your next task is to begin **Phase 6: Sync Optimization** as defined in the master blueprint.
+- **Plan for Phase 6:**
+  1.  **Incremental Sync:** Modify the Shopify and Razorpay sync functions in  to use timestamp-based filtering ( and ). Store and retrieve the  timestamp for each integration.
+  2.  **Auto-Sync Scheduling:** Integrate a scheduler like  into the Next.js process to trigger the sync functions automatically based on user-configurable intervals. This will likely involve modifying the main server entry point or a lib file.
+  3.  **Webhooks:** Implement new API endpoints (, ) to handle real-time updates, including security verification (HMAC, webhook secrets).
+- Be mindful of the monolithic  file. The changes for Phase 6 will add more complexity to it.
+
+**documents created in this job**
+- : Updated multiple times to reflect backend testing for the finance refactor and subsequent bug fixes.
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **#539**:  - User confirms all work is done for this session and the next step is Phase 6. (ADDRESSED)
+2.  **#524**:  - Requests page persistence on refresh. (RESOLVED)
+3.  **#505**: Requests role-based default view on login (Dashboard for admin, KDS for employee). (RESOLVED)
+4.  **#476**:  - Requests a conceptual change to how tips are calculated in Net Revenue. (RESOLVED)
+5.  **#401**: Asks the agent to perform full frontend testing to find any remaining UI inconsistencies with the tip/quantity changes. (RESOLVED)
+6.  **#350**: Reports recurring issue with Recipe Coverage Bar and poor UX in the Apply Template dialog. (RESOLVED)
+7.  **#251**: Reports several issues: Recipe Coverage bar not updating, tips not displayed everywhere, material summary showing decimals unintuitively. (RESOLVED)
+8.  **#117**: Provides a large list of initial bugs and improvements to fix before starting Phase 6. (RESOLVED)
+9.  **#107**: Reports being unable to log in with . (RESOLVED - password was )
+10. **#68**:  - Approves the plan to refactor the Finance Module. (RESOLVED)
+
+**Project Health Check:**
+- **Broken**: None. The application is in a stable and functional state.
+- **Mocked**: None.
+
+**3rd Party Integrations**
+- **Shopify**: For orders and products. (Active)
+- **Razorpay**: For payment fees and settlements. (Active)
+- **Meta Ads (Facebook Graph API)**: For ad spend. (Active)
+- **Frankfurter.app**: For currency conversion. (Active)
+- **NextAuth.js**: For authentication. (Active)
+- **Tesseract.js**: For client-side OCR. (Active)
+- **WhatsApp Cloud API via Meta**: For automated notifications. (Active)
+- **India Post**: For shipment tracking. (**BLOCKED**).
+
+**Testing status**
+- Testing agent used after significant changes: YES. Both backend and frontend testing agents were used to verify the numerous fixes and improvements.
+- Troubleshoot agent used after agent stuck in loop: NO.
+- Test files created: None.  was updated for backend tests.
+- Known regressions: None.
+
+**Credentials to test flow:**
+- **Master Admin**: Email: , Password: 
+- **Employee**: Email: , Password: 
+
+**What agent forgot to execute**
+- The agent successfully completed all assigned tasks and user requests within this session. Nothing was forgotten.
+
 </analysis>
