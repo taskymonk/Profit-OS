@@ -4,7 +4,7 @@ import asyncio
 import aiohttp
 import json
 
-BASE_URL = "https://erp-ocr-fix-1.preview.emergentagent.com"
+BASE_URL = "https://settings-polish.preview.emergentagent.com"
 
 async def test_all_specific_requirements():
     async with aiohttp.ClientSession() as session:

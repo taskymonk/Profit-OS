@@ -5714,15 +5714,15 @@ export async function POST(request) {
         let collectionsToPurge = [];
 
         if (purgeType === 'orders') {
-          collectionsToPurge = ['orders'];
+          collectionsToPurge = ['orders', 'settlementEstimates', 'razorpayUnmatchedPayments'];
         } else if (purgeType === 'inventory') {
-          collectionsToPurge = ['inventoryItems', 'inventoryCategories', 'stockBatches', 'stockConsumptions'];
+          collectionsToPurge = ['inventoryItems', 'inventoryCategories', 'stockBatches', 'stockConsumptions', 'wastageLog', 'rawMaterials', 'packagingMaterials', 'materialRequests'];
         } else if (purgeType === 'expenses') {
-          collectionsToPurge = ['overheadExpenses', 'expenseCategories', 'dailyMarketingSpend'];
+          collectionsToPurge = ['overheadExpenses', 'expenseCategories', 'dailyMarketingSpend', 'bills'];
         } else if (purgeType === 'recipes') {
           collectionsToPurge = ['skuRecipes', 'recipeTemplates'];
         } else {
-          // Purge everything except tenantConfig, integrations, syncHistory
+          // Purge everything except tenantConfig, integrations, syncSettings, syncHistory, users, apiKeys
           collectionsToPurge = [
             'orders', 'skuRecipes', 'recipeTemplates',
             'rawMaterials', 'packagingMaterials', 'vendors', 'employees',
@@ -5730,6 +5730,11 @@ export async function POST(request) {
             'inventoryItems', 'inventoryCategories',
             'stockBatches', 'stockConsumptions',
             'dailyMarketingSpend',
+            'bills', 'kdsAssignments', 'materialRequests',
+            'rtoParcels', 'parcelImages', 'indiaPostEvents',
+            'shippingCarriers', 'settlementEstimates', 'razorpayUnmatchedPayments',
+            'userActivity', 'wastageLog', 'backups',
+            'whatsappMessages', 'whatsappIncoming', 'whatsappOptOuts', 'whatsappTemplates',
           ];
         }
 

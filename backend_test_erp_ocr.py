@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 # Test configuration - using the correct base URL from .env
-BASE_URL = "https://erp-ocr-fix-1.preview.emergentagent.com"
+BASE_URL = "https://settings-polish.preview.emergentagent.com"
 
 class ERPOCRBackendTester:
     def __init__(self):
