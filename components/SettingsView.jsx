@@ -579,35 +579,6 @@ export default function SettingsView({ moduleSettings = {}, onModuleSettingsChan
         </CardContent>
       </Card>
 
-      {/* Feature Toggles */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30"><ToggleLeft className="w-4 h-4 text-purple-700 dark:text-purple-300" /></div>
-            <div><CardTitle className="text-base">Feature Toggles</CardTitle><CardDescription>Enable or disable optional features</CardDescription></div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div><Label>Employee Tracking</Label><p className="text-xs text-muted-foreground">Track employee shifts and daily output</p></div>
-            <Switch checked={config.allowEmployeeTracking} onCheckedChange={v => setConfig({...config, allowEmployeeTracking: v})} />
-          </div>
-          <Separator />
-          <div className="flex items-center justify-between">
-            <div><Label>Shopify Integration</Label><p className="text-xs text-muted-foreground">Auto-sync orders from Shopify</p></div>
-            <Switch checked={config.integrations?.shopifyActive} onCheckedChange={v => setConfig({...config, integrations: {...config.integrations, shopifyActive: v}})} />
-          </div>
-          <div className="flex items-center justify-between">
-            <div><Label>India Post Tracking</Label><p className="text-xs text-muted-foreground">Auto-track shipments via India Post API</p></div>
-            <Switch checked={config.integrations?.indiaPostActive} onCheckedChange={v => setConfig({...config, integrations: {...config.integrations, indiaPostActive: v}})} />
-          </div>
-          <div className="flex items-center justify-between">
-            <div><Label>Meta Ads Sync</Label><p className="text-xs text-muted-foreground">Pull daily ad spend automatically</p></div>
-            <Switch checked={config.integrations?.metaAdsActive} onCheckedChange={v => setConfig({...config, integrations: {...config.integrations, metaAdsActive: v}})} />
-          </div>
-        </CardContent>
-      </Card>
-
       {/* User Management */}
       <Card>
         <CardHeader>
