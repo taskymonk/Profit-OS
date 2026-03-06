@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { v4 as uuidv4 } from 'uuid';
 import { getToken } from 'next-auth/jwt';
+import { getCached, invalidateCache } from '@/lib/cache';
 import { calculateOrderProfit, calculateDashboardMetrics, calculateProratedOverhead, getISTDateKey } from '@/lib/profitCalculator';
 import { getSyncSettings, updateSyncSettings, initScheduler, getSchedulerStatus, acquireSyncLock, releaseSyncLock, isSyncRunning, getSyncLockStatus, runSyncAll } from '@/lib/syncScheduler';
 import { shopifySyncOrdersIncremental, razorpaySyncPaymentsIncremental, logSyncEventLib } from '@/lib/syncFunctions';
@@ -78,6 +79,17 @@ function toISTISO(dateStr) {
 async function listDocs(collectionName, query = {}) {
   const db = await getDb();
   return db.collection(collectionName).find(query).sort({ createdAt: -1 }).toArray();
+}
+
+// Paginated version for high-volume collections
+async function listDocsPaginated(collectionName, query = {}, page = 1, limit = 100, sort = { createdAt: -1 }) {
+  const db = await getDb();
+  const skip = (page - 1) * limit;
+  const [docs, total] = await Promise.all([
+    db.collection(collectionName).find(query).sort(sort).skip(skip).limit(limit).toArray(),
+    db.collection(collectionName).countDocuments(query),
+  ]);
+  return { data: docs, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
 
 async function getDoc(collectionName, id) {
@@ -495,28 +507,8 @@ async function metaAdsSyncSpend() {
 
 async function getDashboardData(params = {}) {
   const db = await getDb();
-  const orders = await db.collection('orders').find({}).toArray();
-  const skuRecipes = await db.collection('skuRecipes').find({}).toArray();
-  const expenses = await db.collection('overheadExpenses').find({}).toArray();
-  const tenantConfig = await db.collection('tenantConfig').findOne({});
-  const integrations = await db.collection('integrations').findOne({ _id: 'integrations-config' });
 
-  // Always filter out old MetaAds expense entries — ad spend now lives in dailyMarketingSpend
-  const overheadExpenses = expenses.filter(e => e.category !== 'MetaAds');
-
-  // Build adSpendMap from dailyMarketingSpend collection (only if Meta active)
-  const isMetaActive = integrations?.metaAds?.active === true;
-  const dailySpends = isMetaActive
-    ? await db.collection('dailyMarketingSpend').find({}).toArray()
-    : [];
-  const adSpendMap = {};
-  dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
-
-  // Ad spend tax multiplier from tenant config (18% GST in India)
-  const adSpendTaxRate = tenantConfig?.adSpendTaxRate ?? 18;
-  const adSpendTaxMultiplier = 1 + (adSpendTaxRate / 100);
-
-  // Date range handling — ALL ranges use IST (Asia/Kolkata) date strings
+  // STEP 1: Compute date range FIRST (before querying orders)
   const now = new Date();
   const todayIST = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   let startDate, endDate;
@@ -555,11 +547,38 @@ async function getDashboardData(params = {}) {
     }
   }
 
+  // STEP 2: Query only orders within date range (uses orderDate index)
+  const orderQuery = { orderDate: { $gte: startDate, $lte: endDate } };
+  const [orders, skuRecipes, expenses, tenantConfig, integrations] = await Promise.all([
+    db.collection('orders').find(orderQuery).sort({ orderDate: -1 }).toArray(),
+    db.collection('skuRecipes').find({}).toArray(),
+    db.collection('overheadExpenses').find({}).toArray(),
+    getCached('tenant-config', () => db.collection('tenantConfig').findOne({}) || {}, 60000),
+    db.collection('integrations').findOne({ _id: 'integrations-config' }),
+  ]);
+
+  // Always filter out old MetaAds expense entries — ad spend now lives in dailyMarketingSpend
+  const overheadExpenses = expenses.filter(e => e.category !== 'MetaAds');
+
+  // Build adSpendMap from dailyMarketingSpend collection (only if Meta active)
+  const isMetaActive = integrations?.metaAds?.active === true;
+  const dailySpends = isMetaActive
+    ? await db.collection('dailyMarketingSpend').find({}).toArray()
+    : [];
+  const adSpendMap = {};
+  dailySpends.forEach(s => { adSpendMap[s.date] = s.spendAmount || 0; });
+
+  // Ad spend tax multiplier from tenant config (18% GST in India)
+  const adSpendTaxRate = tenantConfig?.adSpendTaxRate ?? 18;
+  const adSpendTaxMultiplier = 1 + (adSpendTaxRate / 100);
+
   // Get exchange rate for currency conversion
   const exchangeRate = await getExchangeRate('USD', 'INR');
 
-  // Fetch FIFO consumption records for COGS calculation
-  const allConsumptions = await db.collection('stockConsumptions').find({}).toArray();
+  // Fetch FIFO consumption records only for the matched orders
+  const orderIds = orders.map(o => o._id);
+  const consumptionQuery = orderIds.length > 0 ? { orderId: { $in: orderIds } } : { orderId: '__none__' };
+  const allConsumptions = await db.collection('stockConsumptions').find(consumptionQuery).toArray();
   const consumptionMap = {};
   allConsumptions.forEach(c => {
     if (!consumptionMap[c.orderId]) consumptionMap[c.orderId] = [];
@@ -2504,10 +2523,12 @@ export async function GET(request) {
       }
 
       case 'module-settings': {
-        // GET /api/module-settings — Get module toggle settings
-        const db = await getDb();
-        const config = await db.collection('tenantConfig').findOne({});
-        const moduleSettings = config?.moduleSettings || {};
+        // GET /api/module-settings — Get module toggle settings (uses cached tenant config)
+        const cachedConfig = await getCached('tenant-config', async () => {
+          const db = await getDb();
+          return await db.collection('tenantConfig').findOne({}) || {};
+        }, 60000);
+        const moduleSettings = cachedConfig?.moduleSettings || {};
         // Merge with defaults
         const merged = {};
         for (const [key, def] of Object.entries(DEFAULT_MODULE_SETTINGS)) {
@@ -3484,8 +3505,12 @@ export async function GET(request) {
         }
 
       case 'tenant-config': {
-        const db = await getDb();
-        return json(await db.collection('tenantConfig').findOne({}) || {});
+        // Cached for 60s — avoids DB hit on every page load
+        const config = await getCached('tenant-config', async () => {
+          const db = await getDb();
+          return await db.collection('tenantConfig').findOne({}) || {};
+        }, 60000);
+        return json(config);
       }
 
       case 'currency': {
@@ -3595,6 +3620,12 @@ export async function GET(request) {
 
       case 'overhead-expenses':
         if (subResource) return json(await getDoc('overheadExpenses', subResource));
+        // Support pagination: ?page=1&limit=100
+        if (params.page) {
+          const page = parseInt(params.page) || 1;
+          const limit = Math.min(parseInt(params.limit) || 100, 500);
+          return json(await listDocsPaginated('overheadExpenses', {}, page, limit));
+        }
         return json(await listDocs('overheadExpenses'));
 
       case 'expense-categories': {
@@ -6446,6 +6477,7 @@ export async function PUT(request) {
         } else {
           await db.collection('tenantConfig').insertOne({ _id: 'tenant-1', ...body, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
         }
+        invalidateCache('tenant-config');
         return json(await db.collection('tenantConfig').findOne({}));
       }
 
